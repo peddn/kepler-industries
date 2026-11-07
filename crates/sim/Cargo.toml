@@ -1,0 +1,15 @@
+[package]
+name = "sim"
+version = "0.1.0"
+edition = "2024"
+description = "Simulation von Kepler Industries: Bahnen, Atmosphäre, Schiffe, Zeit. Ohne Bevy."
+
+[dependencies]
+# Dieselbe Mathe-Bibliothek, die Bevy intern nutzt, aber in f64.
+glam = { version = "0.33", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# float_roundtrip: Zahlen müssen bitgenau zurückgelesen werden, sonst weicht
+# ein geladener Spielstand minimal ab (der Test hat das ohne gezeigt).
+serde_json = { version = "1", features = ["float_roundtrip"] }
