@@ -234,9 +234,9 @@ pub fn draw_trajectories(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos)
             .segments()
             .find(|s| matches!(s, Segment::Kepler { .. }));
         let mut horizon = now + span(world, first_kepler);
-        if let Some(plan) = trajectory.plans().last() {
-            let after = span(world, trajectory.segment_after(&plan.burn));
-            horizon = horizon.max(plan.burn.end + after);
+        if let Some(burn) = trajectory.burns().last() {
+            let after = span(world, trajectory.segment_after(burn));
+            horizon = horizon.max(burn.end + after);
         }
 
         let mut after_burn = false;
@@ -353,10 +353,8 @@ pub fn draw_burn_points(
     let world = &sim.0;
     let eye = camera.translation;
     for vessel in &world.vessels {
-        let times = vessel
-            .trajectory
-            .plans()
-            .flat_map(|p| [p.burn.start, p.burn.end]);
+        let burns = vessel.trajectory.burns();
+        let times = burns.iter().flat_map(|b| [b.start, b.end]);
         for t in times {
             if t <= world.time {
                 continue;

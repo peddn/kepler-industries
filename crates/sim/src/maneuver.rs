@@ -7,6 +7,7 @@
 
 use crate::body::BodyId;
 use crate::kepler::StateVector;
+use crate::launch::Ascent;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -37,6 +38,9 @@ pub struct Burn {
     pub thrust: f64,
     /// Treibstoffverbrauch in kg/s.
     pub mass_flow: f64,
+    /// Beim Start vom Boden: Aufstiegssteuerung statt fester Richtung.
+    #[serde(default)]
+    pub ascent: Option<Ascent>,
 }
 
 impl Burn {
@@ -61,7 +65,14 @@ impl Burn {
             direction,
             thrust: params.thrust,
             mass_flow,
+            ascent: None,
         }
+    }
+
+    /// Schubrichtung an der Position `position`.
+    pub fn direction_at(&self, position: DVec3) -> DVec3 {
+        self.ascent
+            .map_or(self.direction, |ascent| ascent.direction(position))
     }
 
     pub fn duration(&self) -> f64 {
@@ -147,6 +158,10 @@ pub enum PlanError {
     /// Ein früherer Node der Kette ist ungültig.
     AfterInvalid,
     NoNode,
+    /// Ein Start geht nur am Boden (und nicht als Wrack).
+    NotLanded,
+    /// Der Schub ist kleiner als das Gewicht.
+    TooWeak,
 }
 
 impl fmt::Display for PlanError {
@@ -163,6 +178,8 @@ impl fmt::Display for PlanError {
             }
             PlanError::OnGround => "Bahn endet vorher am Boden",
             PlanError::AfterInvalid => "Ein Node davor ist ungültig",
+            PlanError::NotLanded => "Starten geht nur am Boden",
+            PlanError::TooWeak => "Schub reicht nicht zum Abheben",
             PlanError::NoNode => "Kein Node geplant",
         })
     }

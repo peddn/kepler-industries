@@ -3,12 +3,13 @@
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::kepler::{self, StateVector};
+use crate::launch::Launch;
 use crate::maneuver::{ManeuverNode, PlanError};
 use crate::trajectory::{Segment, Trajectory};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 3;
+pub const SAVE_VERSION: u32 = 4;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -89,6 +90,47 @@ impl World {
         }
     }
 
+    /// Stellt ein Schiff mit `fuel` kg Treibstoff auf den Boden, z. B. an
+    /// eine Basis.
+    pub fn spawn_landed(
+        &mut self,
+        name: &str,
+        params: VesselParams,
+        fuel: f64,
+        body: BodyId,
+        point: SurfacePoint,
+    ) -> usize {
+        let mass = params.dry_mass + fuel;
+        self.vessels.push(Vessel {
+            name: name.to_owned(),
+            params,
+            trajectory: Trajectory::new_landed(body, self.time, point, mass),
+            halt_warp_at_burn: false,
+        });
+        self.vessels.len() - 1
+    }
+
+    /// Plant oder ändert den Start eines gelandeten Schiffs.
+    pub fn set_launch(&mut self, vessel: usize, launch: Launch) -> Result<(), PlanError> {
+        let v = &mut self.vessels[vessel];
+        v.trajectory
+            .set_launch(&self.bodies, &v.params, self.time, launch)
+    }
+
+    /// Verschiebt den Start um `dt` s; die ganze Kette wandert mit.
+    pub fn shift_launch(&mut self, vessel: usize, dt: f64) -> Result<(), PlanError> {
+        let v = &mut self.vessels[vessel];
+        v.trajectory
+            .shift_launch(&self.bodies, &v.params, self.time, dt)
+    }
+
+    /// Sagt den geplanten Start ab.
+    pub fn clear_launch(&mut self, vessel: usize) -> Result<(), PlanError> {
+        let v = &mut self.vessels[vessel];
+        v.trajectory
+            .clear_launch(&self.bodies, &v.params, self.time)
+    }
+
     /// Setzt ein Schiff mit dem gegebenen Zustand und `fuel` kg Treibstoff zur
     /// aktuellen Zeit aus.
     pub fn spawn_vessel(
@@ -167,14 +209,14 @@ impl World {
             .with_first_nodes(&self.bodies, &v.params, self.time, count)
     }
 
-    /// Volle Umläufe vor dem Node `index` eines Schiffs: ab jetzt (erster
-    /// Node) oder ab dem Ende des vorherigen Brennens. `None` für ungültige
-    /// Nodes.
+    /// Volle Umläufe vor dem Node `index` eines Schiffs: ab dem Ende des
+    /// vorherigen Brennens (auch des Aufstiegs), sonst ab jetzt. `None` für
+    /// ungültige Nodes.
     pub fn revolutions_before_node(&self, vessel: usize, index: usize) -> Option<u32> {
         let trajectory = &self.vessels[vessel].trajectory;
         let plan = trajectory.nodes().get(index)?.plan.ok()?;
         let from = match index {
-            0 => self.time,
+            0 => trajectory.launch().map_or(self.time, |l| l.burn.end),
             _ => trajectory.nodes()[index - 1].plan.ok()?.burn.end,
         };
         Some(trajectory.revolutions(&self.bodies, from.max(self.time), plan.node.time))
@@ -186,7 +228,7 @@ impl World {
         self.vessels
             .iter()
             .filter(|v| v.halt_warp_at_burn && v.trajectory.armed())
-            .filter_map(|v| v.trajectory.plans().next().map(|p| p.burn.start))
+            .filter_map(|v| v.trajectory.burns().first().map(|b| b.start))
             .filter(|&start| start > self.time)
             .min_by(f64::total_cmp)
     }
