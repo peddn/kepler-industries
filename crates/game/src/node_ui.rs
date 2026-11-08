@@ -15,6 +15,7 @@
 use crate::Sim;
 use crate::camera::{CameraRig, MainCamera, OVERLAY_LAYER, dir_to_view, to_view};
 use crate::hud::UiFont;
+use crate::panel::{PanelShown, over_panel};
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -87,12 +88,12 @@ pub struct UiMessage {
 }
 
 impl UiMessage {
-    fn say(&mut self, text: String, now: f64) {
+    pub fn say(&mut self, text: String, now: f64) {
         self.text = text;
         self.until = now + 3.0;
     }
 
-    fn show(&mut self, error: PlanError, now: f64) {
+    pub fn show(&mut self, error: PlanError, now: f64) {
         self.say(error.to_string(), now);
     }
 }
@@ -309,7 +310,11 @@ fn coast_path(world: &World, trajectory: &Trajectory, from: f64) -> Path {
                     .map(|s| (s.time, s.state.position))
                     .collect(),
             ),
-            Segment::Integrated { .. } => {}
+            // Brennen (auch der Aufstieg) und das Warten am Boden vor dem Start.
+            Segment::Integrated { .. }
+            | Segment::Surface {
+                liftoff: Some(_), ..
+            } => {}
             Segment::Surface { .. } => break,
         }
     }
@@ -355,10 +360,13 @@ fn nearest_on_path(
     best
 }
 
-/// Lässt sich die Kette des Schiffs gerade ändern (nicht während des Brennens)?
+/// Lässt sich die Kette des Schiffs gerade ändern? Nicht während des
+/// Brennens, am Boden nur mit geplantem Start.
 fn editable(world: &World, i: usize) -> bool {
-    let current = world.vessels[i].trajectory.current();
-    !current.is_burn() && !matches!(current, Segment::Surface { .. })
+    let trajectory = &world.vessels[i].trajectory;
+    let current = trajectory.current();
+    !current.is_burn()
+        && (trajectory.launch().is_some() || !matches!(current, Segment::Surface { .. }))
 }
 
 /// Maus und Tastatur für Auswahl und Nodes.
@@ -373,6 +381,7 @@ pub fn input(
     keys: Res<ButtonInput<KeyCode>>,
     real_time: Res<Time<Real>>,
     rig: Res<CameraRig>,
+    shown: Res<PanelShown>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<MainCamera>>,
 ) {
@@ -432,7 +441,8 @@ pub fn input(
         planet_radius: world.bodies[0].radius as f32,
     };
 
-    if buttons.just_pressed(MouseButton::Left) {
+    // Klicks auf die Seitenleiste gehören der Leiste.
+    if buttons.just_pressed(MouseButton::Left) && !over_panel(&shown, &window, cursor) {
         *drag = Drag::Pending(cursor);
         if let Some(i) = selection.0
             && editable(world, i)

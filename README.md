@@ -8,10 +8,17 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 
 ## Stand
 
-Ein Planet mit Atmosphäre, eine Startbasis, zwei Satelliten mit Triebwerk.
-„Relais-1" kreist stabil oberhalb der Atmosphäre. „Sonde-2" wurde zu tief
-abgesetzt, wird bei jedem Durchgang durch die Luft abgebremst (orange) und
-stürzt nach einigen Umläufen ab, außer man rettet sie mit einem Manöver.
+Ein Planet mit Atmosphäre, eine Startbasis, zwei Satelliten mit Triebwerk und
+eine Fähre am Boden. „Relais-1" kreist stabil oberhalb der Atmosphäre.
+„Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang durch die Luft
+abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
+mit einem Manöver. „Fähre-3" steht an der Startbasis und kann starten.
+
+Gestartet wird mit einem Startprofil aus drei Werten: Kurs, Wendebeginn und
+Ziel-Apoapsis. Eingestellt wird es in der Seitenleiste rechts, die erscheint,
+sobald ein gelandetes Schiff gewählt ist. Die Vorschau zeigt den ganzen
+Aufstieg (gelb) und die Bahn danach. Den Node zum Zirkularisieren an der
+Apoapsis kann man schon vor dem Abheben setzen.
 
 Manöver plant man mit dem Manöver-Node wie in KSP, auch mehrere
 hintereinander als Kette: Jeder Node liegt auf der Bahn nach den vorherigen
@@ -24,6 +31,12 @@ der Liste stehen, bis es wieder passt. Gelbe Ringe auf der Bahn zeigen Beginn
 und Ende jedes Brennens. Während des Brennens zeigt die blaue Linie die momentane Bahn, die sich
 sichtbar zur geplanten (violetten) hin verformt. Endet eine Bahn am Boden,
 zeigt ein rotes Kreuz den Aufschlagpunkt.
+
+![Startprofil](docs/screenshots/startprofil.png)
+
+*Fähre-3 vor dem Start: Aufstieg nach Osten (gelb), Freiflug durch die obere
+Luft (orange), dazu ein Node an der Apoapsis, der die Bahn auf 99 km rund
+macht. Rechts die Karte „Start“.*
 
 ![Manöver-Node](docs/screenshots/manoever-node.png)
 
@@ -66,6 +79,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Rechte Maustaste ziehen | Kamera drehen |
 | Mausrad | Zoomen |
 | Linksklick auf ein Schiff / `Tab` | Schiff wählen / nächstes Schiff |
+| Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
@@ -87,7 +101,9 @@ cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,
 
 - `--time SEKUNDEN`: vor dem Start bis zu dieser Spielzeit vorrechnen
 - `--camera GIER,NEIGUNG,KM`: Blickwinkel in Grad, Abstand vom Planetenmittelpunkt in km
-- `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2)
+- `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2, 2 = Fähre-3)
+- `--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM`: Start planen (Zeitpunkt des
+  Abhebens in s, Kurs in Grad), z. B. `--launch 2,120,90,2,100`
 - `--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]`: Node setzen (Zeit in s,
   Δv in m/s), mehrfach für eine Kette; scharf wie im Spiel, `SCHARF` = 0 lässt
   die Kette zum Testen nicht scharf
@@ -104,6 +120,6 @@ in Sekunden.
 
 ## Aufbau
 
-- `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Zeitleiste, Spielstand)
-- `crates/game`: Darstellung und Eingabe mit Bevy
+- `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Start, Zeitleiste, Spielstand)
+- `crates/game`: Darstellung und Eingabe mit Bevy (Anzeige links, Seitenleiste rechts)
 - `docs/ARCHITEKTUR.md`: Regeln, Physikmodell, Entscheidungen, Merkliste

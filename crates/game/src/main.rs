@@ -6,6 +6,7 @@
 mod camera;
 mod hud;
 mod node_ui;
+mod panel;
 mod view;
 
 use bevy::prelude::*;
@@ -46,6 +47,8 @@ struct Options {
     /// (ohne Angabe ja, wie im Spiel). Mehrere Nodes eines Schiffs bilden eine
     /// Kette; sie ist scharf, wenn keiner "nicht scharf" verlangt.
     nodes: Vec<(usize, f64, [f64; 3], bool)>,
+    /// Start: Schiff, Zeitpunkt (s), Kurs (°), Wendebeginn (km), Ziel-Apoapsis (km).
+    launch: Option<(usize, sim::Launch)>,
 }
 
 fn numbers(text: &str, what: &str) -> Vec<f64> {
@@ -79,11 +82,27 @@ fn parse_options() -> Options {
                     .nodes
                     .push((p[0] as usize, p[1], [p[2], p[3], p[4]], armed));
             }
+            ("--launch", Some(l)) => {
+                let p = numbers(&l, "--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM");
+                let profile = sim::LaunchProfile {
+                    heading: p[2],
+                    turn_altitude: p[3] * 1000.0,
+                    target_apoapsis: p[4] * 1000.0,
+                };
+                options.launch = Some((
+                    p[0] as usize,
+                    sim::Launch {
+                        time: p[1],
+                        profile,
+                    },
+                ));
+            }
             (other, _) => {
                 eprintln!("Unbekannte Option: {other}");
                 eprintln!(
                     "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM\n\
-                     \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]"
+                     \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]\n\
+                     \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM"
                 );
                 std::process::exit(2);
             }
@@ -98,6 +117,17 @@ fn main() {
     let mut world = sim::scenario::demo();
     world.advance_to(options.time);
     let mut selection = node_ui::Selection(options.select);
+    // Zuerst der Start, damit Nodes danach auf seiner Bahn liegen können.
+    if let Some((vessel, launch)) = options.launch {
+        if let Err(e) = world
+            .set_launch(vessel, launch)
+            .and_then(|()| world.set_armed(vessel, true))
+        {
+            eprintln!("--launch: {e}");
+            std::process::exit(2);
+        }
+        selection.0 = Some(vessel);
+    }
     for &(vessel, time, [p, n, r], _) in &options.nodes {
         let node = sim::ManeuverNode {
             time,
@@ -144,6 +174,7 @@ fn main() {
     .insert_resource(rig)
     .insert_resource(selection)
     .init_resource::<node_ui::SelectedNode>()
+    .init_resource::<panel::PanelShown>()
     .init_resource::<node_ui::Drag>()
     .init_resource::<node_ui::UiMessage>()
     .init_gizmo_group::<node_ui::NodeGizmos>()
@@ -156,6 +187,7 @@ fn main() {
                 view::setup,
                 node_ui::configure_gizmos,
                 node_ui::setup_label,
+                panel::setup,
                 hud::setup,
             ),
         )
@@ -168,10 +200,13 @@ fn main() {
             advance_simulation,
             camera::input,
             camera::apply,
+            panel::buttons,
             node_ui::input,
             view::sync_markers,
             node_ui::draw,
             node_ui::sync_label,
+            panel::sync,
+            panel::hover,
             view::draw_planet_grid,
             view::draw_trajectories,
             view::draw_burn_points,

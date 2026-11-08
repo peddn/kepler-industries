@@ -74,7 +74,7 @@ fn format_time(seconds: f64) -> String {
 }
 
 /// Zeitspanne, z. B. "00:12:34" oder "2 d 03:04:05".
-fn format_span(seconds: f64) -> String {
+pub(crate) fn format_span(seconds: f64) -> String {
     let total = seconds.max(0.0).round() as u64;
     let (days, rest) = (total / 86_400, total % 86_400);
     let clock = format!(
@@ -90,11 +90,11 @@ fn format_span(seconds: f64) -> String {
     }
 }
 
-fn km(meters: f64) -> String {
+pub(crate) fn km(meters: f64) -> String {
     format!("{:.1} km", meters / 1000.0)
 }
 
-fn place(point: &SurfacePoint) -> String {
+pub(crate) fn place(point: &SurfacePoint) -> String {
     let lat = point.latitude.to_degrees();
     let lon = point.longitude.to_degrees();
     format!(
@@ -128,11 +128,21 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
             }
         ),
     ];
-    let flying = !matches!(trajectory.current(), Segment::Surface { .. });
+    // Nodes gehen im Flug und am Boden mit geplantem Start (danach).
+    let launch = trajectory.launch();
+    let can_plan = launch.is_some() || !matches!(trajectory.current(), Segment::Surface { .. });
+    if let Some(plan) = launch
+        && plan.burn.start > world.time
+    {
+        lines.push(format!(
+            "Start in {} (Einstellungen rechts)",
+            format_span(plan.burn.start - world.time)
+        ));
+    }
     let nodes = trajectory.nodes();
     let mut warning = 0..0;
     if nodes.is_empty() {
-        if flying {
+        if can_plan {
             lines.push("Linksklick auf die Bahn setzt einen Node.".into());
         }
     } else {
@@ -314,17 +324,16 @@ pub fn update(
         lines.extend(details);
     }
     lines.push(String::new());
-    lines.push(
-        "Linksklick: Schiff wählen / Node setzen / Node wählen   Griffe ziehen: Δv (Umschalt: fein)"
-            .into(),
-    );
-    lines.push(
-        "Node ziehen: verschieben   ↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff   H: Zeitraffer-Stopp"
-            .into(),
-    );
-    lines.push(
-        "Rechte Maustaste ziehen: drehen   Mausrad: zoomen   , / .: Zeitraffer   Leertaste: Pause"
-            .into(),
+    // Kurze Zeilen, damit rechts Platz für die Seitenleiste bleibt.
+    lines.extend(
+        [
+            "Linksklick: Schiff wählen / Node setzen / Node wählen",
+            "Griffe ziehen: Δv (Umschalt: fein)   Node ziehen: verschieben",
+            "↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff",
+            "H: Zeitraffer-Stopp   , / .: Zeitraffer   Leertaste: Pause",
+            "Rechte Maustaste ziehen: drehen   Mausrad: zoomen",
+        ]
+        .map(String::from),
     );
     // Drei Teile: davor, rot, danach. Ohne rote Zeilen steht alles im ersten.
     let (before, red, after) = if red.is_empty() {

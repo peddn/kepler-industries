@@ -171,12 +171,32 @@ wieder gültig.
 **Nicht scharfe Kette:** Erreicht sie ihren ersten Brennbeginn, rückt sie als
 Ganzes einen Umlauf weiter (nach derselben Regel) oder verfällt.
 
+**Start vom Boden (Startprofil):** drei Werte: Kurs (90° = Osten), Wendebeginn
+(Höhe), Ziel-Apoapsis. Senkrecht bis zum Wendebeginn, dann zunehmend geneigt
+(Neigung aus der Senkrechten = 90° · √Anteil, anfangs also schneller),
+waagerecht ab der halben Ziel-Apoapsis (`FLAT_FRACTION`). Die Schubrichtung
+bleibt in einer festen Ebene durch Startplatz und Kurs (Großkreis); die
+Bahnneigung ergibt sich daraus und aus der Drehung des Planeten. Der Aufstieg
+ist ein normales `Burn` mit Aufstiegssteuerung statt fester Richtung, deshalb
+gelten Vorschau = Ausführung, Brennpunkte und Nodes danach ohne Sonderweg.
+Brennschluss, wenn die Apoapsis die Zielhöhe erreicht: beim Planen mit
+denselben Schritten wie die Zeitleiste gerechnet und im Schritt auf Bruchteile
+eines Meters genau gesucht, dann als Ende des Brennens gespeichert. Danach
+Freiflug; die obere Luft senkt die Apoapsis noch etwas, die Vorschau zeigt den
+echten Wert. Mit leerem Tank vorher: Brennschluss dort, die Vorschau zeigt den
+Absturz. Kein Start bei Schub ≤ Gewicht. Der Start steht vor allen Nodes und
+gehört zur Kette; Nodes danach liegen auf der Bahn nach dem Aufstieg und
+lassen sich schon vor dem Abheben setzen. Wird die Startzeit verschoben,
+wandert die ganze Kette mit. Ein nicht scharfer Start wartet eine
+Planetendrehung (dann liegt der Startplatz wieder gleich).
+
 **Zeitleiste eines Schiffs:** Folge von Abschnitten
 - `Kepler`: Freiflug ohne Luft, analytisch (universelle Variablen: eine Formel
   für Ellipse, Parabel, Hyperbel).
 - `Integrated`: vorausberechnet (RK4, 0,1 s, Stützpunkt jede Sekunde,
   Hermite-Interpolation dazwischen, max. 30 min pro Stück); mit oder ohne Schub.
-- `Surface`: am Boden (gelandet oder Wrack).
+- `Surface`: am Boden (gelandet oder Wrack); mit geplantem Start endet er beim
+  Abheben.
 
 Vorausberechnet werden 8 Abschnitte (`LOOKAHEAD`) nach dem Ende des letzten
 geplanten Brennens (ohne Manöver: ab jetzt), oder bis die Zeitleiste offen
@@ -186,6 +206,7 @@ durch die Luft führt, sind 8 Abschnitte vier Umläufe; weiter voraus lässt
 sich kein Node setzen.
 Übergänge: Kepler → (Eintritt) → Integrated → (Austritt) → Kepler;
 Freiflug → (Brennbeginn) → Integrated mit Schub → (Brennende) → Freiflug;
+Surface → (Abheben) → Integrated mit Aufstiegssteuerung → (Brennschluss) → Freiflug;
 → (Bodenkontakt) → Surface/Wrack.
 
 **Aufschlagkreuz:** Es markiert die Stelle *auf dem Boden* und dreht sich mit
@@ -236,8 +257,14 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Brennbeginn an und schaltet auf 1×. Pro Schiff statt für alle, damit spätere
   automatische Routen den Zeitraffer nicht ständig bremsen. Die Markierung
   gehört zum Spielstand.
-- **Startprofil** mit wenigen Parametern (Richtung, Wendebeginn, Ziel-Apoapsis);
-  das Schiff kommt mit nicht mehr vollen Tanks oben an. Zirkularisieren per Manöver-Node.
+- **Startprofil** mit wenigen Parametern (Kurs, Wendebeginn, Ziel-Apoapsis);
+  das Schiff kommt mit nicht mehr vollen Tanks oben an. Zirkularisieren per
+  Manöver-Node, auch schon vor dem Abheben geplant. Feste Startzeit mit
+  Countdown (Vorgabe 2 min); verschieben verschiebt die ganze Kette.
+- **Seitenleiste rechts** für alles, was man bedient, als Karten je nach Lage
+  (zuerst „Start“ bei einem gelandeten Schiff). Die Anzeige links bleibt reine
+  Information. Klicks auf die Leiste gehen nicht an die Karte dahinter.
+  Schaltflächen prüfen Treffer selbst, ohne Bevys Picking.
 - **Landung über den Manöver-Node:** Die Vorschau rechnet bis zum Boden,
   Aufschlagpunkt als Kreuz, Zielgebiet als Kreisfläche auf der Oberfläche.
   Fallschirme = größere Widerstandsfläche ab einer Auslösehöhe (dasselbe Modell).
@@ -281,6 +308,8 @@ nichts verloren geht.
 - **„+1 Umlauf“ / „−1 Umlauf“** für den gewählten Node, z. B. im Node-Manager.
   Damit kommt ein Node auch auf einer stabilen Bahn auf einen späteren Umlauf.
 - **Liste der Nodes anklickbar** statt `↑`/`↓`.
+- Alles davon als Karten in der **Seitenleiste** (gibt es seit dem Startprofil).
+- **Startfenster:** Startzeit so wählen, dass die Bahnebene zu einem Ziel passt.
 
 ## Reihenfolge
 
@@ -290,7 +319,8 @@ nichts verloren geht.
    nächster Umlauf, Griffe mit Tank-Anschlag)
 3. Manöverketten ✓ (mehrere Nodes pro Schiff, Nodes auf zukünftigen Bahnen,
    ungültige Nodes bleiben, Anzeige „+N Umläufe“)
-4. Startprofil (Zirkularisieren per Node in derselben Kette)
+4. Startprofil ✓ (Kurs, Wendebeginn, Ziel-Apoapsis; Zirkularisieren per Node
+   in derselben Kette; Seitenleiste mit Karte „Start“)
 5. Landung (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
 6. Rendezvous und Andocken
 7. Mond, Wechsel der Einflusssphäre

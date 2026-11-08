@@ -9,6 +9,7 @@
 pub mod body;
 pub mod integrator;
 pub mod kepler;
+pub mod launch;
 pub mod maneuver;
 pub mod scenario;
 pub mod trajectory;
@@ -16,6 +17,7 @@ pub mod world;
 
 pub use body::{Atmosphere, Body, BodyId, SurfacePoint};
 pub use kepler::StateVector;
+pub use launch::{Launch, LaunchPlan, LaunchProfile};
 pub use maneuver::{Burn, ManeuverNode, Plan, PlanError};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
 pub use world::{Base, Vessel, VesselParams, VesselStatus, World};

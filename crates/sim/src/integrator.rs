@@ -62,14 +62,14 @@ impl Forces<'_> {
         if let Some(burn) = self.burn
             && burn.is_active(t)
         {
-            a += burn.direction * (burn.thrust / mass);
+            a += burn.direction_at(s.position) * (burn.thrust / mass);
         }
         a
     }
 }
 
 /// Ein klassischer Runge-Kutta-Schritt (4. Ordnung).
-fn rk4(forces: &Forces, t: f64, s: &StateVector, dt: f64) -> StateVector {
+pub(crate) fn rk4(forces: &Forces, t: f64, s: &StateVector, dt: f64) -> StateVector {
     let deriv = |t: f64, s: &StateVector| (s.velocity, forces.acceleration(t, s));
     let add = |s: &StateVector, (dp, dv): (DVec3, DVec3), h: f64| StateVector {
         position: s.position + dp * h,

@@ -17,6 +17,7 @@
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::integrator::{self, Forces, Sample};
 use crate::kepler::{self, StateVector};
+use crate::launch::{self, Launch, LaunchPlan};
 use crate::maneuver::{self, Burn, ManeuverNode, Plan, PlanError};
 use crate::world::VesselParams;
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,8 @@ pub enum Event {
     BurnEnd,
     /// Maximale Stücklänge erreicht; gleiche Kräfte im nächsten Stück.
     Continue,
+    /// Abheben vom Boden: Beginn des Aufstiegs.
+    Liftoff,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -74,6 +77,9 @@ pub enum Segment {
         mass: f64,
         /// Durch einen Aufschlag entstanden.
         wreck: bool,
+        /// Zeitpunkt des geplanten Abhebens; sonst bleibt das Schiff stehen.
+        #[serde(default)]
+        liftoff: Option<f64>,
     },
 }
 
@@ -98,7 +104,7 @@ impl Segment {
         match self {
             Segment::Kepler { end, .. } => end.map_or(f64::INFINITY, |(t, _)| t),
             Segment::Integrated { samples, .. } => samples[samples.len() - 1].time,
-            Segment::Surface { .. } => f64::INFINITY,
+            Segment::Surface { liftoff, .. } => liftoff.unwrap_or(f64::INFINITY),
         }
     }
 
@@ -106,7 +112,7 @@ impl Segment {
         match self {
             Segment::Kepler { end, .. } => end.map(|(_, e)| e),
             Segment::Integrated { end_event, .. } => Some(*end_event),
-            Segment::Surface { .. } => None,
+            Segment::Surface { liftoff, .. } => liftoff.map(|_| Event::Liftoff),
         }
     }
 
@@ -170,7 +176,7 @@ impl Segment {
             }
             Event::AtmosphereExit => kepler_segment(bodies, body, t, state, mass, pending),
             Event::GroundContact => wreck(bodies, body, t, state, mass),
-            Event::BurnStart => {
+            Event::BurnStart | Event::Liftoff => {
                 let burn = *pending?;
                 integrated(bodies, params, body, t, state, mass, Some(burn), None)
             }
@@ -296,16 +302,17 @@ fn wreck(bodies: &[Body], body_id: BodyId, t: f64, state: StateVector, mass: f64
         point,
         mass,
         wreck: true,
+        liftoff: None,
     }
 }
 
 /// Das nächste geplante Brennen nach dem Abschnitt `back`. Nach einem Brennen
 /// beginnt das nächste echt später (siehe `locate`); so wird ein Brennen ohne
 /// Dauer nicht zweimal gefunden.
-fn pending_after(plans: &[Plan], back: &Segment) -> Option<Burn> {
+fn pending_after(burns: &[Burn], back: &Segment) -> Option<Burn> {
     let t = back.end();
     let after_burn = back.is_burn();
-    plans.iter().map(|p| p.burn).find(|b| {
+    burns.iter().copied().find(|b| {
         if after_burn {
             b.start > t
         } else {
@@ -321,9 +328,9 @@ fn extend(
     segments: &mut VecDeque<Segment>,
     bodies: &[Body],
     params: &VesselParams,
-    plans: &[Plan],
+    burns: &[Burn],
 ) {
-    let horizon = plans.last().map_or(f64::NEG_INFINITY, |p| p.burn.end);
+    let horizon = burns.last().map_or(f64::NEG_INFINITY, |b| b.end);
     loop {
         let ahead = segments
             .iter()
@@ -333,7 +340,7 @@ fn extend(
         if ahead >= LOOKAHEAD {
             return;
         }
-        let pending = pending_after(plans, back);
+        let pending = pending_after(burns, back);
         match back.next(bodies, params, pending.as_ref()) {
             Some(segment) => segments.push_back(segment),
             None => return,
@@ -342,15 +349,33 @@ fn extend(
 }
 
 /// Der Abschnitt `first`, neu berechnet ab seinem Anfangszustand und bis zum
-/// ersten geplanten Brennen. `None` während eines Brennens oder am Boden.
+/// ersten geplanten Brennen (am Boden: bis zum Abheben). `None` während eines
+/// Brennens.
 fn restart(
     first: &Segment,
     bodies: &[Body],
     params: &VesselParams,
-    plans: &[Plan],
+    burns: &[Burn],
 ) -> Option<Segment> {
-    let pending = plans.first().map(|p| p.burn);
+    let pending = burns.first().copied();
     match first {
+        Segment::Surface {
+            body,
+            start,
+            point,
+            mass,
+            wreck,
+            ..
+        } => Some(Segment::Surface {
+            body: *body,
+            start: *start,
+            point: *point,
+            mass: *mass,
+            wreck: *wreck,
+            liftoff: pending
+                .filter(|b| !*wreck && b.ascent.is_some())
+                .map(|b| b.start),
+        }),
         Segment::Kepler {
             body,
             start,
@@ -482,17 +507,23 @@ pub struct ChainNode {
 }
 
 /// Zeitleiste eines Schiffs: der aktuelle Abschnitt und die vorausberechneten,
-/// dazu die geplante Manöverkette.
+/// dazu der geplante Start (am Boden) und die Manöverkette.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Trajectory {
     segments: VecDeque<Segment>,
+    /// Geplanter Start vom Boden; steht vor allen Nodes. Verschwindet beim
+    /// Brennschluss.
+    #[serde(default)]
+    launch: Option<LaunchPlan>,
     /// Manöverkette in Ausführungsreihenfolge. Jeder Node liegt auf der Bahn
-    /// nach den vorherigen. Die gültigen stehen vorn: Nach einem ungültigen
-    /// Node ist die Kette unterbrochen, alle weiteren sind auch ungültig. Sie
-    /// bleiben erhalten und werden wieder gültig, sobald es wieder passt.
+    /// nach den vorherigen (und nach dem Aufstieg). Die gültigen stehen vorn:
+    /// Nach einem ungültigen Node ist die Kette unterbrochen, alle weiteren
+    /// sind auch ungültig. Sie bleiben erhalten und werden wieder gültig,
+    /// sobald es wieder passt.
     nodes: Vec<ChainNode>,
-    /// Nur eine scharfe Kette wird ausgeführt. Eine nicht scharfe rückt bei
-    /// Brennbeginn als Ganzes einen Umlauf weiter.
+    /// Nur eine scharfe Kette (mit Start) wird ausgeführt. Eine nicht scharfe
+    /// rückt bei Brennbeginn als Ganzes einen Umlauf weiter, beim Abheben eine
+    /// Planetendrehung.
     armed: bool,
 }
 
@@ -509,6 +540,7 @@ impl Trajectory {
         let first = coast(bodies, params, body_id, t, state, mass, None);
         let mut trajectory = Self {
             segments: VecDeque::from([first]),
+            launch: None,
             nodes: Vec::new(),
             armed: false,
         };
@@ -525,111 +557,164 @@ impl Trajectory {
                 point,
                 mass,
                 wreck: false,
+                liftoff: None,
             }]),
+            launch: None,
             nodes: Vec::new(),
             armed: false,
         }
     }
 
-    fn valid_plans(&self) -> Vec<Plan> {
-        self.plans().copied().collect()
+    /// Alle geplanten Brennvorgänge in Reihenfolge: Aufstieg, dann die
+    /// gültigen Nodes.
+    pub fn burns(&self) -> Vec<Burn> {
+        self.launch
+            .iter()
+            .map(|l| l.burn)
+            .chain(self.plans().map(|p| p.burn))
+            .collect()
     }
 
     fn extend(&mut self, bodies: &[Body], params: &VesselParams) {
-        let plans = self.valid_plans();
-        extend(&mut self.segments, bodies, params, &plans);
+        let burns = self.burns();
+        extend(&mut self.segments, bodies, params, &burns);
     }
 
     /// Zeitleiste ab dem Anfang des aktuellen Abschnitts mit den Brennvorgängen
-    /// `plans`, danach frei. `None` während eines Brennens oder am Boden.
+    /// `burns`, danach frei. `None` während eines Brennens.
     fn compute(
         &self,
         bodies: &[Body],
         params: &VesselParams,
-        plans: &[Plan],
+        burns: &[Burn],
     ) -> Option<VecDeque<Segment>> {
-        let first = restart(&self.segments[0], bodies, params, plans)?;
+        let first = restart(&self.segments[0], bodies, params, burns)?;
         let mut segments = VecDeque::from([first]);
-        extend(&mut segments, bodies, params, plans);
+        extend(&mut segments, bodies, params, burns);
         Some(segments)
     }
 
     /// Berechnet die Kette und die Zeitleiste ab dem Anfang des aktuellen
-    /// Abschnitts neu: die Nodes der Reihe nach, jeder auf der Bahn nach den
-    /// vorherigen Brennvorgängen. Der aktuelle Abschnitt behält seinen
-    /// Anfangszustand. Von `now` hängt nur die Regel "Brennen nicht vor jetzt"
-    /// ab.
+    /// Abschnitts neu: nach dem Aufstieg die Nodes der Reihe nach, jeder auf
+    /// der Bahn nach den vorherigen Brennvorgängen. Der aktuelle Abschnitt
+    /// behält seinen Anfangszustand. Von `now` hängt nur die Regel "Brennen
+    /// nicht vor jetzt" ab.
     fn rebuild(&mut self, bodies: &[Body], params: &VesselParams, now: f64) {
-        let mut plans: Vec<Plan> = Vec::new();
+        let mut burns: Vec<Burn> = self.launch.iter().map(|l| l.burn).collect();
         let mut broken = false;
         for k in 0..self.nodes.len() {
             let result = if broken {
                 Err(PlanError::AfterInvalid)
             } else {
-                let Some(leg) = self.compute(bodies, params, &plans) else {
+                let Some(leg) = self.compute(bodies, params, &burns) else {
                     return;
                 };
-                let previous = plans.last().map(|p| &p.burn);
-                locate(bodies, params, &leg, now, previous, self.nodes[k].node)
+                locate(bodies, params, &leg, now, burns.last(), self.nodes[k].node)
             };
             match result {
-                Ok(plan) => plans.push(plan),
+                Ok(plan) => burns.push(plan.burn),
                 Err(_) => broken = true,
             }
             self.nodes[k].plan = result;
         }
-        if let Some(segments) = self.compute(bodies, params, &plans) {
+        if let Some(segments) = self.compute(bodies, params, &burns) {
             self.segments = segments;
         }
     }
 
+    /// Dieselbe Kette um `dt` verschoben: Start und alle Nodes (wie gesetzt).
+    /// Der Aufstieg wird neu berechnet; er liegt nur woanders über dem
+    /// drehenden Planeten.
+    fn shifted(
+        &self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        dt: f64,
+    ) -> Result<Trajectory, PlanError> {
+        let mut changed = self.clone();
+        if let Some(plan) = self.launch {
+            let launch = Launch {
+                time: plan.launch.time + dt,
+                ..plan.launch
+            };
+            changed.launch = Some(self.plan_launch(bodies, params, now, launch)?);
+        }
+        for n in &mut changed.nodes {
+            n.node.time += dt;
+        }
+        changed.rebuild(bodies, params, now);
+        Ok(changed)
+    }
+
     /// Rückt bis zum Zeitpunkt `t` vor: Vergangene Abschnitte fallen weg,
-    /// neue werden bei Bedarf berechnet. Ein ausgeführter Node verschwindet.
-    /// Eine nicht scharfe Kette rückt beim ersten Brennbeginn als Ganzes einen
-    /// Umlauf weiter oder verfällt, wenn es keinen nächsten Umlauf gibt.
+    /// neue werden bei Bedarf berechnet. Ein ausgeführter Node (oder Start)
+    /// verschwindet. Eine nicht scharfe Kette rückt beim ersten Brennbeginn
+    /// als Ganzes einen Umlauf weiter oder verfällt, wenn es keinen nächsten
+    /// Umlauf gibt; beim Abheben rückt sie um eine Planetendrehung weiter.
     pub fn advance_to(&mut self, bodies: &[Body], t: f64, params: &VesselParams) {
         loop {
             self.extend(bodies, params);
             if self.segments.len() < 2 || self.segments[0].end() > t {
                 break;
             }
+            let at = self.segments[0].end();
             let first = self.plans().next().copied();
-            if self.segments[0].end_event() == Some(Event::BurnStart)
-                && !self.armed
-                && let Some(first) = first
-            {
-                let burn_start = self.segments[0].end();
-                match next_orbit(bodies, &self.segments[0], &first) {
-                    Some(later) => {
-                        let period = later.node.time - first.node.time;
-                        for n in &mut self.nodes {
-                            let time = n.plan.map_or(n.node.time, |p| p.node.time);
-                            n.node.time = time + period;
+            match self.segments[0].end_event() {
+                Some(Event::Liftoff) if !self.armed => {
+                    let day = bodies[self.segments[0].body()].rotation_period;
+                    match self.shifted(bodies, params, at, day) {
+                        Ok(changed) => *self = changed,
+                        Err(_) => {
+                            self.launch = None;
+                            self.nodes.clear();
+                            self.rebuild(bodies, params, at);
                         }
                     }
-                    None => self.nodes.clear(),
+                    continue;
                 }
-                self.rebuild(bodies, params, burn_start);
-                continue;
+                Some(Event::BurnStart) if !self.armed && self.launch.is_none() => {
+                    if let Some(first) = first {
+                        match next_orbit(bodies, &self.segments[0], &first) {
+                            Some(later) => {
+                                let period = later.node.time - first.node.time;
+                                for n in &mut self.nodes {
+                                    let time = n.plan.map_or(n.node.time, |p| p.node.time);
+                                    n.node.time = time + period;
+                                }
+                            }
+                            None => self.nodes.clear(),
+                        }
+                        self.rebuild(bodies, params, at);
+                        continue;
+                    }
+                }
+                _ => {}
             }
             let done = self
                 .segments
                 .pop_front()
                 .expect("mindestens zwei Abschnitte");
-            if done.is_burn() && done.end_event() != Some(Event::Continue) && !self.nodes.is_empty()
-            {
-                self.nodes.remove(0);
+            if done.is_burn() && done.end_event() != Some(Event::Continue) {
+                // Ausgeführt: zuerst der Aufstieg, dann die Nodes der Reihe nach.
+                if self.launch.is_some() {
+                    self.launch = None;
+                } else if !self.nodes.is_empty() {
+                    self.nodes.remove(0);
+                }
             }
         }
-        if matches!(self.segments[0], Segment::Surface { .. }) {
+        // Ein Wrack plant nichts mehr.
+        if matches!(self.segments[0], Segment::Surface { wreck: true, .. }) {
+            self.launch = None;
             self.nodes.clear();
         }
     }
 
-    /// Lässt sich die Kette gerade ändern?
+    /// Lässt sich die Kette gerade ändern? Am Boden nur mit geplantem Start.
     fn check_editable(&self, params: &VesselParams) -> Result<(), PlanError> {
         match self.current() {
-            Segment::Surface { .. } => Err(PlanError::NotFlying),
+            Segment::Surface { .. } if self.launch.is_none() => Err(PlanError::NotFlying),
             segment if segment.is_burn() => Err(PlanError::Burning),
             _ if params.thrust <= 0.0 || params.exhaust_velocity <= 0.0 => Err(PlanError::NoEngine),
             _ => Ok(()),
@@ -661,7 +746,7 @@ impl Trajectory {
         self.check_editable(params)?;
         let index = self.plans().filter(|p| p.node.time < node.time).count();
         let mut changed = self.clone();
-        if changed.nodes.is_empty() {
+        if changed.nodes.is_empty() && changed.launch.is_none() {
             changed.armed = false;
         }
         changed.nodes.insert(
@@ -715,16 +800,98 @@ impl Trajectory {
         Ok(())
     }
 
+    /// Berechnet den Aufstieg für `launch` vom aktuellen Abschnitt aus (muss
+    /// am Boden sein).
+    fn plan_launch(
+        &self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        launch: Launch,
+    ) -> Result<LaunchPlan, PlanError> {
+        let Segment::Surface {
+            body,
+            point,
+            mass,
+            wreck: false,
+            ..
+        } = *self.current()
+        else {
+            return Err(PlanError::NotLanded);
+        };
+        if launch.time <= now {
+            return Err(PlanError::InPast);
+        }
+        let burn = launch::plan(bodies, params, body, point, mass, &launch)?;
+        Ok(LaunchPlan { launch, burn })
+    }
+
+    /// Plant oder ändert den Start (Zeitpunkt und Profil). Die Nodes danach
+    /// bleiben an ihren Zeitpunkten und wandern mit der neuen Bahn. Ein neuer
+    /// Start ohne Nodes ist nicht scharf.
+    pub fn set_launch(
+        &mut self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        launch: Launch,
+    ) -> Result<(), PlanError> {
+        let plan = self.plan_launch(bodies, params, now, launch)?;
+        if self.launch.is_none() && self.nodes.is_empty() {
+            self.armed = false;
+        }
+        self.launch = Some(plan);
+        self.rebuild(bodies, params, now);
+        Ok(())
+    }
+
+    /// Verschiebt den Start um `dt`; die ganze Kette wandert mit.
+    pub fn shift_launch(
+        &mut self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        dt: f64,
+    ) -> Result<(), PlanError> {
+        if self.launch.is_none() {
+            return Err(PlanError::NoNode);
+        }
+        *self = self.shifted(bodies, params, now, dt)?;
+        Ok(())
+    }
+
+    /// Sagt den Start ab. Nodes danach bleiben (dann ungültig) erhalten.
+    pub fn clear_launch(
+        &mut self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+    ) -> Result<(), PlanError> {
+        if !matches!(self.current(), Segment::Surface { .. }) {
+            return Err(PlanError::NotLanded);
+        }
+        if self.launch.take().is_none() {
+            return Err(PlanError::NoNode);
+        }
+        self.rebuild(bodies, params, now);
+        Ok(())
+    }
+
     /// Schaltet die Kette scharf (oder wieder ab). Während des Brennens nicht möglich.
     pub fn set_armed(&mut self, armed: bool) -> Result<(), PlanError> {
         if self.current().is_burn() {
             return Err(PlanError::Burning);
         }
-        if self.nodes.is_empty() {
+        if self.nodes.is_empty() && self.launch.is_none() {
             return Err(PlanError::NoNode);
         }
         self.armed = armed;
         Ok(())
+    }
+
+    /// Der geplante Start, bis zum Brennschluss.
+    pub fn launch(&self) -> Option<&LaunchPlan> {
+        self.launch.as_ref()
     }
 
     /// Dieselbe Zeitleiste nur mit den ersten `count` Nodes der Kette. Auf
