@@ -4,16 +4,18 @@
 //! Alles läuft über die Simulation: Jede Änderung ruft `World::set_node` auf,
 //! die Zeitleiste wird neu berechnet und ist sofort die Vorschau.
 //!
+//! Vorerst ist jeder neue Node sofort scharf. Die Simulation kennt auch nicht
+//! scharfe Nodes; eine Schaltfläche dafür kommt später an anderer Stelle in die
+//! Oberfläche.
+//!
 //! Treffer werden im Bildschirm geprüft (Abstand in Pixeln). Punkte hinter dem
 //! Planeten zählen nicht. Annahme bis zum Mond-PR: Der Planet liegt im Fokus.
 
 use crate::Sim;
 use crate::camera::{CameraRig, MainCamera, OVERLAY_LAYER, dir_to_view, to_view};
-use crate::hud::UiFont;
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use bevy::text::FontSize;
 use bevy::window::PrimaryWindow;
 use sim::{ManeuverNode, Plan, PlanError, Segment, Trajectory, World, kepler, maneuver};
 
@@ -29,11 +31,6 @@ const NODE_RADIUS: f32 = 0.012;
 /// Node-Farbe: scharf orange, sonst hellblau.
 const ARMED_COLOR: Color = Color::srgb(1.0, 0.55, 0.1);
 const UNARMED_COLOR: Color = Color::srgb(0.6, 0.85, 1.0);
-/// Lage und Größe der Schaltfläche "scharf" relativ zum Node (Bildschirm).
-/// Rechts außerhalb der Griffe (die reichen höchstens ~77 px weit), damit sie
-/// sich nie überdecken.
-const BUTTON_OFFSET: Vec2 = Vec2::new(85.0, -13.0);
-const BUTTON_SIZE: Vec2 = Vec2::new(170.0, 26.0);
 
 /// Die sechs Griffe: Achse (0 prograd, 1 normal, 2 radial), Richtung, Farbe.
 const HANDLES: [(usize, f64, Color); 6] = [
@@ -116,90 +113,6 @@ pub fn configure_gizmos(mut store: ResMut<GizmoConfigStore>) {
     let (config, _) = store.config_mut::<NodeGizmos>();
     config.render_layers = RenderLayers::layer(OVERLAY_LAYER);
     config.line.width = 2.5;
-}
-
-/// Schaltfläche neben dem Node, mit der er scharf geschaltet wird.
-#[derive(Component)]
-pub struct ArmButton;
-
-#[derive(Component)]
-pub struct ArmButtonText;
-
-pub fn setup_button(mut commands: Commands, font: Res<UiFont>) {
-    commands
-        .spawn((
-            ArmButton,
-            Node {
-                position_type: PositionType::Absolute,
-                width: px(BUTTON_SIZE.x),
-                height: px(BUTTON_SIZE.y),
-                border: UiRect::all(px(1)),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                display: Display::None,
-                ..default()
-            },
-            BackgroundColor(Color::BLACK),
-            BorderColor::all(Color::WHITE),
-        ))
-        .with_child((
-            ArmButtonText,
-            Text::new(""),
-            TextFont {
-                font: font.0.clone().into(),
-                font_size: FontSize::Px(14.0),
-                ..default()
-            },
-        ));
-}
-
-/// Bildschirmbereich der Schaltfläche, wenn der Node bei `node` liegt.
-fn button_rect(node: Vec2) -> Rect {
-    Rect::from_corners(node + BUTTON_OFFSET, node + BUTTON_OFFSET + BUTTON_SIZE)
-}
-
-/// Schaltfläche an den Node des gewählten Schiffs schieben und beschriften.
-/// Während des Brennens ausgeblendet, dann ist nichts mehr zu schalten.
-pub fn sync_button(
-    sim: Res<Sim>,
-    selection: Res<Selection>,
-    rig: Res<CameraRig>,
-    camera: Single<(&Camera, &Transform), With<MainCamera>>,
-    mut button: Single<(&mut Node, &mut BackgroundColor, &mut BorderColor), With<ArmButton>>,
-    mut label: Single<&mut Text, With<ArmButtonText>>,
-) {
-    let world = &sim.0;
-    let (camera, transform) = *camera;
-    let screen = selection.0.and_then(|i| {
-        let trajectory = &world.vessels[i].trajectory;
-        let plan = trajectory
-            .plan()
-            .filter(|_| !trajectory.current().is_burn())?;
-        let node = to_view(plan.node_state.position, rig.focus);
-        let screen = camera
-            .world_to_viewport(&GlobalTransform::from(*transform), node)
-            .ok()?;
-        Some((screen, plan.armed))
-    });
-    let (node, background, border) = &mut *button;
-    let Some((screen, armed)) = screen else {
-        node.display = Display::None;
-        return;
-    };
-    let rect = button_rect(screen);
-    node.display = Display::Flex;
-    node.left = px(rect.min.x);
-    node.top = px(rect.min.y);
-    let (text, fill) = if armed {
-        ("● Scharf", ARMED_COLOR.darker(0.25))
-    } else {
-        ("○ Scharf schalten", Color::srgb(0.12, 0.14, 0.18))
-    };
-    background.0 = fill;
-    **border = BorderColor::all(if armed { ARMED_COLOR } else { UNARMED_COLOR });
-    if label.0 != text {
-        label.0 = text.into();
-    }
 }
 
 /// Bildschirmprojektion mit Verdeckung durch den Planeten.
@@ -346,12 +259,6 @@ pub fn input(
         let vessel = &mut world.vessels[i];
         vessel.halt_warp_at_burn = !vessel.halt_warp_at_burn;
     }
-    if (keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter))
-        && let Some(i) = selection.0
-        && let Some(armed) = world.vessels[i].trajectory.plan().map(|p| p.armed)
-    {
-        failure = world.set_node_armed(i, !armed).err();
-    }
 
     let Some(cursor) = window.cursor_position() else {
         if let Some(e) = failure {
@@ -397,11 +304,6 @@ pub fn input(
                 let mut free = vessel.trajectory.clone();
                 let _ = free.clear_node(&world.bodies, &vessel.params);
                 *drag = Drag::Node(coast_path(world, &free));
-            } else if let Ok(screen) = camera.world_to_viewport(&projector.transform, node)
-                && button_rect(screen).contains(cursor)
-            {
-                failure = world.set_node_armed(i, !plan.armed).err();
-                *drag = Drag::None;
             }
         }
     }
@@ -500,13 +402,14 @@ fn click(
         if let Some((distance, time)) = nearest_on_path(projector, &path, focus, world.time, cursor)
             && distance < PICK_RADIUS
         {
-            return world.set_node(
-                i,
-                ManeuverNode {
-                    time,
-                    delta_v: DVec3::ZERO,
-                },
-            );
+            let node = ManeuverNode {
+                time,
+                delta_v: DVec3::ZERO,
+            };
+            // Vorerst ist jeder neue Node sofort scharf.
+            return world
+                .set_node(i, node)
+                .and_then(|()| world.set_node_armed(i, true));
         }
     }
     Ok(())

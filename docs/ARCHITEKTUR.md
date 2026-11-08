@@ -182,13 +182,14 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   ist gewollt (siehe „Aufschlagkreuz“ unter Physikmodell).
 - **Ein Manöver-Node pro Schiff.** Der nächste wird geplant, wenn der vorige
   ausgeführt ist.
-- **Scharf schalten:** Nur ein scharfer Node wird ausgeführt (`Plan::armed`,
-  Schaltfläche neben dem Node oder `Enter`). Neue Nodes sind nicht scharf, ein
-  geänderter behält seinen Zustand. Ein nicht scharfer Node rückt bei
-  Brennbeginn einen Umlauf weiter (siehe „Brennen ganz in der Zukunft“), so
-  geht kein Plan verloren, nur weil der Zeitraffer läuft. Die Vorschau ist
-  scharf wie nicht scharf dieselbe. Der Zeitraffer-Stopp greift nur bei
-  scharfen Nodes.
+- **Scharf schalten:** Nur ein scharfer Node wird ausgeführt (`Plan::armed`).
+  In der Simulation sind neue Nodes nicht scharf, ein geänderter behält seinen
+  Zustand. Ein nicht scharfer Node rückt bei Brennbeginn einen Umlauf weiter
+  (siehe „Brennen ganz in der Zukunft“), so geht kein Plan verloren, nur weil
+  der Zeitraffer läuft. Die Vorschau ist scharf wie nicht scharf dieselbe. Der
+  Zeitraffer-Stopp greift nur bei scharfen Nodes. **Vorerst schaltet das Spiel
+  jeden neuen Node sofort scharf**; die Schaltfläche dafür kommt später an
+  anderer Stelle in die Oberfläche (siehe UI-Ideen).
 - **Brennpunkte:** Gelbe Ringe auf der Bahn markieren Beginn und Ende jedes
   geplanten Brennens, für alle Schiffe mit Node.
 - **Griffe:** Ein gezogener Griff folgt der Maus entlang seiner Achse und
@@ -244,6 +245,8 @@ nichts verloren geht.
 
 - **Manöver-Node-Manager:** Übersicht und Bearbeitung der geplanten Nodes
   (sinnvoll, sobald es Manöverketten gibt)
+- **Scharf schalten:** Schaltfläche dafür, z. B. im Node-Manager. Die Mechanik
+  steckt schon in der Simulation; bis dahin ist jeder Node sofort scharf.
 
 ## Reihenfolge
 
