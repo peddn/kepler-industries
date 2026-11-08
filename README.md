@@ -20,6 +20,11 @@ sobald ein gelandetes Schiff gewählt ist. Die Vorschau zeigt den ganzen
 Aufstieg (gelb) und die Bahn danach. Den Node zum Zirkularisieren an der
 Apoapsis kann man schon vor dem Abheben setzen.
 
+Unten zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
+ist der volle Tank, darin die geplanten Brennvorgänge der Kette (Start gelb,
+Nodes violett), dahinter der Rest (grün). Reicht der Treibstoff nicht, steht
+rot dahinter, wie viel fehlt.
+
 Manöver plant man mit dem Manöver-Node wie in KSP, auch mehrere
 hintereinander als Kette: Jeder Node liegt auf der Bahn nach den vorherigen
 und wandert mit, wenn sich ein früherer ändert. Eine Kette ist sofort scharf:
@@ -59,6 +64,11 @@ Kreuz markiert den Aufschlagpunkt.*
 *Node mit 250 m/s prograd, 20 s vor Relais-1 gesetzt. Das Brennen bräuchte
 30 s Vorlauf, also liegt der Node einen Umlauf später; das Etikett „+1 Umlauf“
 zeigt es an.*
+
+![Δv-Balken](docs/screenshots/dv-balken.png)
+
+*Relais-1 hat noch 669 m/s an Bord (von 1216 m/s mit vollem Tank). Die Kette
+will zweimal 400 m/s: Der zweite Node bekommt nur 269 m/s, 131 m/s fehlen.*
 
 ## Starten
 

@@ -4,6 +4,7 @@
 //! vollständig im Crate `sim`; hier wird sie nur gelesen und vorangetrieben.
 
 mod camera;
+mod dv_bar;
 mod hud;
 mod node_ui;
 mod panel;
@@ -175,6 +176,7 @@ fn main() {
     .insert_resource(selection)
     .init_resource::<node_ui::SelectedNode>()
     .init_resource::<panel::PanelShown>()
+    .init_resource::<dv_bar::BarShown>()
     .init_resource::<node_ui::Drag>()
     .init_resource::<node_ui::UiMessage>()
     .init_gizmo_group::<node_ui::NodeGizmos>()
@@ -188,6 +190,7 @@ fn main() {
                 node_ui::configure_gizmos,
                 node_ui::setup_label,
                 panel::setup,
+                dv_bar::setup,
                 hud::setup,
             ),
         )
@@ -207,6 +210,7 @@ fn main() {
             node_ui::sync_label,
             panel::sync,
             panel::hover,
+            dv_bar::sync,
             view::draw_planet_grid,
             view::draw_trajectories,
             view::draw_burn_points,

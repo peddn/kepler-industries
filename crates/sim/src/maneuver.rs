@@ -195,6 +195,7 @@ mod tests {
         drag_area: 2.0,
         thrust: 2000.0,
         exhaust_velocity: 3000.0,
+        fuel_capacity: 200.0,
     };
 
     #[test]
