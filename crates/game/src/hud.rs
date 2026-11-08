@@ -81,12 +81,22 @@ fn place(point: &SurfacePoint) -> String {
 fn selected_details(world: &World, i: usize) -> Vec<String> {
     let vessel = &world.vessels[i];
     let trajectory = &vessel.trajectory;
-    let mut lines = vec![format!(
-        "{}: Treibstoff {:.1} kg, Δv {:.0} m/s",
-        vessel.name,
-        world.vessel_fuel(i),
-        world.vessel_delta_v(i)
-    )];
+    let mut lines = vec![
+        format!(
+            "{}: Treibstoff {:.1} kg, Δv {:.0} m/s",
+            vessel.name,
+            world.vessel_fuel(i),
+            world.vessel_delta_v(i)
+        ),
+        format!(
+            "Zeitraffer-Stopp bei Brennbeginn: {} (H)",
+            if vessel.halt_warp_at_burn {
+                "an"
+            } else {
+                "aus"
+            }
+        ),
+    ];
     let flying = !matches!(trajectory.current(), Segment::Surface { .. });
 
     match trajectory.plan() {
@@ -186,7 +196,15 @@ pub fn update(
                 format!("In der Atmosphäre, Höhe {}", km(altitude))
             }
             VesselStatus::Burning { remaining } => {
-                format!("Brennt, noch {remaining:.1} s")
+                // Momentane Bahn: ändert sich während des Brennens laufend.
+                let (body_id, state) = world.vessel_state(i);
+                let body = &world.bodies[body_id];
+                let info = kepler::orbit_info(body.gm, &state);
+                format!(
+                    "Brennt, noch {remaining:.1} s  Ap {}  Pe {}",
+                    info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
+                    km(info.periapsis - body.radius)
+                )
             }
             VesselStatus::Landed { point } => format!("Gelandet bei {}", place(&point)),
             VesselStatus::Wreck { point } => format!("Wrack bei {}", place(&point)),
@@ -202,7 +220,10 @@ pub fn update(
     lines.push(
         "Linksklick: Schiff wählen / Node setzen   Griffe ziehen: Δv (Umschalt: fein)".into(),
     );
-    lines.push("Node ziehen: verschieben   Entf: Node löschen   Tab: nächstes Schiff".into());
+    lines.push(
+        "Node ziehen: verschieben   Entf: Node löschen   Tab: nächstes Schiff   H: Zeitraffer-Stopp"
+            .into(),
+    );
     lines.push(
         "Rechte Maustaste ziehen: drehen   Mausrad: zoomen   , / .: Zeitraffer   Leertaste: Pause"
             .into(),

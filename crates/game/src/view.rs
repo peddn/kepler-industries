@@ -275,6 +275,9 @@ pub fn draw_trajectories(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos)
                 Segment::Integrated { samples, burn, .. } => {
                     let color = if burn.is_some() {
                         after_burn = true;
+                        if segment.start() <= now && now < segment.end() {
+                            draw_momentary_orbit(&mut gizmos, world, segment, now, rig.focus);
+                        }
                         BURN_COLOR
                     } else {
                         ATMOSPHERE_PATH_COLOR
@@ -285,6 +288,35 @@ pub fn draw_trajectories(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos)
             }
         }
     }
+}
+
+/// Während des Brennens: die Bahn, die das Schiff hätte, wenn das Triebwerk
+/// jetzt abschaltete (wie in KSP). Sie verformt sich sichtbar von der alten zur
+/// neuen Bahn. Abgeschnitten am Eintritt in die Luft; in der Luft gar nicht,
+/// dort zählt der berechnete Weg.
+fn draw_momentary_orbit(
+    gizmos: &mut Gizmos,
+    world: &World,
+    segment: &Segment,
+    now: f64,
+    focus: DVec3,
+) {
+    let body = &world.bodies[segment.body()];
+    let state = segment.state_at(&world.bodies, now);
+    let boundary = body.boundary_radius();
+    if state.position.length() < boundary {
+        return;
+    }
+    let span = kepler::period(body.gm, &state).unwrap_or(3.0 * 3600.0);
+    let to =
+        kepler::time_to_radius_inbound(body.gm, &state, boundary).map_or(span, |dt| dt.min(span));
+    gizmos.linestrip(
+        (0..=256).map(|i| {
+            let dt = to * i as f64 / 256.0;
+            to_view(kepler::propagate(body.gm, state, dt).position, focus)
+        }),
+        ORBIT_COLOR,
+    );
 }
 
 fn draw_samples(

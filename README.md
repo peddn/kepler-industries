@@ -15,7 +15,9 @@ stürzt nach einigen Umläufen ab, außer man rettet sie mit einem Manöver.
 
 Manöver plant man mit dem Manöver-Node wie in KSP. Das Schiff führt das
 Brennmanöver zum geplanten Zeitpunkt selbst aus, auch unter Zeitraffer.
-Endet eine Bahn am Boden, zeigt ein rotes Kreuz den Aufschlagpunkt.
+Während des Brennens zeigt die blaue Linie die momentane Bahn, die sich
+sichtbar zur geplanten (violetten) hin verformt. Endet eine Bahn am Boden,
+zeigt ein rotes Kreuz den Aufschlagpunkt.
 
 ![Manöver-Node](docs/screenshots/manoever-node.png)
 
@@ -50,6 +52,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein) |
 | Node ziehen | Node entlang der Bahn verschieben |
 | `Entf` / `Rücktaste` | Node löschen |
+| `H` | Zeitraffer-Stopp für das gewählte Schiff an/aus: Beginnt es zu brennen, hält der Zeitraffer genau dort an und schaltet auf 1× |
 | `Esc` | Auswahl aufheben |
 | `.` / `,` | Zeitraffer schneller / langsamer (1× bis 100 000×) |
 | Leertaste | Pause |

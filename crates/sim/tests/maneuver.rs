@@ -318,3 +318,29 @@ fn invalid_nodes_are_rejected() {
     assert_eq!(world.set_node(0, node(900.0)), Err(PlanError::Burning));
     assert_eq!(world.clear_node(0), Err(PlanError::Burning));
 }
+
+/// Nur Schiffe mit gesetzter Markierung halten den Zeitraffer an, und nur vor
+/// dem Brennbeginn.
+#[test]
+fn halting_burn_respects_flag() {
+    let mut world = demo();
+    let node = |time| ManeuverNode {
+        time,
+        delta_v: prograde(20.0),
+    };
+    world.set_node(0, node(1_000.0)).unwrap();
+    world.set_node(1, node(2_000.0)).unwrap();
+    assert_eq!(world.next_halting_burn(), None);
+
+    world.vessels[1].halt_warp_at_burn = true;
+    let start = world.vessels[1].trajectory.plan().unwrap().burn.start;
+    assert_eq!(world.next_halting_burn(), Some(start));
+
+    // Genau am Brennbeginn: kein zweites Anhalten.
+    world.advance_to(start);
+    assert_eq!(world.next_halting_burn(), None);
+    assert!(matches!(
+        world.vessel_status(1),
+        VesselStatus::Burning { .. }
+    ));
+}
