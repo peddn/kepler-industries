@@ -3,6 +3,7 @@
 //! Ein Node ist der Plan selbst: Wird er gesetzt, wird die Zeitleiste des
 //! Schiffs mit dem Brennmanöver neu berechnet. Vorschau und Ausführung sind
 //! damit derselbe Code, die Vorschau kann nicht von der Ausführung abweichen.
+//! Mehrere Nodes bilden eine Kette (siehe `trajectory`).
 
 use crate::body::BodyId;
 use crate::kepler::StateVector;
@@ -86,9 +87,11 @@ impl Burn {
     }
 }
 
-/// Ein gesetzter Node mit allem, was daraus folgt.
+/// Was aus einem Node folgt.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Plan {
+    /// Der Node, wie er ausgeführt wird: Zeitpunkt nach der Regel "Brennen
+    /// nicht zu früh" eventuell einen oder mehrere Umläufe später als gesetzt.
     pub node: ManeuverNode,
     /// Körper, um den das Schiff beim Node kreist.
     pub body: BodyId,
@@ -96,10 +99,6 @@ pub struct Plan {
     /// prograd/normal/radial fest und ist der Ort der Node-Markierung.
     pub node_state: StateVector,
     pub burn: Burn,
-    /// Nur ein scharfer Node wird ausgeführt. Ein nicht scharfer rückt bei
-    /// Brennbeginn einen Umlauf weiter. Neue Nodes sind nicht scharf.
-    #[serde(default)]
-    pub armed: bool,
 }
 
 impl Plan {
@@ -128,8 +127,9 @@ pub fn to_inertial(state: &StateVector, delta_v: DVec3) -> DVec3 {
     p * delta_v.x + n * delta_v.y + r * delta_v.z
 }
 
-/// Warum ein Node nicht gesetzt oder gelöscht werden kann.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Warum ein Node nicht gesetzt oder gelöscht werden kann, oder warum ein
+/// Node der Kette gerade ungültig ist.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlanError {
     NotFlying,
     Burning,
@@ -139,6 +139,13 @@ pub enum PlanError {
     /// Brennbeginn läge in der Vergangenheit, und es gibt keinen nächsten
     /// Umlauf ohne Luft oder Boden dazwischen.
     TooLate,
+    /// Das Brennen begänne vor dem Ende des vorherigen, und es gibt keinen
+    /// nächsten Umlauf ohne Luft oder Boden dazwischen.
+    Overlaps,
+    /// Das Schiff ist zu diesem Zeitpunkt schon am Boden.
+    OnGround,
+    /// Ein früherer Node der Kette ist ungültig.
+    AfterInvalid,
     NoNode,
 }
 
@@ -151,6 +158,11 @@ impl fmt::Display for PlanError {
             PlanError::InPast => "Zeitpunkt liegt in der Vergangenheit",
             PlanError::BeyondPrediction => "Zeitpunkt liegt hinter der Vorausschau",
             PlanError::TooLate => "Zu spät zum Brennen, und kein nächster Umlauf",
+            PlanError::Overlaps => {
+                "Brennen begänne vor dem Ende des vorherigen, und kein nächster Umlauf"
+            }
+            PlanError::OnGround => "Bahn endet vorher am Boden",
+            PlanError::AfterInvalid => "Ein Node davor ist ungültig",
             PlanError::NoNode => "Kein Node geplant",
         })
     }

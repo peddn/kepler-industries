@@ -1,13 +1,23 @@
 //! Textanzeige: Spielzeit, Zeitraffer, Zustand der Schiffe, Bedienhilfe.
 
-use crate::node_ui::{Selection, UiMessage};
+use crate::node_ui::{self, SelectedNode, Selection, UiMessage};
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use sim::{Segment, SurfacePoint, VesselStatus, World, kepler};
+use sim::{Event, Plan, Segment, SurfacePoint, VesselStatus, World, kepler};
+use std::ops::Range;
 
 #[derive(Component)]
 pub struct Hud;
+
+/// Teil der Anzeige in Rot (ungültige Nodes) und der Rest danach.
+#[derive(Component)]
+pub struct HudWarning;
+
+#[derive(Component)]
+pub struct HudRest;
+
+const WARNING_COLOR: Color = Color::srgb(1.0, 0.35, 0.3);
 
 /// Schrift für alle Texte.
 #[derive(Resource)]
@@ -24,21 +34,32 @@ pub fn load_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
 }
 
 pub fn setup(mut commands: Commands, font: Res<UiFont>) {
-    commands.spawn((
-        Hud,
-        Text::new(""),
-        TextFont {
-            font: font.0.clone().into(),
-            font_size: FontSize::Px(15.0),
-            ..default()
-        },
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(12),
-            left: px(12),
-            ..default()
-        },
-    ));
+    let text_font = TextFont {
+        font: font.0.clone().into(),
+        font_size: FontSize::Px(15.0),
+        ..default()
+    };
+    commands
+        .spawn((
+            Hud,
+            Text::new(""),
+            text_font.clone(),
+            Node {
+                position_type: PositionType::Absolute,
+                top: px(12),
+                left: px(12),
+                ..default()
+            },
+        ))
+        .with_children(|hud| {
+            hud.spawn((
+                HudWarning,
+                TextSpan::new(""),
+                text_font.clone(),
+                TextColor(WARNING_COLOR),
+            ));
+            hud.spawn((HudRest, TextSpan::new(""), text_font));
+        });
 }
 
 fn format_time(seconds: f64) -> String {
@@ -85,8 +106,10 @@ fn place(point: &SurfacePoint) -> String {
     )
 }
 
-/// Kenndaten und Node des gewählten Schiffs.
-fn selected_details(world: &World, i: usize) -> Vec<String> {
+/// Kenndaten und Manöverkette des gewählten Schiffs; `chosen` ist der
+/// gewählte Node. Dazu die Zeilen, die rot erscheinen (ungültige Nodes; sie
+/// stehen immer am Ende der Kette, also zusammen).
+fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<String>, Range<usize>) {
     let vessel = &world.vessels[i];
     let trajectory = &vessel.trajectory;
     let mut lines = vec![
@@ -106,60 +129,54 @@ fn selected_details(world: &World, i: usize) -> Vec<String> {
         ),
     ];
     let flying = !matches!(trajectory.current(), Segment::Surface { .. });
-
-    match trajectory.plan() {
-        None if flying => lines.push("Linksklick auf die Bahn setzt einen Node.".into()),
-        None => {}
-        Some(plan) => {
-            let dv = plan.node.delta_v;
-            let burn = &plan.burn;
-            let when = if burn.start > world.time {
-                format!("Brennbeginn in {}", format_span(burn.start - world.time))
-            } else {
-                "Brennt".into()
-            };
-            lines.push(format!(
-                "Node: Δv {:.1} m/s (prograd {:.1}, normal {:.1}, radial {:.1})",
-                dv.length(),
-                dv.x,
-                dv.y,
-                dv.z
-            ));
-            lines.push(format!(
-                "{when}, Dauer {:.1} s, Treibstoff danach {:.1} kg",
-                burn.duration(),
-                burn.end_mass() - vessel.params.dry_mass
-            ));
-            // Im Spiel ist vorerst jeder Node scharf; nicht scharf nur über `--node`.
-            if !plan.armed {
-                lines.push("Nicht scharf: rückt bei Brennbeginn einen Umlauf weiter".into());
-            }
-            if burn.delta_v() < dv.length() - 0.05 {
-                lines.push(format!(
-                    "Treibstoff reicht nur für {:.0} m/s!",
-                    burn.delta_v()
-                ));
-            }
-            match trajectory.segment_after_burn() {
-                Some(Segment::Kepler { state, end, .. }) => {
-                    let body = &world.bodies[plan.body];
-                    let info = kepler::orbit_info(body.gm, state);
-                    lines.push(format!(
-                        "Danach: Ap {}  Pe {}{}",
-                        info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
-                        km(info.periapsis - body.radius),
-                        if end.is_some() {
-                            "  – führt in die Atmosphäre!"
-                        } else {
-                            ""
-                        }
-                    ));
+    let nodes = trajectory.nodes();
+    let mut warning = 0..0;
+    if nodes.is_empty() {
+        if flying {
+            lines.push("Linksklick auf die Bahn setzt einen Node.".into());
+        }
+    } else {
+        // Im Spiel ist vorerst jede Kette scharf; nicht scharf nur über `--node`.
+        lines.push(if trajectory.armed() {
+            "Manöverkette:".into()
+        } else {
+            "Manöverkette (nicht scharf: rückt bei Brennbeginn einen Umlauf weiter):".into()
+        });
+        for (k, node) in nodes.iter().enumerate() {
+            let marker = if chosen == Some(k) { ">" } else { " " };
+            lines.push(match node.plan {
+                Ok(plan) => {
+                    let when = if plan.burn.start > world.time {
+                        format!("in {}", format_span(plan.burn.start - world.time))
+                    } else {
+                        "brennt".into()
+                    };
+                    let after = world
+                        .revolutions_before_node(i, k)
+                        .filter(|&n| n > 0)
+                        .map_or(String::new(), |n| match n {
+                            1 => "  nach 1 Umlauf".into(),
+                            n => format!("  nach {n} Umläufen"),
+                        });
+                    format!(
+                        "{marker} {}  {when:<12} Δv {:6.1} m/s{after}",
+                        k + 1,
+                        plan.node.delta_v.length()
+                    )
                 }
-                Some(Segment::Integrated { .. }) => {
-                    lines.push("Danach: weiter durch die Atmosphäre".into());
+                Err(e) => {
+                    if warning.is_empty() {
+                        warning = lines.len()..lines.len();
+                    }
+                    warning.end = lines.len() + 1;
+                    format!("{marker} {}  ungültig: {e}", k + 1)
                 }
-                _ => {}
-            }
+            });
+        }
+        if let Some(k) = chosen
+            && let Ok(plan) = nodes[k].plan
+        {
+            lines.extend(node_details(world, i, k, &plan));
         }
     }
     if let Some((time, _, point)) = trajectory.predicted_impact()
@@ -171,16 +188,75 @@ fn selected_details(world: &World, i: usize) -> Vec<String> {
             place(&point)
         ));
     }
+    (lines, warning)
+}
+
+/// Einzelheiten zum gewählten Node.
+fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
+    let vessel = &world.vessels[i];
+    let dv = plan.node.delta_v;
+    let burn = &plan.burn;
+    let when = if burn.start > world.time {
+        format!("Brennbeginn in {}", format_span(burn.start - world.time))
+    } else {
+        "Brennt".into()
+    };
+    let mut lines = vec![
+        String::new(),
+        format!(
+            "Node {}: Δv {:.1} m/s (prograd {:.1}, normal {:.1}, radial {:.1})",
+            k + 1,
+            dv.length(),
+            dv.x,
+            dv.y,
+            dv.z
+        ),
+        format!(
+            "{when}, Dauer {:.1} s, Treibstoff danach {:.1} kg",
+            burn.duration(),
+            burn.end_mass() - vessel.params.dry_mass
+        ),
+    ];
+    if burn.delta_v() < dv.length() - 0.05 {
+        lines.push(format!(
+            "Treibstoff reicht nur für {:.0} m/s!",
+            burn.delta_v()
+        ));
+    }
+    match vessel.trajectory.segment_after(burn) {
+        Some(Segment::Kepler { state, end, .. }) => {
+            let body = &world.bodies[plan.body];
+            let info = kepler::orbit_info(body.gm, state);
+            lines.push(format!(
+                "Danach: Ap {}  Pe {}{}",
+                info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
+                km(info.periapsis - body.radius),
+                if end.is_some_and(|(_, e)| e != Event::BurnStart) {
+                    "  – führt in die Atmosphäre!"
+                } else {
+                    ""
+                }
+            ));
+        }
+        Some(Segment::Integrated { burn: None, .. }) => {
+            lines.push("Danach: weiter durch die Atmosphäre".into());
+        }
+        _ => {}
+    }
     lines
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn update(
     sim: Res<Sim>,
     warp: Res<TimeWarp>,
     selection: Res<Selection>,
+    selected: Res<SelectedNode>,
     message: Res<UiMessage>,
     real_time: Res<Time<Real>>,
     mut text: Single<&mut Text, With<Hud>>,
+    mut warning: Single<&mut TextSpan, (With<HudWarning>, Without<HudRest>)>,
+    mut rest: Single<&mut TextSpan, (With<HudRest>, Without<HudWarning>)>,
 ) {
     let world = &sim.0;
     let mut lines = vec![format!(
@@ -229,21 +305,44 @@ pub fn update(
         let marker = if selection.0 == Some(i) { ">" } else { " " };
         lines.push(format!("{marker} {:<9} {status}", vessel.name));
     }
+    let mut red = 0..0;
     if let Some(i) = selection.0 {
+        let chosen = node_ui::selected_node(world, &selection, &selected).map(|(_, k)| k);
         lines.push(String::new());
-        lines.extend(selected_details(world, i));
+        let (details, warning) = selected_details(world, i, chosen);
+        red = lines.len() + warning.start..lines.len() + warning.end;
+        lines.extend(details);
     }
     lines.push(String::new());
     lines.push(
-        "Linksklick: Schiff wählen / Node setzen   Griffe ziehen: Δv (Umschalt: fein)".into(),
+        "Linksklick: Schiff wählen / Node setzen / Node wählen   Griffe ziehen: Δv (Umschalt: fein)"
+            .into(),
     );
     lines.push(
-        "Node ziehen: verschieben   Entf: Node löschen   Tab: nächstes Schiff   H: Zeitraffer-Stopp"
+        "Node ziehen: verschieben   ↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff   H: Zeitraffer-Stopp"
             .into(),
     );
     lines.push(
         "Rechte Maustaste ziehen: drehen   Mausrad: zoomen   , / .: Zeitraffer   Leertaste: Pause"
             .into(),
     );
-    text.0 = lines.join("\n");
+    // Drei Teile: davor, rot, danach. Ohne rote Zeilen steht alles im ersten.
+    let (before, red, after) = if red.is_empty() {
+        (lines.join("\n"), String::new(), String::new())
+    } else {
+        (
+            lines[..red.start].join("\n") + "\n",
+            lines[red.clone()].join("\n"),
+            "\n".to_owned() + &lines[red.end..].join("\n"),
+        )
+    };
+    for (target, value) in [
+        (&mut text.0, before),
+        (&mut warning.0, red),
+        (&mut rest.0, after),
+    ] {
+        if *target != value {
+            *target = value;
+        }
+    }
 }

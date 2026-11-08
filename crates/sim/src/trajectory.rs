@@ -10,9 +10,9 @@
 //! ab. Deshalb ist das Ergebnis unabhängig davon, wann und in wie großen
 //! Zeitschritten die Simulation vorangetrieben wird.
 //!
-//! Ein gesetzter Manöver-Node schneidet die Zeitleiste am Brennbeginn ab; dort
-//! folgt ein `Integrated`-Abschnitt mit Schub. Die Vorschau ist einfach die
-//! vorausberechnete Zeitleiste.
+//! Geplante Manöver bilden eine Kette. Jeder Node schneidet die Zeitleiste an
+//! seinem Brennbeginn ab; dort folgt ein `Integrated`-Abschnitt mit Schub. Die
+//! Vorschau ist einfach die vorausberechnete Zeitleiste.
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::integrator::{self, Forces, Sample};
@@ -22,8 +22,10 @@ use crate::world::VesselParams;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
-/// Wie viele Abschnitte (inklusive des aktuellen) im Voraus bekannt sind.
-/// Reicht, um nach einem Manöver die neue Bahn oder den Aufschlag zu sehen.
+/// Wie viele Abschnitte nach dem letzten geplanten Brennen (ohne Manöver: ab
+/// jetzt) im Voraus bekannt sind. Reicht, um nach einem Manöver die neue Bahn
+/// oder den Aufschlag zu sehen. Auf einer Bahn, die bei jedem Umlauf durch
+/// die Luft führt, sind das vier Umläufe.
 pub const LOOKAHEAD: usize = 8;
 
 /// Womit ein Abschnitt endet.
@@ -297,12 +299,201 @@ fn wreck(bodies: &[Body], body_id: BodyId, t: f64, state: StateVector, mass: f64
     }
 }
 
-/// Zeitleiste eines Schiffs: der aktuelle Abschnitt und bis zu `LOOKAHEAD - 1`
-/// folgende, dazu der geplante Node.
+/// Das nächste geplante Brennen nach dem Abschnitt `back`. Nach einem Brennen
+/// beginnt das nächste echt später (siehe `locate`); so wird ein Brennen ohne
+/// Dauer nicht zweimal gefunden.
+fn pending_after(plans: &[Plan], back: &Segment) -> Option<Burn> {
+    let t = back.end();
+    let after_burn = back.is_burn();
+    plans.iter().map(|p| p.burn).find(|b| {
+        if after_burn {
+            b.start > t
+        } else {
+            b.start >= t
+        }
+    })
+}
+
+/// Berechnet Abschnitte voraus, bis `LOOKAHEAD` Abschnitte nach dem Ende des
+/// letzten geplanten Brennens liegen (ohne Brennen: insgesamt) oder die
+/// Zeitleiste offen endet (stabile Bahn oder am Boden).
+fn extend(
+    segments: &mut VecDeque<Segment>,
+    bodies: &[Body],
+    params: &VesselParams,
+    plans: &[Plan],
+) {
+    let horizon = plans.last().map_or(f64::NEG_INFINITY, |p| p.burn.end);
+    loop {
+        let ahead = segments
+            .iter()
+            .filter(|s| s.start() >= horizon && !s.is_burn())
+            .count();
+        let Some(back) = segments.back() else { return };
+        if ahead >= LOOKAHEAD {
+            return;
+        }
+        let pending = pending_after(plans, back);
+        match back.next(bodies, params, pending.as_ref()) {
+            Some(segment) => segments.push_back(segment),
+            None => return,
+        }
+    }
+}
+
+/// Der Abschnitt `first`, neu berechnet ab seinem Anfangszustand und bis zum
+/// ersten geplanten Brennen. `None` während eines Brennens oder am Boden.
+fn restart(
+    first: &Segment,
+    bodies: &[Body],
+    params: &VesselParams,
+    plans: &[Plan],
+) -> Option<Segment> {
+    let pending = plans.first().map(|p| p.burn);
+    match first {
+        Segment::Kepler {
+            body,
+            start,
+            state,
+            mass,
+            ..
+        } => Some(kepler_segment(
+            bodies,
+            *body,
+            *start,
+            *state,
+            *mass,
+            pending.as_ref(),
+        )),
+        Segment::Integrated {
+            body,
+            samples,
+            mass,
+            burn: None,
+            ..
+        } => Some(integrated(
+            bodies,
+            params,
+            *body,
+            samples[0].time,
+            samples[0].state,
+            *mass,
+            None,
+            pending.as_ref(),
+        )),
+        _ => None,
+    }
+}
+
+/// Der Plan für `node` auf der Zeitleiste `segments`, die alle früheren
+/// Brennvorgänge der Kette enthält und danach frei weiterläuft. `previous`
+/// ist das Brennen davor.
+///
+/// Regel: Das Brennen beginnt nicht vor jetzt und echt nach dem Ende des
+/// vorherigen. Sonst rückt der Node auf seiner Bahn einen Umlauf weiter (an
+/// dieselbe Stelle der Bahn), so oft wie nötig. Geht das nicht, ist er
+/// ungültig.
+fn locate(
+    bodies: &[Body],
+    params: &VesselParams,
+    segments: &VecDeque<Segment>,
+    now: f64,
+    previous: Option<&Burn>,
+    node: ManeuverNode,
+) -> Result<Plan, PlanError> {
+    if node.time <= now {
+        return Err(PlanError::InPast);
+    }
+    let too_early = |burn: &Burn| match previous {
+        None => burn.start < now,
+        Some(p) => burn.start <= p.end,
+    };
+    let no_next_orbit = if previous.is_some() {
+        PlanError::Overlaps
+    } else {
+        PlanError::TooLate
+    };
+
+    // Die Bahn, auf der der Node liegt: ab dem Ende des vorherigen Brennens.
+    let leg_start = previous.map_or(f64::NEG_INFINITY, |b| b.end);
+    let mut leg = segments
+        .iter()
+        .filter(|s| s.start() >= leg_start && !s.is_burn());
+    let segment = if node.time < leg_start {
+        // Vor dem Ende des vorherigen Brennens: Nur auf einer geschlossenen
+        // Bahn gibt es dieselbe Stelle einen Umlauf später.
+        match leg.next() {
+            Some(s @ Segment::Kepler { state, .. })
+                if kepler::period(bodies[s.body()].gm, state).is_some() =>
+            {
+                s
+            }
+            _ => return Err(no_next_orbit),
+        }
+    } else {
+        leg.find(|s| s.start() <= node.time && node.time < s.end())
+            .ok_or(PlanError::BeyondPrediction)?
+    };
+    if matches!(segment, Segment::Surface { .. }) {
+        return Err(PlanError::OnGround);
+    }
+
+    let node_state = segment.state_at(bodies, node.time);
+    let mass = segment.mass_at(node.time);
+    let delta_v = maneuver::to_inertial(&node_state, node.delta_v);
+    let direction = delta_v
+        .try_normalize()
+        .unwrap_or_else(|| node_state.velocity.normalize());
+    let burn = Burn::centered(node.time, mass, params, direction, delta_v.length());
+    let mut plan = Plan {
+        node,
+        body: segment.body(),
+        node_state,
+        burn,
+    };
+    while too_early(&plan.burn) {
+        plan = next_orbit(bodies, segment, &plan).ok_or(no_next_orbit)?;
+    }
+    Ok(plan)
+}
+
+/// Winkel in Flugrichtung von `from` nach `to`, 0 bis 2π.
+fn forward_angle(from: &StateVector, to: glam::DVec3) -> f64 {
+    let normal = from.position.cross(from.velocity).normalize();
+    let angle = normal
+        .dot(from.position.cross(to))
+        .atan2(from.position.dot(to));
+    if angle < 0.0 {
+        angle + std::f64::consts::TAU
+    } else {
+        angle
+    }
+}
+
+/// Ein Node der Manöverkette: wie gesetzt und was daraus folgt.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChainNode {
+    /// Wie gesetzt. Rückt der Node nur wegen eines früheren Manövers einen
+    /// Umlauf weiter, steht das im Plan, nicht hier. So kehrt er zurück, wenn
+    /// das frühere Manöver zurückgenommen wird.
+    pub node: ManeuverNode,
+    /// Der berechnete Plan, oder warum der Node gerade ungültig ist.
+    pub plan: Result<Plan, PlanError>,
+}
+
+/// Zeitleiste eines Schiffs: der aktuelle Abschnitt und die vorausberechneten,
+/// dazu die geplante Manöverkette.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Trajectory {
     segments: VecDeque<Segment>,
-    plan: Option<Plan>,
+    /// Manöverkette in Ausführungsreihenfolge. Jeder Node liegt auf der Bahn
+    /// nach den vorherigen. Die gültigen stehen vorn: Nach einem ungültigen
+    /// Node ist die Kette unterbrochen, alle weiteren sind auch ungültig. Sie
+    /// bleiben erhalten und werden wieder gültig, sobald es wieder passt.
+    nodes: Vec<ChainNode>,
+    /// Nur eine scharfe Kette wird ausgeführt. Eine nicht scharfe rückt bei
+    /// Brennbeginn als Ganzes einen Umlauf weiter.
+    armed: bool,
 }
 
 impl Trajectory {
@@ -318,7 +509,8 @@ impl Trajectory {
         let first = coast(bodies, params, body_id, t, state, mass, None);
         let mut trajectory = Self {
             segments: VecDeque::from([first]),
-            plan: None,
+            nodes: Vec::new(),
+            armed: false,
         };
         trajectory.extend(bodies, params);
         trajectory
@@ -334,186 +526,236 @@ impl Trajectory {
                 mass,
                 wreck: false,
             }]),
-            plan: None,
+            nodes: Vec::new(),
+            armed: false,
         }
     }
 
-    /// Das geplante Brennmanöver, solange es noch nicht begonnen hat.
-    fn pending_burn(&self) -> Option<Burn> {
-        if self.segments.iter().any(Segment::is_burn) {
-            None
-        } else {
-            self.plan.map(|p| p.burn)
-        }
+    fn valid_plans(&self) -> Vec<Plan> {
+        self.plans().copied().collect()
     }
 
-    /// Berechnet Abschnitte voraus, bis `LOOKAHEAD` erreicht ist oder die
-    /// Zeitleiste offen endet (stabile Bahn oder am Boden).
     fn extend(&mut self, bodies: &[Body], params: &VesselParams) {
-        while self.segments.len() < LOOKAHEAD {
-            let pending = self.pending_burn();
-            let next = self
-                .segments
-                .back()
-                .and_then(|s| s.next(bodies, params, pending.as_ref()));
-            match next {
-                Some(segment) => self.segments.push_back(segment),
-                None => break,
-            }
-        }
+        let plans = self.valid_plans();
+        extend(&mut self.segments, bodies, params, &plans);
     }
 
-    /// Berechnet alles ab dem Beginn des aktuellen Abschnitts neu (nach einer
-    /// Änderung am Node). Der aktuelle Abschnitt behält seinen Anfangszustand,
-    /// das Ergebnis hängt also nicht davon ab, wann neu berechnet wird.
-    fn rebuild(&mut self, bodies: &[Body], params: &VesselParams) {
-        let pending = self.plan.map(|p| p.burn);
-        let first = match &self.segments[0] {
-            Segment::Kepler {
-                body,
-                start,
-                state,
-                mass,
-                ..
-            } => kepler_segment(bodies, *body, *start, *state, *mass, pending.as_ref()),
-            Segment::Integrated {
-                body,
-                samples,
-                mass,
-                burn: None,
-                ..
-            } => integrated(
-                bodies,
-                params,
-                *body,
-                samples[0].time,
-                samples[0].state,
-                *mass,
-                None,
-                pending.as_ref(),
-            ),
-            _ => return,
-        };
-        self.segments.clear();
-        self.segments.push_back(first);
-        self.extend(bodies, params);
+    /// Zeitleiste ab dem Anfang des aktuellen Abschnitts mit den Brennvorgängen
+    /// `plans`, danach frei. `None` während eines Brennens oder am Boden.
+    fn compute(
+        &self,
+        bodies: &[Body],
+        params: &VesselParams,
+        plans: &[Plan],
+    ) -> Option<VecDeque<Segment>> {
+        let first = restart(&self.segments[0], bodies, params, plans)?;
+        let mut segments = VecDeque::from([first]);
+        extend(&mut segments, bodies, params, plans);
+        Some(segments)
+    }
+
+    /// Berechnet die Kette und die Zeitleiste ab dem Anfang des aktuellen
+    /// Abschnitts neu: die Nodes der Reihe nach, jeder auf der Bahn nach den
+    /// vorherigen Brennvorgängen. Der aktuelle Abschnitt behält seinen
+    /// Anfangszustand. Von `now` hängt nur die Regel "Brennen nicht vor jetzt"
+    /// ab.
+    fn rebuild(&mut self, bodies: &[Body], params: &VesselParams, now: f64) {
+        let mut plans: Vec<Plan> = Vec::new();
+        let mut broken = false;
+        for k in 0..self.nodes.len() {
+            let result = if broken {
+                Err(PlanError::AfterInvalid)
+            } else {
+                let Some(leg) = self.compute(bodies, params, &plans) else {
+                    return;
+                };
+                let previous = plans.last().map(|p| &p.burn);
+                locate(bodies, params, &leg, now, previous, self.nodes[k].node)
+            };
+            match result {
+                Ok(plan) => plans.push(plan),
+                Err(_) => broken = true,
+            }
+            self.nodes[k].plan = result;
+        }
+        if let Some(segments) = self.compute(bodies, params, &plans) {
+            self.segments = segments;
+        }
     }
 
     /// Rückt bis zum Zeitpunkt `t` vor: Vergangene Abschnitte fallen weg,
     /// neue werden bei Bedarf berechnet. Ein ausgeführter Node verschwindet.
-    /// Ein nicht scharfer Node rückt bei Brennbeginn einen Umlauf weiter oder
-    /// verfällt, wenn es keinen nächsten Umlauf gibt.
+    /// Eine nicht scharfe Kette rückt beim ersten Brennbeginn als Ganzes einen
+    /// Umlauf weiter oder verfällt, wenn es keinen nächsten Umlauf gibt.
     pub fn advance_to(&mut self, bodies: &[Body], t: f64, params: &VesselParams) {
         loop {
             self.extend(bodies, params);
-            if self.segments.len() > 1 && self.segments[0].end() <= t {
-                if self.segments[0].end_event() == Some(Event::BurnStart)
-                    && let Some(plan) = self.plan.filter(|p| !p.armed)
-                {
-                    self.plan = next_orbit(bodies, &self.segments[0], &plan);
-                    self.rebuild(bodies, params);
-                    continue;
-                }
-                let done = self
-                    .segments
-                    .pop_front()
-                    .expect("mindestens zwei Abschnitte");
-                if done.is_burn() && done.end_event() != Some(Event::Continue) {
-                    self.plan = None;
-                }
-            } else {
+            if self.segments.len() < 2 || self.segments[0].end() > t {
                 break;
+            }
+            let first = self.plans().next().copied();
+            if self.segments[0].end_event() == Some(Event::BurnStart)
+                && !self.armed
+                && let Some(first) = first
+            {
+                let burn_start = self.segments[0].end();
+                match next_orbit(bodies, &self.segments[0], &first) {
+                    Some(later) => {
+                        let period = later.node.time - first.node.time;
+                        for n in &mut self.nodes {
+                            let time = n.plan.map_or(n.node.time, |p| p.node.time);
+                            n.node.time = time + period;
+                        }
+                    }
+                    None => self.nodes.clear(),
+                }
+                self.rebuild(bodies, params, burn_start);
+                continue;
+            }
+            let done = self
+                .segments
+                .pop_front()
+                .expect("mindestens zwei Abschnitte");
+            if done.is_burn() && done.end_event() != Some(Event::Continue) && !self.nodes.is_empty()
+            {
+                self.nodes.remove(0);
             }
         }
         if matches!(self.segments[0], Segment::Surface { .. }) {
-            self.plan = None;
+            self.nodes.clear();
         }
     }
 
-    /// Setzt (oder ändert) den Manöver-Node und berechnet die Zeitleiste neu.
-    /// Ein neuer Node ist nicht scharf, ein geänderter behält seinen Zustand.
+    /// Lässt sich die Kette gerade ändern?
+    fn check_editable(&self, params: &VesselParams) -> Result<(), PlanError> {
+        match self.current() {
+            Segment::Surface { .. } => Err(PlanError::NotFlying),
+            segment if segment.is_burn() => Err(PlanError::Burning),
+            _ if params.thrust <= 0.0 || params.exhaust_velocity <= 0.0 => Err(PlanError::NoEngine),
+            _ => Ok(()),
+        }
+    }
+
+    /// Übernimmt `changed`, wenn der Node `index` darin gültig ist. Spätere
+    /// Nodes dürfen dabei ungültig werden, sie bleiben erhalten.
+    fn accept(&mut self, changed: Trajectory, index: usize) -> Result<(), PlanError> {
+        changed.nodes[index].plan?;
+        *self = changed;
+        Ok(())
+    }
+
+    /// Fügt einen Node in die Kette ein, und zwar dort, wo er zeitlich
+    /// zwischen den gültigen Nodes liegt. Liefert seine Stelle in der Kette.
+    /// Ist er ungültig, bleibt alles unverändert. Eine neue Kette ist nicht
+    /// scharf.
     ///
-    /// Das Brennen muss ganz in der Zukunft liegen. Läge sein Beginn in der
-    /// Vergangenheit, rückt der Node einen Umlauf weiter (an dieselbe Stelle
-    /// der Bahn). Gibt es keinen nächsten Umlauf ohne Luft oder Boden dazwischen,
-    /// wird er abgelehnt. Bei einem Fehler bleibt alles unverändert.
-    pub fn set_node(
+    /// Das Brennen muss ganz in der Zukunft und nach dem vorherigen liegen.
+    /// Sonst rückt der Node einen Umlauf weiter (an dieselbe Stelle der Bahn).
+    pub fn add_node(
         &mut self,
         bodies: &[Body],
         params: &VesselParams,
         now: f64,
         node: ManeuverNode,
+    ) -> Result<usize, PlanError> {
+        self.check_editable(params)?;
+        let index = self.plans().filter(|p| p.node.time < node.time).count();
+        let mut changed = self.clone();
+        if changed.nodes.is_empty() {
+            changed.armed = false;
+        }
+        changed.nodes.insert(
+            index,
+            ChainNode {
+                node,
+                plan: Err(PlanError::NoNode),
+            },
+        );
+        changed.rebuild(bodies, params, now);
+        self.accept(changed, index)?;
+        Ok(index)
+    }
+
+    /// Ändert den Node `index` (Zeitpunkt und Δv). Spätere Nodes wandern mit.
+    /// Ist er danach ungültig, bleibt alles unverändert.
+    pub fn set_node(
+        &mut self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        index: usize,
+        node: ManeuverNode,
     ) -> Result<(), PlanError> {
-        match self.current() {
-            Segment::Surface { .. } => return Err(PlanError::NotFlying),
-            segment if segment.is_burn() => return Err(PlanError::Burning),
-            _ => {}
+        self.check_editable(params)?;
+        if index >= self.nodes.len() {
+            return Err(PlanError::NoNode);
         }
-        if params.thrust <= 0.0 || params.exhaust_velocity <= 0.0 {
-            return Err(PlanError::NoEngine);
-        }
-        if node.time <= now {
-            return Err(PlanError::InPast);
-        }
+        let mut changed = self.clone();
+        changed.nodes[index].node = node;
+        changed.rebuild(bodies, params, now);
+        self.accept(changed, index)
+    }
 
-        // Bahn ohne Manöver: Dort liegt der Node, sie legt seine Richtungen fest.
-        let mut free = self.clone();
-        free.plan = None;
-        free.rebuild(bodies, params);
-        let segment = free
-            .segments
-            .iter()
-            .find(|s| s.start() <= node.time && node.time < s.end())
-            .ok_or(PlanError::BeyondPrediction)?;
-        if matches!(segment, Segment::Surface { .. }) {
-            return Err(PlanError::BeyondPrediction);
+    /// Löscht den Node `index`. Während des Brennens nicht möglich.
+    pub fn remove_node(
+        &mut self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        index: usize,
+    ) -> Result<(), PlanError> {
+        if self.current().is_burn() {
+            return Err(PlanError::Burning);
         }
-        let node_state = segment.state_at(bodies, node.time);
-        let mass = segment.mass_at(node.time);
-        let delta_v = maneuver::to_inertial(&node_state, node.delta_v);
-        let direction = delta_v
-            .try_normalize()
-            .unwrap_or_else(|| node_state.velocity.normalize());
-        let burn = Burn::centered(node.time, mass, params, direction, delta_v.length());
-
-        let mut plan = Plan {
-            node,
-            body: segment.body(),
-            node_state,
-            burn,
-            armed: self.plan.is_some_and(|p| p.armed),
-        };
-        while plan.burn.start < now {
-            plan = next_orbit(bodies, segment, &plan).ok_or(PlanError::TooLate)?;
+        if index >= self.nodes.len() {
+            return Err(PlanError::NoNode);
         }
-        self.plan = Some(plan);
-        self.rebuild(bodies, params);
+        self.nodes.remove(index);
+        self.rebuild(bodies, params, now);
         Ok(())
     }
 
-    /// Schaltet den Node scharf (oder wieder ab). Während des Brennens nicht möglich.
+    /// Schaltet die Kette scharf (oder wieder ab). Während des Brennens nicht möglich.
     pub fn set_armed(&mut self, armed: bool) -> Result<(), PlanError> {
         if self.current().is_burn() {
             return Err(PlanError::Burning);
         }
-        let plan = self.plan.as_mut().ok_or(PlanError::NoNode)?;
-        plan.armed = armed;
+        if self.nodes.is_empty() {
+            return Err(PlanError::NoNode);
+        }
+        self.armed = armed;
         Ok(())
     }
 
-    /// Löscht den Node. Während des Brennens nicht möglich.
-    pub fn clear_node(&mut self, bodies: &[Body], params: &VesselParams) -> Result<(), PlanError> {
-        if self.current().is_burn() {
-            return Err(PlanError::Burning);
+    /// Dieselbe Zeitleiste nur mit den ersten `count` Nodes der Kette. Auf
+    /// ihr liegt der Node `count`; man verschiebt ihn entlang dieser Bahn.
+    pub fn with_first_nodes(
+        &self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        count: usize,
+    ) -> Trajectory {
+        let mut trajectory = self.clone();
+        if count < trajectory.nodes.len() {
+            trajectory.nodes.truncate(count);
+            trajectory.rebuild(bodies, params, now);
         }
-        if self.plan.take().is_some() {
-            self.rebuild(bodies, params);
-        }
-        Ok(())
+        trajectory
     }
 
-    pub fn plan(&self) -> Option<&Plan> {
-        self.plan.as_ref()
+    /// Die Manöverkette, gültige und ungültige Nodes.
+    pub fn nodes(&self) -> &[ChainNode] {
+        &self.nodes
+    }
+
+    /// Die Pläne der gültigen Nodes, in Ausführungsreihenfolge.
+    pub fn plans(&self) -> impl Iterator<Item = &Plan> {
+        self.nodes.iter().map_while(|n| n.plan.as_ref().ok())
+    }
+
+    pub fn armed(&self) -> bool {
+        self.armed
     }
 
     /// Der Abschnitt, in dem sich das Schiff gerade befindet.
@@ -526,13 +768,45 @@ impl Trajectory {
         self.segments.iter()
     }
 
-    /// Erster Abschnitt nach dem geplanten Brennmanöver.
-    pub fn segment_after_burn(&self) -> Option<&Segment> {
-        let i = self
-            .segments
+    /// Erster Abschnitt nach dem Brennen `burn`.
+    pub fn segment_after(&self, burn: &Burn) -> Option<&Segment> {
+        self.segments
             .iter()
-            .position(|s| s.end_event() == Some(Event::BurnEnd))?;
-        self.segments.get(i + 1)
+            .find(|s| s.start() >= burn.end && !s.is_burn())
+    }
+
+    /// Volle Umläufe um den Körper zwischen `from` und `to`, gezählt am
+    /// überstrichenen Winkel (gilt auch für zerfallende Bahnen).
+    pub fn revolutions(&self, bodies: &[Body], from: f64, to: f64) -> u32 {
+        let mut angle = 0.0;
+        for segment in &self.segments {
+            let (a, b) = (segment.start().max(from), segment.end().min(to));
+            if a >= b {
+                continue;
+            }
+            let at = |t| segment.state_at(bodies, t);
+            angle += match segment {
+                Segment::Kepler { state, .. } => {
+                    let gm = bodies[segment.body()].gm;
+                    let whole = kepler::period(gm, state).map_or(0.0, |p| ((b - a) / p).floor());
+                    whole * std::f64::consts::TAU + forward_angle(&at(a), at(b).position)
+                }
+                Segment::Integrated { samples, .. } => {
+                    // Stützpunkte liegen 1 s auseinander: Winkel aufsummieren.
+                    let inner = samples.iter().filter(|s| a < s.time && s.time < b);
+                    let states: Vec<StateVector> = std::iter::once(at(a))
+                        .chain(inner.map(|s| s.state))
+                        .chain(std::iter::once(at(b)))
+                        .collect();
+                    states
+                        .windows(2)
+                        .map(|w| forward_angle(&w[0], w[1].position))
+                        .sum()
+                }
+                Segment::Surface { .. } => 0.0,
+            };
+        }
+        (angle / std::f64::consts::TAU + 1e-9).floor() as u32
     }
 
     /// Vorausberechneter Absturz: Zeitpunkt, Körper und Ort.

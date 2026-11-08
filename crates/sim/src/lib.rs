@@ -17,5 +17,5 @@ pub mod world;
 pub use body::{Atmosphere, Body, BodyId, SurfacePoint};
 pub use kepler::StateVector;
 pub use maneuver::{Burn, ManeuverNode, Plan, PlanError};
-pub use trajectory::{Event, Segment, Trajectory};
+pub use trajectory::{ChainNode, Event, Segment, Trajectory};
 pub use world::{Base, Vessel, VesselParams, VesselStatus, World};
