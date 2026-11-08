@@ -130,14 +130,10 @@ fn selected_details(world: &World, i: usize) -> Vec<String> {
                 burn.duration(),
                 burn.end_mass() - vessel.params.dry_mass
             ));
-            lines.push(
-                if plan.armed {
-                    "Scharf: wird ausgeführt (Enter: abschalten)"
-                } else {
-                    "Nicht scharf: rückt bei Brennbeginn einen Umlauf weiter (Enter: scharf)"
-                }
-                .into(),
-            );
+            // Im Spiel ist vorerst jeder Node scharf; nicht scharf nur über `--node`.
+            if !plan.armed {
+                lines.push("Nicht scharf: rückt bei Brennbeginn einen Umlauf weiter".into());
+            }
             if burn.delta_v() < dv.length() - 0.05 {
                 lines.push(format!(
                     "Treibstoff reicht nur für {:.0} m/s!",
@@ -242,7 +238,7 @@ pub fn update(
         "Linksklick: Schiff wählen / Node setzen   Griffe ziehen: Δv (Umschalt: fein)".into(),
     );
     lines.push(
-        "Node ziehen: verschieben   Enter: scharf   Entf: Node löschen   Tab: nächstes Schiff   H: Zeitraffer-Stopp"
+        "Node ziehen: verschieben   Entf: Node löschen   Tab: nächstes Schiff   H: Zeitraffer-Stopp"
             .into(),
     );
     lines.push(

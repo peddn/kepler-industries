@@ -42,7 +42,8 @@ struct Options {
     camera: Option<(f32, f32, f64)>,
     /// Gewähltes Schiff.
     select: Option<usize>,
-    /// Node: Schiff, Zeitpunkt (s), Δv prograd, normal, radial (m/s), scharf.
+    /// Node: Schiff, Zeitpunkt (s), Δv prograd, normal, radial (m/s), scharf
+    /// (ohne Angabe ja, wie im Spiel).
     node: Option<(usize, f64, [f64; 3], bool)>,
 }
 
@@ -72,7 +73,7 @@ fn parse_options() -> Options {
             }
             ("--node", Some(n)) => {
                 let p = numbers(&n, "--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]");
-                let armed = p.get(5).is_some_and(|&a| a != 0.0);
+                let armed = p.get(5).is_none_or(|&a| a != 0.0);
                 options.node = Some((p[0] as usize, p[1], [p[2], p[3], p[4]], armed));
             }
             (other, _) => {
@@ -143,12 +144,7 @@ fn main() {
         Startup,
         (
             hud::load_font,
-            (
-                view::setup,
-                node_ui::configure_gizmos,
-                node_ui::setup_button,
-                hud::setup,
-            ),
+            (view::setup, node_ui::configure_gizmos, hud::setup),
         )
             .chain(),
     )
@@ -162,7 +158,6 @@ fn main() {
             node_ui::input,
             view::sync_markers,
             node_ui::draw,
-            node_ui::sync_button,
             view::draw_planet_grid,
             view::draw_trajectories,
             view::draw_burn_points,

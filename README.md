@@ -13,11 +13,11 @@ Ein Planet mit Atmosphäre, eine Startbasis, zwei Satelliten mit Triebwerk.
 abgesetzt, wird bei jedem Durchgang durch die Luft abgebremst (orange) und
 stürzt nach einigen Umläufen ab, außer man rettet sie mit einem Manöver.
 
-Manöver plant man mit dem Manöver-Node wie in KSP. Ein Node wird erst
-ausgeführt, wenn er scharf geschaltet ist; dann brennt das Schiff zum
-geplanten Zeitpunkt selbst, auch unter Zeitraffer. Ein nicht scharfer Node
-rückt bei Brennbeginn einen Umlauf weiter. Gelbe Ringe auf der Bahn zeigen
-Beginn und Ende des Brennens. Während des Brennens zeigt die blaue Linie die momentane Bahn, die sich
+Manöver plant man mit dem Manöver-Node wie in KSP. Ein gesetzter Node ist
+sofort scharf: Das Schiff brennt zum geplanten Zeitpunkt selbst, auch unter
+Zeitraffer. Läge der Brennbeginn schon in der Vergangenheit, rückt der Node
+einen Umlauf weiter. Gelbe Ringe auf der Bahn zeigen Beginn und Ende des
+Brennens. Während des Brennens zeigt die blaue Linie die momentane Bahn, die sich
 sichtbar zur geplanten (violetten) hin verformt. Endet eine Bahn am Boden,
 zeigt ein rotes Kreuz den Aufschlagpunkt.
 
@@ -31,10 +31,10 @@ Bahn, violett die Bahn danach.*
 *Relais-1 bremst ab: Die Bahn führt durch die Luft (orange) auf den Boden, das
 Kreuz markiert den Aufschlagpunkt.*
 
-![Node scharf](docs/screenshots/node-scharf.png)
+![Nächster Umlauf](docs/screenshots/naechster-umlauf.png)
 
-*Scharfer Node (orange) mit Schaltfläche. Er wurde 20 s vor Relais-1 gesetzt,
-das Brennen bräuchte aber 30 s Vorlauf, also liegt er einen Umlauf später.*
+*Node mit 250 m/s prograd, 20 s vor Relais-1 gesetzt. Das Brennen bräuchte
+30 s Vorlauf, also liegt der Node einen Umlauf später.*
 
 ## Starten
 
@@ -58,7 +58,6 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
 | Node ziehen | Node entlang der Bahn verschieben |
-| Schaltfläche neben dem Node / `Enter` | Node scharf schalten / abschalten |
 | `Entf` / `Rücktaste` | Node löschen |
 | `H` | Zeitraffer-Stopp für das gewählte Schiff an/aus: Beginnt es zu brennen, hält der Zeitraffer genau dort an und schaltet auf 1× |
 | `Esc` | Auswahl aufheben |
@@ -78,7 +77,8 @@ cargo run -p game -- --time 1500 --node 1,1973.5,30,0,0 --camera -60,35,2600
 - `--camera GIER,NEIGUNG,KM`: Blickwinkel in Grad, Abstand vom Planetenmittelpunkt in km
 - `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2)
 - `--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]`: Node setzen (Zeit in s,
-  Δv in m/s, `SCHARF` = 1 schaltet ihn scharf)
+  Δv in m/s; scharf wie im Spiel, `SCHARF` = 0 lässt ihn zum Testen nicht
+  scharf)
 - `--screenshot DATEI.png`: Bild speichern und beenden (Zeit steht dabei still)
 
 ## Tests
