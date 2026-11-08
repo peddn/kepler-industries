@@ -42,8 +42,8 @@ struct Options {
     camera: Option<(f32, f32, f64)>,
     /// Gewähltes Schiff.
     select: Option<usize>,
-    /// Node: Schiff, Zeitpunkt (s), Δv prograd, normal, radial (m/s).
-    node: Option<(usize, f64, [f64; 3])>,
+    /// Node: Schiff, Zeitpunkt (s), Δv prograd, normal, radial (m/s), scharf.
+    node: Option<(usize, f64, [f64; 3], bool)>,
 }
 
 fn numbers(text: &str, what: &str) -> Vec<f64> {
@@ -71,14 +71,15 @@ fn parse_options() -> Options {
                 options.select = Some(v.parse().expect("--select erwartet eine Schiffsnummer"))
             }
             ("--node", Some(n)) => {
-                let p = numbers(&n, "--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL");
-                options.node = Some((p[0] as usize, p[1], [p[2], p[3], p[4]]));
+                let p = numbers(&n, "--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]");
+                let armed = p.get(5).is_some_and(|&a| a != 0.0);
+                options.node = Some((p[0] as usize, p[1], [p[2], p[3], p[4]], armed));
             }
             (other, _) => {
                 eprintln!("Unbekannte Option: {other}");
                 eprintln!(
                     "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM\n\
-                     \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL"
+                     \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]"
                 );
                 std::process::exit(2);
             }
@@ -93,12 +94,15 @@ fn main() {
     let mut world = sim::scenario::demo();
     world.advance_to(options.time);
     let mut selection = node_ui::Selection(options.select);
-    if let Some((vessel, time, [p, n, r])) = options.node {
+    if let Some((vessel, time, [p, n, r], armed)) = options.node {
         let node = sim::ManeuverNode {
             time,
             delta_v: bevy::math::DVec3::new(p, n, r),
         };
-        if let Err(e) = world.set_node(vessel, node) {
+        if let Err(e) = world
+            .set_node(vessel, node)
+            .and_then(|()| world.set_node_armed(vessel, armed))
+        {
             eprintln!("--node: {e}");
             std::process::exit(2);
         }
@@ -132,11 +136,21 @@ fn main() {
     .insert_resource(rig)
     .insert_resource(selection)
     .init_resource::<node_ui::Drag>()
+    .init_resource::<node_ui::UiMessage>()
     .init_gizmo_group::<node_ui::NodeGizmos>()
     .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.025)))
     .add_systems(
         Startup,
-        (view::setup, node_ui::configure_gizmos, hud::setup),
+        (
+            hud::load_font,
+            (
+                view::setup,
+                node_ui::configure_gizmos,
+                node_ui::setup_button,
+                hud::setup,
+            ),
+        )
+            .chain(),
     )
     .add_systems(
         Update,
@@ -148,8 +162,10 @@ fn main() {
             node_ui::input,
             view::sync_markers,
             node_ui::draw,
+            node_ui::sync_button,
             view::draw_planet_grid,
             view::draw_trajectories,
+            view::draw_burn_points,
             view::draw_impacts,
             hud::update,
         )

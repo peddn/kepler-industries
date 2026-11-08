@@ -73,6 +73,7 @@ fn fuel_follows_rocket_equation() {
             },
         )
         .unwrap();
+    world.set_node_armed(0, true).unwrap();
     let burn = world.vessels[0].trajectory.plan().unwrap().burn;
     world.advance_to(burn.start + 1.0);
     assert!(matches!(
@@ -101,6 +102,7 @@ fn empty_tank_ends_burn_early() {
             },
         )
         .unwrap();
+    world.set_node_armed(0, true).unwrap();
     let burn = world.vessels[0].trajectory.plan().unwrap().burn;
     assert!((burn.delta_v() - available).abs() < 1e-9);
     world.advance_to(burn.end + 1.0);
@@ -170,6 +172,7 @@ fn impact_prediction_matches_wreck() {
             },
         )
         .unwrap();
+    world.set_node_armed(0, true).unwrap();
     let (time, body, point) = world.vessels[0].trajectory.predicted_impact().unwrap();
     assert_eq!(body, 0);
     world.advance_to(time + 10.0);
@@ -194,6 +197,7 @@ fn rescue_probe_at_apoapsis() {
             },
         )
         .unwrap();
+    world.set_node_armed(1, true).unwrap();
     let (periapsis, _) = orbit_after_burn(&world, 1);
     assert!(periapsis > BOUNDARY_ALT, "Periapsis {periapsis}");
     assert!(matches!(
@@ -232,6 +236,8 @@ fn clearing_node_restores_trajectory() {
 }
 
 /// Regel 6 gilt auch mit Manöver: 1 Schritt == 10 000 Schritte, bitgenau.
+/// Relais-1 brennt (scharf). Der Node von Sonde-2 ist nicht scharf und
+/// verfällt bei Brennbeginn, weil vor dem nächsten Umlauf die Luft liegt.
 #[test]
 fn node_result_is_independent_of_step_size() {
     let setup = || {
@@ -248,6 +254,7 @@ fn node_result_is_independent_of_step_size() {
                 )
                 .unwrap();
         }
+        world.set_node_armed(0, true).unwrap();
         world
     };
     let target = 4.0 * 3600.0 + 17.0;
@@ -311,12 +318,17 @@ fn invalid_nodes_are_rejected() {
         Err(PlanError::NotFlying)
     );
 
+    // Ohne Node gibt es nichts scharf zu schalten.
+    assert_eq!(world.set_node_armed(0, true), Err(PlanError::NoNode));
+
     // Während des Brennens lässt sich der Node nicht ändern.
     world.set_node(0, node(600.0)).unwrap();
+    world.set_node_armed(0, true).unwrap();
     let burn = world.vessels[0].trajectory.plan().unwrap().burn;
     world.advance_to(0.5 * (burn.start + burn.end));
     assert_eq!(world.set_node(0, node(900.0)), Err(PlanError::Burning));
     assert_eq!(world.clear_node(0), Err(PlanError::Burning));
+    assert_eq!(world.set_node_armed(0, false), Err(PlanError::Burning));
 }
 
 /// Nur Schiffe mit gesetzter Markierung halten den Zeitraffer an, und nur vor
@@ -332,7 +344,11 @@ fn halting_burn_respects_flag() {
     world.set_node(1, node(2_000.0)).unwrap();
     assert_eq!(world.next_halting_burn(), None);
 
+    // Markiert, aber der Node ist nicht scharf: kein Anhalten.
     world.vessels[1].halt_warp_at_burn = true;
+    assert_eq!(world.next_halting_burn(), None);
+
+    world.set_node_armed(1, true).unwrap();
     let start = world.vessels[1].trajectory.plan().unwrap().burn.start;
     assert_eq!(world.next_halting_burn(), Some(start));
 
@@ -343,4 +359,103 @@ fn halting_burn_respects_flag() {
         world.vessel_status(1),
         VesselStatus::Burning { .. }
     ));
+}
+
+/// Liegt der Brennbeginn schon in der Vergangenheit, rückt der Node einen
+/// Umlauf weiter: gleiche Stelle der Bahn, Brennen wieder mittig und ganz in
+/// der Zukunft.
+#[test]
+fn late_node_moves_to_next_orbit() {
+    let mut world = satellite(100_000.0, 100_000.0, 200.0);
+    world.advance_to(100.0);
+    let gm = world.bodies[0].gm;
+    let period = kepler::period(gm, &world.vessel_state(0).1).unwrap();
+    // 300 m/s brauchen rund 86 s, der Node liegt nur 10 s voraus.
+    world
+        .set_node(
+            0,
+            ManeuverNode {
+                time: 110.0,
+                delta_v: prograde(300.0),
+            },
+        )
+        .unwrap();
+    let plan = *world.vessels[0].trajectory.plan().unwrap();
+    assert!((plan.node.time - (110.0 + period)).abs() < 1e-6);
+    assert!(plan.burn.start > world.time);
+    assert!(((plan.burn.start + plan.burn.end) / 2.0 - plan.node.time).abs() < 1e-6);
+    // Die Node-Markierung bleibt an derselben Stelle der Bahn.
+    let here = kepler::propagate(gm, world.vessel_state(0).1, 10.0).position;
+    assert!((plan.node_state.position - here).length() < 1.0);
+}
+
+/// Ohne nächsten Umlauf (die Bahn taucht vorher in die Luft) wird ein zu
+/// später Node abgelehnt.
+#[test]
+fn late_node_without_next_orbit_is_rejected() {
+    let mut world = satellite(62_000.0, 150_000.0, 200.0);
+    world.advance_to(10.0);
+    let result = world.set_node(
+        0,
+        ManeuverNode {
+            time: 20.0,
+            delta_v: prograde(300.0),
+        },
+    );
+    assert_eq!(result, Err(PlanError::TooLate));
+    assert!(world.vessels[0].trajectory.plan().is_none());
+}
+
+/// Ein nicht scharfer Node brennt nicht: Bei Brennbeginn rückt er einen
+/// Umlauf weiter. Scharf geschaltet wird er ausgeführt.
+#[test]
+fn unarmed_node_waits_one_orbit() {
+    let mut world = satellite(100_000.0, 100_000.0, 200.0);
+    let gm = world.bodies[0].gm;
+    let period = kepler::period(gm, &world.vessel_state(0).1).unwrap();
+    let m0 = world.vessel_mass(0);
+    world
+        .set_node(
+            0,
+            ManeuverNode {
+                time: 600.0,
+                delta_v: prograde(50.0),
+            },
+        )
+        .unwrap();
+    assert!(!world.vessels[0].trajectory.plan().unwrap().armed);
+
+    world.advance_to(700.0);
+    let plan = *world.vessels[0].trajectory.plan().unwrap();
+    assert!((plan.node.time - (600.0 + period)).abs() < 1e-6);
+    assert_eq!(world.vessel_mass(0), m0);
+
+    world.set_node_armed(0, true).unwrap();
+    world.advance_to(plan.burn.end + 1.0);
+    assert!(world.vessels[0].trajectory.plan().is_none());
+    assert!(world.vessel_mass(0) < m0);
+}
+
+/// Gibt es keinen nächsten Umlauf, verfällt ein nicht scharfer Node bei
+/// Brennbeginn, und das Schiff fliegt weiter, als wäre nichts geplant gewesen.
+#[test]
+fn unarmed_node_expires_without_next_orbit() {
+    let mut world = satellite(62_000.0, 150_000.0, 200.0);
+    let untouched = {
+        let mut w = world.clone();
+        w.advance_to(1_000.0);
+        w.vessel_state(0)
+    };
+    world
+        .set_node(
+            0,
+            ManeuverNode {
+                time: 300.0,
+                delta_v: prograde(30.0),
+            },
+        )
+        .unwrap();
+    world.advance_to(1_000.0);
+    assert!(world.vessels[0].trajectory.plan().is_none());
+    assert_eq!(world.vessel_state(0), untouched);
 }
