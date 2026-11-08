@@ -191,6 +191,11 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   scharfen Nodes.
 - **Brennpunkte:** Gelbe Ringe auf der Bahn markieren Beginn und Ende jedes
   geplanten Brennens, für alle Schiffe mit Node.
+- **Griffe:** Ein gezogener Griff folgt der Maus entlang seiner Achse und
+  springt beim Loslassen zurück (wie in KSP). Er kann das Δv nicht über den
+  Tankinhalt am Brennbeginn hinaus erhöhen. Das begrenzt nur die Bedienung;
+  die Simulation erlaubt mehr Δv als im Tank ist (das Brennen endet dann
+  leer), damit später vor einem Node nachgetankt werden kann.
 - **Während des Brennens** zeigt die Karte die momentane Bahn (die Keplerbahn
   aus dem aktuellen Zustand, wie in KSP). Reine Darstellung, die Simulation
   rechnet unverändert den ganzen Brennvorgang voraus.
@@ -229,16 +234,27 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 - Scans, automatisierte Routen, Ressourcen, Basen, Wirtschaft
 - Bergung von Wracks (über Geld/Punkte)
 - „Hop zum Ziel": Parameter automatisch suchen, falls Zielen per Hand zu fummelig ist
-- **Geparkt:** Bandbreite, Modulslots, Gelände/Höhenkarte, Wiedereintrittshitze,
-  mehrere Nodes pro Schiff
+- **Geparkt:** Bandbreite, Modulslots, Gelände/Höhenkarte, Wiedereintrittshitze
 - **Gestrichen:** Technikalterung, Lagrange-Punkte (mit Patched Conics nicht möglich)
+
+## UI-Ideen (nach dem Grundgerüst)
+
+Erst kommt das Grundgerüst, dann die Bedienung. Ideen landen hier, damit
+nichts verloren geht.
+
+- **Manöver-Node-Manager:** Übersicht und Bearbeitung der geplanten Nodes
+  (sinnvoll, sobald es Manöverketten gibt)
 
 ## Reihenfolge
 
 1. Fundament ✓
-2. Manöver-Node in 3D (Schub, endliche Brenndauer, Vorschau mit Aufschlagkreuz) ← *dieser Stand*
-3. Startprofil (nutzt den Schub aus PR 2; Zirkularisieren per Node)
-4. Landung (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
-5. Rendezvous und Andocken
-6. Mond, Wechsel der Einflusssphäre
-7. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft
+2. Manöver-Node in 3D ✓ (Schub, endliche Brenndauer, Aufschlagkreuz; dazu
+   momentane Bahn beim Brennen, Zeitraffer-Stopp, scharf schalten,
+   nächster Umlauf, Griffe mit Tank-Anschlag)
+3. Manöverketten: mehrere Nodes pro Schiff, Nodes auf zukünftigen Bahnen
+   (Grundlage für Startprofil + Zirkularisieren und für automatische Routen)
+4. Startprofil (Zirkularisieren per Node in derselben Kette)
+5. Landung (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
+6. Rendezvous und Andocken
+7. Mond, Wechsel der Einflusssphäre
+8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft
