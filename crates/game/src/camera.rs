@@ -6,6 +6,7 @@
 //! Abziehen des Fokus (siehe `to_view`). Die Kamera ist nie weiter vom
 //! Ursprung entfernt als der Zoomabstand, daher bleibt alles Sichtbare genau.
 
+use bevy::camera::visibility::RenderLayers;
 use bevy::camera::{PerspectiveProjection, Projection};
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::math::DVec3;
@@ -38,32 +39,63 @@ impl CameraRig {
 
 /// Simulationssystem (Z nach Norden) → Bevy (Y nach oben), relativ zum Fokus.
 pub fn to_view(position: DVec3, focus: DVec3) -> Vec3 {
-    let p = position - focus;
-    Vec3::new(p.x as f32, p.z as f32, -p.y as f32)
+    dir_to_view(position - focus)
+}
+
+/// Wie `to_view`, aber für Richtungen (ohne Fokus).
+pub fn dir_to_view(d: DVec3) -> Vec3 {
+    Vec3::new(d.x as f32, d.z as f32, -d.y as f32)
+}
+
+/// Die Kamera, die die Welt zeigt.
+#[derive(Component)]
+pub struct MainCamera;
+
+/// Ebene für Dinge, die immer über der Welt liegen (Node und Griffe).
+pub const OVERLAY_LAYER: usize = 1;
+
+fn projection() -> Projection {
+    Projection::Perspective(PerspectiveProjection {
+        near: 1.0,
+        near_clip_plane: Vec4::new(0.0, 0.0, -1.0, -1.0),
+        // Bevy rendert mit unendlicher Tiefe; `far` begrenzt nur das Aussortieren.
+        far: 1e12,
+        ..default()
+    })
 }
 
 pub fn spawn(commands: &mut Commands) {
     commands.spawn((
+        MainCamera,
+        IsDefaultUiCamera,
         Camera3d::default(),
-        Projection::Perspective(PerspectiveProjection {
-            near: 1.0,
-            near_clip_plane: Vec4::new(0.0, 0.0, -1.0, -1.0),
-            // Bevy rendert mit unendlicher Tiefe; `far` begrenzt nur das Aussortieren.
-            far: 1e12,
-            ..default()
-        }),
+        projection(),
         Transform::default(),
+    ));
+    // Zweite Kamera mit gleichem Blick, die nur die Overlay-Ebene zeichnet. Sie
+    // hat einen eigenen Tiefenpuffer, deshalb liegt das Overlay immer obenauf.
+    commands.spawn((
+        Camera3d::default(),
+        Camera {
+            order: 1,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        projection(),
+        Transform::default(),
+        RenderLayers::layer(OVERLAY_LAYER),
     ));
 }
 
-/// Ziehen mit linker oder rechter Maustaste dreht, Mausrad zoomt.
+/// Ziehen mit der rechten Maustaste dreht (wie in KSP), Mausrad zoomt.
+/// Die linke Maustaste gehört der Bedienung (Auswahl, Node).
 pub fn input(
     buttons: Res<ButtonInput<MouseButton>>,
     motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
     mut rig: ResMut<CameraRig>,
 ) {
-    if buttons.pressed(MouseButton::Left) || buttons.pressed(MouseButton::Right) {
+    if buttons.pressed(MouseButton::Right) {
         rig.yaw -= motion.delta.x * 0.005;
         rig.pitch = (rig.pitch + motion.delta.y * 0.005).clamp(-1.55, 1.55);
     }
@@ -78,12 +110,15 @@ pub fn input(
     }
 }
 
-pub fn apply(rig: Res<CameraRig>, mut camera: Single<&mut Transform, With<Camera3d>>) {
+pub fn apply(rig: Res<CameraRig>, mut cameras: Query<&mut Transform, With<Camera3d>>) {
     let direction = Vec3::new(
         rig.pitch.cos() * rig.yaw.sin(),
         rig.pitch.sin(),
         rig.pitch.cos() * rig.yaw.cos(),
     );
-    **camera = Transform::from_translation(direction * rig.distance as f32)
+    let transform = Transform::from_translation(direction * rig.distance as f32)
         .looking_at(Vec3::ZERO, Vec3::Y);
+    for mut camera in &mut cameras {
+        *camera = transform;
+    }
 }

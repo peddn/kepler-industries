@@ -5,6 +5,7 @@
 
 mod camera;
 mod hud;
+mod node_ui;
 mod view;
 
 use bevy::prelude::*;
@@ -39,6 +40,19 @@ struct Options {
     time: f64,
     /// Kamera: Gierwinkel (°), Neigung (°), Abstand vom Planetenmittelpunkt (km).
     camera: Option<(f32, f32, f64)>,
+    /// Gewähltes Schiff.
+    select: Option<usize>,
+    /// Node: Schiff, Zeitpunkt (s), Δv prograd, normal, radial (m/s).
+    node: Option<(usize, f64, [f64; 3])>,
+}
+
+fn numbers(text: &str, what: &str) -> Vec<f64> {
+    text.split(',')
+        .map(|p| {
+            p.parse()
+                .unwrap_or_else(|_| panic!("{what}: Zahl erwartet, nicht {p:?}"))
+        })
+        .collect()
 }
 
 fn parse_options() -> Options {
@@ -50,16 +64,21 @@ fn parse_options() -> Options {
             ("--screenshot", Some(path)) => options.screenshot = Some(path),
             ("--time", Some(t)) => options.time = t.parse().expect("--time erwartet Sekunden"),
             ("--camera", Some(c)) => {
-                let parts: Vec<f64> = c
-                    .split(',')
-                    .map(|p| p.parse().expect("--camera erwartet Gier,Neigung,km"))
-                    .collect();
-                options.camera = Some((parts[0] as f32, parts[1] as f32, parts[2]));
+                let p = numbers(&c, "--camera GIER,NEIGUNG,KM");
+                options.camera = Some((p[0] as f32, p[1] as f32, p[2]));
+            }
+            ("--select", Some(v)) => {
+                options.select = Some(v.parse().expect("--select erwartet eine Schiffsnummer"))
+            }
+            ("--node", Some(n)) => {
+                let p = numbers(&n, "--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL");
+                options.node = Some((p[0] as usize, p[1], [p[2], p[3], p[4]]));
             }
             (other, _) => {
                 eprintln!("Unbekannte Option: {other}");
                 eprintln!(
-                    "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM"
+                    "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM\n\
+                     \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL"
                 );
                 std::process::exit(2);
             }
@@ -73,6 +92,18 @@ fn main() {
 
     let mut world = sim::scenario::demo();
     world.advance_to(options.time);
+    let mut selection = node_ui::Selection(options.select);
+    if let Some((vessel, time, [p, n, r])) = options.node {
+        let node = sim::ManeuverNode {
+            time,
+            delta_v: bevy::math::DVec3::new(p, n, r),
+        };
+        if let Err(e) = world.set_node(vessel, node) {
+            eprintln!("--node: {e}");
+            std::process::exit(2);
+        }
+        selection.0 = Some(vessel);
+    }
 
     let mut rig = camera::CameraRig::new(world.bodies[0].radius);
     if let Some((yaw, pitch, km)) = options.camera {
@@ -99,8 +130,14 @@ fn main() {
     .insert_resource(Sim(world))
     .insert_resource(warp)
     .insert_resource(rig)
+    .insert_resource(selection)
+    .init_resource::<node_ui::Drag>()
+    .init_gizmo_group::<node_ui::NodeGizmos>()
     .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.025)))
-    .add_systems(Startup, (view::setup, hud::setup))
+    .add_systems(
+        Startup,
+        (view::setup, node_ui::configure_gizmos, hud::setup),
+    )
     .add_systems(
         Update,
         (
@@ -108,9 +145,12 @@ fn main() {
             advance_simulation,
             camera::input,
             camera::apply,
+            node_ui::input,
             view::sync_markers,
+            node_ui::draw,
             view::draw_planet_grid,
             view::draw_trajectories,
+            view::draw_impacts,
             hud::update,
         )
             .chain(),

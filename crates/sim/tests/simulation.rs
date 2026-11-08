@@ -3,7 +3,7 @@
 
 use sim::kepler::{self, state_from_apsides};
 use sim::scenario::{demo, home_planet};
-use sim::{Segment, VesselStatus, World};
+use sim::{Segment, VesselParams, VesselStatus, World};
 
 const DAY: f64 = 86_400.0;
 
@@ -11,7 +11,13 @@ fn single_vessel(periapsis_alt: f64, apoapsis_alt: f64, drag_area: f64) -> World
     let mut world = World::new(vec![home_planet()]);
     let (gm, r) = (world.bodies[0].gm, world.bodies[0].radius);
     let state = state_from_apsides(gm, r + periapsis_alt, r + apoapsis_alt, 0.3, 0.0, 0.0, true);
-    world.spawn_vessel("Test", 500.0, drag_area, 0, state);
+    let params = VesselParams {
+        dry_mass: 500.0,
+        drag_area,
+        thrust: 0.0,
+        exhaust_velocity: 3_000.0,
+    };
+    world.spawn_vessel("Test", params, 0.0, 0, state);
     world
 }
 
@@ -89,7 +95,9 @@ fn too_low_orbit_decays_and_crashes() {
                 }
             }
             VesselStatus::Wreck { .. } => break,
-            VesselStatus::Landed { .. } => panic!("darf nicht landen"),
+            VesselStatus::Landed { .. } | VesselStatus::Burning { .. } => {
+                panic!("darf weder landen noch brennen")
+            }
         }
     }
     assert!(

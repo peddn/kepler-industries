@@ -3,26 +3,32 @@
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::kepler::{self, StateVector};
+use crate::maneuver::{ManeuverNode, PlanError};
 use crate::trajectory::{Segment, Trajectory};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 1;
+pub const SAVE_VERSION: u32 = 2;
+
+/// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
+/// Upgrades ändern nur diese Werte.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct VesselParams {
+    /// Masse ohne Treibstoff in kg.
+    pub dry_mass: f64,
+    /// Widerstandsbeiwert × Querschnittsfläche in m².
+    pub drag_area: f64,
+    /// Schub in N (0 = kein Triebwerk).
+    pub thrust: f64,
+    /// Ausströmgeschwindigkeit in m/s (spezifischer Impuls × g₀).
+    pub exhaust_velocity: f64,
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Vessel {
     pub name: String,
-    /// Masse in kg.
-    pub mass: f64,
-    /// Widerstandsbeiwert × Querschnittsfläche in m².
-    pub drag_area: f64,
+    pub params: VesselParams,
     pub trajectory: Trajectory,
-}
-
-impl Vessel {
-    pub fn drag_per_mass(&self) -> f64 {
-        self.drag_area / self.mass
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -42,9 +48,13 @@ pub enum VesselStatus {
         /// Die Bahn führt in die Atmosphäre oder auf den Boden.
         descending: bool,
     },
-    /// In der Atmosphäre.
+    /// Freiflug durch die Atmosphäre.
     Atmosphere {
         altitude: f64,
+    },
+    /// Das Triebwerk läuft noch `remaining` Sekunden.
+    Burning {
+        remaining: f64,
     },
     Landed {
         point: SurfacePoint,
@@ -75,21 +85,22 @@ impl World {
         }
     }
 
-    /// Setzt ein Schiff mit dem gegebenen Zustand zur aktuellen Zeit aus.
+    /// Setzt ein Schiff mit dem gegebenen Zustand und `fuel` kg Treibstoff zur
+    /// aktuellen Zeit aus.
     pub fn spawn_vessel(
         &mut self,
         name: &str,
-        mass: f64,
-        drag_area: f64,
+        params: VesselParams,
+        fuel: f64,
         body: BodyId,
         state: StateVector,
     ) -> usize {
+        let mass = params.dry_mass + fuel;
         let trajectory =
-            Trajectory::new_flying(&self.bodies, body, self.time, state, drag_area / mass);
+            Trajectory::new_flying(&self.bodies, &params, body, self.time, state, mass);
         self.vessels.push(Vessel {
             name: name.to_owned(),
-            mass,
-            drag_area,
+            params,
             trajectory,
         });
         self.vessels.len() - 1
@@ -105,9 +116,23 @@ impl World {
     pub fn advance_to(&mut self, t: f64) {
         self.time = t;
         for vessel in &mut self.vessels {
-            let k = vessel.drag_per_mass();
-            vessel.trajectory.advance_to(&self.bodies, t, k);
+            vessel
+                .trajectory
+                .advance_to(&self.bodies, t, &vessel.params);
         }
+    }
+
+    /// Setzt oder ändert den Manöver-Node eines Schiffs.
+    pub fn set_node(&mut self, index: usize, node: ManeuverNode) -> Result<(), PlanError> {
+        let vessel = &mut self.vessels[index];
+        vessel
+            .trajectory
+            .set_node(&self.bodies, &vessel.params, self.time, node)
+    }
+
+    pub fn clear_node(&mut self, index: usize) -> Result<(), PlanError> {
+        let vessel = &mut self.vessels[index];
+        vessel.trajectory.clear_node(&self.bodies, &vessel.params)
     }
 
     /// Körper und Zustand eines Schiffs zur aktuellen Zeit.
@@ -115,6 +140,22 @@ impl World {
         self.vessels[index]
             .trajectory
             .state_at(&self.bodies, self.time)
+    }
+
+    /// Aktuelle Masse in kg.
+    pub fn vessel_mass(&self, index: usize) -> f64 {
+        self.vessels[index].trajectory.current().mass_at(self.time)
+    }
+
+    /// Verbleibender Treibstoff in kg.
+    pub fn vessel_fuel(&self, index: usize) -> f64 {
+        self.vessel_mass(index) - self.vessels[index].params.dry_mass
+    }
+
+    /// Verbleibendes Δv in m/s (Raketengleichung).
+    pub fn vessel_delta_v(&self, index: usize) -> f64 {
+        let params = &self.vessels[index].params;
+        params.exhaust_velocity * (self.vessel_mass(index) / params.dry_mass).ln()
     }
 
     pub fn vessel_status(&self, index: usize) -> VesselStatus {
@@ -128,19 +169,23 @@ impl World {
                     VesselStatus::Landed { point: *point }
                 }
             }
+            Segment::Integrated {
+                burn: Some(burn), ..
+            } => VesselStatus::Burning {
+                remaining: burn.end - self.time,
+            },
             Segment::Integrated { .. } => {
                 let state = segment.state_at(&self.bodies, self.time);
                 VesselStatus::Atmosphere {
                     altitude: state.position.length() - body.radius,
                 }
             }
-            Segment::Kepler { end, .. } => {
-                let state = segment.state_at(&self.bodies, self.time);
-                let info = kepler::orbit_info(body.gm, &state);
+            Segment::Kepler { state, end, .. } => {
+                let info = kepler::orbit_info(body.gm, state);
                 VesselStatus::Orbit {
                     periapsis_altitude: info.periapsis - body.radius,
                     apoapsis_altitude: info.apoapsis.map(|r| r - body.radius),
-                    descending: end.is_some(),
+                    descending: end.is_some_and(|(_, e)| e != crate::trajectory::Event::BurnStart),
                 }
             }
         }

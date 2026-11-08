@@ -190,6 +190,21 @@ pub fn time_to_radius_inbound(gm: f64, s: &StateVector, radius: f64) -> Option<f
     }
 }
 
+/// Zeit bis zur nächsten Apoapsis (nur bei Ellipsen), in [0, Umlaufzeit).
+pub fn time_to_apoapsis(gm: f64, s: &StateVector) -> Option<f64> {
+    let alpha = alpha(gm, s);
+    if alpha <= 0.0 {
+        return None;
+    }
+    let a = 1.0 / alpha;
+    let n = (gm * alpha * alpha * alpha).sqrt();
+    let e_sin_e0 = s.position.dot(s.velocity) / (gm * a).sqrt();
+    let e_cos_e0 = 1.0 - s.position.length() / a;
+    let e0 = e_sin_e0.atan2(e_cos_e0);
+    let m0 = e0 - e_sin_e0;
+    Some((std::f64::consts::PI - m0).rem_euclid(TAU) / n)
+}
+
 /// Zustand in der Periapsis (oder Apoapsis) einer Bahn mit den gegebenen
 /// Radien und Lagewinkeln (Inklination, aufsteigender Knoten, Argument der
 /// Periapsis; alle in Radiant).
@@ -338,5 +353,14 @@ mod tests {
         let info = orbit_info(GM, &s);
         assert!((info.periapsis - (R + 80_000.0)).abs() < 1e-3);
         assert!((info.apoapsis.unwrap() - (R + 900_000.0)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn apoapsis_time_is_exact() {
+        let s = propagate(GM, eccentric(), 1234.0);
+        let dt = time_to_apoapsis(GM, &s).unwrap();
+        let at = propagate(GM, s, dt);
+        assert!((at.position.length() - (R + 900_000.0)).abs() < 1e-3);
+        assert!(time_to_apoapsis(GM, &hyperbolic()).is_none());
     }
 }
