@@ -265,6 +265,14 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   (zuerst „Start“ bei einem gelandeten Schiff). Die Anzeige links bleibt reine
   Information. Klicks auf die Leiste gehen nicht an die Karte dahinter.
   Schaltflächen prüfen Treffer selbst, ohne Bevys Picking.
+- **Δv-Balken unten** für das gewählte Schiff: volle Breite = voller Tank
+  (`VesselParams::fuel_capacity`), gefüllt = Δv an Bord. Darin die geplanten
+  Brennvorgänge der Kette in Reihenfolge (Start gelb, Nodes abwechselnd
+  violett, der gewählte hell umrandet), dann der Rest (grün). Verlangt die
+  Kette mehr als an Bord ist, steht der Fehlbetrag rot dahinter (der Balken
+  wird dafür länger). Teilstriche alle 500 m/s. Die Teile gehen exakt auf, weil
+  sich bei fester Ausströmgeschwindigkeit das Δv der Brennvorgänge zum Δv des
+  Tanks addiert (`World::delta_v_budget`).
 - **Landung über den Manöver-Node:** Die Vorschau rechnet bis zum Boden,
   Aufschlagpunkt als Kreuz, Zielgebiet als Kreisfläche auf der Oberfläche.
   Fallschirme = größere Widerstandsfläche ab einer Auslösehöhe (dasselbe Modell).

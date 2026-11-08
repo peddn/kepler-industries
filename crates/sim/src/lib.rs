@@ -20,4 +20,4 @@ pub use kepler::StateVector;
 pub use launch::{Launch, LaunchPlan, LaunchProfile};
 pub use maneuver::{Burn, ManeuverNode, Plan, PlanError};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
-pub use world::{Base, Vessel, VesselParams, VesselStatus, World};
+pub use world::{Base, BudgetItem, DeltaVBudget, Vessel, VesselParams, VesselStatus, World};

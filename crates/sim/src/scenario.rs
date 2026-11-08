@@ -29,6 +29,7 @@ pub const SATELLITE: VesselParams = VesselParams {
     drag_area: 2.0,
     thrust: 2_000.0,
     exhaust_velocity: 3_000.0,
+    fuel_capacity: 200.0,
 };
 
 /// Fähre, die selbst vom Boden startet: 1,5 t leer, Schub reicht für das
@@ -39,6 +40,7 @@ pub const FERRY: VesselParams = VesselParams {
     drag_area: 2.0,
     thrust: 80_000.0,
     exhaust_velocity: 3_200.0,
+    fuel_capacity: 4_000.0,
 };
 
 /// Ein Planet, eine Startbasis, zwei Satelliten: einer stabil oberhalb der

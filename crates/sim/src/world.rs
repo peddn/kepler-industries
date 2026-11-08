@@ -9,7 +9,7 @@ use crate::trajectory::{Segment, Trajectory};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 4;
+pub const SAVE_VERSION: u32 = 5;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -23,6 +23,41 @@ pub struct VesselParams {
     pub thrust: f64,
     /// Ausströmgeschwindigkeit in m/s (spezifischer Impuls × g₀).
     pub exhaust_velocity: f64,
+    /// Fassungsvermögen des Tanks in kg.
+    pub fuel_capacity: f64,
+}
+
+impl VesselParams {
+    /// Δv mit vollem Tank in m/s.
+    pub fn full_delta_v(&self) -> f64 {
+        self.exhaust_velocity * ((self.dry_mass + self.fuel_capacity) / self.dry_mass).ln()
+    }
+}
+
+/// Wofür ein Teil des Δv geplant ist.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BudgetItem {
+    Launch,
+    /// Node der Kette (Stelle in der Kette).
+    Node(usize),
+}
+
+/// Wie sich das Δv eines Schiffs auf die geplanten Brennvorgänge verteilt.
+/// Die Teile gehen exakt auf: Bei fester Ausströmgeschwindigkeit addiert sich
+/// das Δv der einzelnen Brennvorgänge zum Δv des Tanks.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeltaVBudget {
+    /// Δv mit vollem Tank.
+    pub full: f64,
+    /// Δv jetzt (Treibstoff an Bord).
+    pub available: f64,
+    /// Geplante Brennvorgänge in Reihenfolge, je mit dem Δv, das sie noch
+    /// verbrauchen (ein laufendes Brennen nur mit seinem Rest).
+    pub burns: Vec<(BudgetItem, f64)>,
+    /// Was danach im Tank bleibt.
+    pub rest: f64,
+    /// Was die Kette mehr verlangt, als im Tank ist.
+    pub missing: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -100,6 +135,10 @@ impl World {
         body: BodyId,
         point: SurfacePoint,
     ) -> usize {
+        assert!(
+            fuel <= params.fuel_capacity,
+            "{name}: mehr Treibstoff als Tank"
+        );
         let mass = params.dry_mass + fuel;
         self.vessels.push(Vessel {
             name: name.to_owned(),
@@ -141,6 +180,10 @@ impl World {
         body: BodyId,
         state: StateVector,
     ) -> usize {
+        assert!(
+            fuel <= params.fuel_capacity,
+            "{name}: mehr Treibstoff als Tank"
+        );
         let mass = params.dry_mass + fuel;
         let trajectory =
             Trajectory::new_flying(&self.bodies, &params, body, self.time, state, mass);
@@ -254,6 +297,52 @@ impl World {
     pub fn vessel_delta_v(&self, index: usize) -> f64 {
         let params = &self.vessels[index].params;
         params.exhaust_velocity * (self.vessel_mass(index) / params.dry_mass).ln()
+    }
+
+    /// Δv-Haushalt eines Schiffs: voller Tank, jetzt, geplante Brennvorgänge
+    /// (Start und gültige Nodes), Rest und was fehlt.
+    pub fn delta_v_budget(&self, index: usize) -> DeltaVBudget {
+        let vessel = &self.vessels[index];
+        let params = &vessel.params;
+        let trajectory = &vessel.trajectory;
+        let ve = params.exhaust_velocity;
+        let now = self.time;
+        let mass = self.vessel_mass(index);
+
+        let items = trajectory
+            .launch()
+            .map(|l| (BudgetItem::Launch, l.burn, None))
+            .into_iter()
+            .chain(
+                trajectory
+                    .plans()
+                    .enumerate()
+                    .map(|(k, p)| (BudgetItem::Node(k), p.burn, Some(p.node.delta_v.length()))),
+            );
+        let mut burns = Vec::new();
+        let mut missing = 0.0;
+        let mut end_mass = mass;
+        for (item, burn, wanted) in items {
+            if burn.end <= now {
+                continue;
+            }
+            // Ab jetzt bzw. ab Brennbeginn bis Brennende.
+            let from = burn.mass_at(now.max(burn.start));
+            let delta_v = ve * (from / burn.end_mass()).ln();
+            if let Some(wanted) = wanted {
+                let done = ve * (burn.start_mass / from).ln();
+                missing += (wanted - done - delta_v).max(0.0);
+            }
+            end_mass = burn.end_mass();
+            burns.push((item, delta_v));
+        }
+        DeltaVBudget {
+            full: params.full_delta_v(),
+            available: ve * (mass / params.dry_mass).ln(),
+            burns,
+            rest: ve * (end_mass / params.dry_mass).ln(),
+            missing,
+        }
     }
 
     pub fn vessel_status(&self, index: usize) -> VesselStatus {

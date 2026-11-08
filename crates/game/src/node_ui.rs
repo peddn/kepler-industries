@@ -14,6 +14,7 @@
 
 use crate::Sim;
 use crate::camera::{CameraRig, MainCamera, OVERLAY_LAYER, dir_to_view, to_view};
+use crate::dv_bar::{BarShown, over_bar};
 use crate::hud::UiFont;
 use crate::panel::{PanelShown, over_panel};
 use bevy::camera::visibility::RenderLayers;
@@ -382,6 +383,7 @@ pub fn input(
     real_time: Res<Time<Real>>,
     rig: Res<CameraRig>,
     shown: Res<PanelShown>,
+    bar: Res<BarShown>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<MainCamera>>,
 ) {
@@ -441,8 +443,9 @@ pub fn input(
         planet_radius: world.bodies[0].radius as f32,
     };
 
-    // Klicks auf die Seitenleiste gehören der Leiste.
-    if buttons.just_pressed(MouseButton::Left) && !over_panel(&shown, &window, cursor) {
+    // Klicks auf Seitenleiste und Δv-Balken gehören diesen.
+    let over_ui = over_panel(&shown, &window, cursor) || over_bar(&bar, &shown, &window, cursor);
+    if buttons.just_pressed(MouseButton::Left) && !over_ui {
         *drag = Drag::Pending(cursor);
         if let Some(i) = selection.0
             && editable(world, i)
