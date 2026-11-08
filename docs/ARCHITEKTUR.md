@@ -168,6 +168,10 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 ## Getroffene Spielentscheidungen
 
 - 3D, kleine Planeten (Kerbin-Größe), **keine Raketenstufen**.
+- **Aufschlagkreuz und Bahnlinie:** Das Kreuz zeigt den genauen Punkt auf dem
+  Boden (dreht mit dem Planeten), die Bahn wird ohne Planetendrehung
+  gezeichnet. Dass das Ende der Linie vor dem Aufschlag nicht am Kreuz liegt,
+  ist gewollt (siehe „Aufschlagkreuz“ unter Physikmodell).
 - **Ein Manöver-Node pro Schiff.** Der nächste wird geplant, wenn der vorige
   ausgeführt ist. Brennmanöver laufen automatisch.
 - **Während des Brennens** zeigt die Karte die momentane Bahn (die Keplerbahn
