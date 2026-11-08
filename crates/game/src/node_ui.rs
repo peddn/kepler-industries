@@ -58,10 +58,39 @@ pub struct UiMessage {
 }
 
 impl UiMessage {
-    fn show(&mut self, error: PlanError, now: f64) {
-        self.text = error.to_string();
+    fn say(&mut self, text: String, now: f64) {
+        self.text = text;
         self.until = now + 3.0;
     }
+
+    fn show(&mut self, error: PlanError, now: f64) {
+        self.say(error.to_string(), now);
+    }
+}
+
+/// Wie weit (Pixel) die Maus seit dem Drücken entlang eines Griffs gezogen
+/// wurde; `a` und `b` sind Node und Griff auf dem Bildschirm.
+fn pull_along(cursor: Vec2, press: Vec2, a: Vec2, b: Vec2) -> f32 {
+    (cursor - press).dot((b - a).normalize_or_zero())
+}
+
+/// Begrenzt eine Änderung an der Achse `axis`, damit |Δv| den Vorrat
+/// `available` nicht übersteigt. Verkleinern geht immer. Liefert das erlaubte
+/// Δv und ob begrenzt wurde.
+///
+/// Nur die Bedienung begrenzt; die Simulation erlaubt mehr Δv als im Tank ist
+/// (das Brennen endet dann leer). Das braucht es, sobald vor einem Node noch
+/// nachgetankt werden kann.
+fn limit_to_tank(old: DVec3, mut new: DVec3, axis: usize, available: f64) -> (DVec3, bool) {
+    if new.length() <= available || new.length() <= old.length() {
+        return (new, false);
+    }
+    if old.length() >= available {
+        return (old, true);
+    }
+    let others = new.length_squared() - new[axis] * new[axis];
+    new[axis] = new[axis].signum() * (available * available - others).max(0.0).sqrt();
+    (new, true)
 }
 
 /// Was die linke Maustaste gerade tut.
@@ -388,13 +417,27 @@ pub fn input(
                 if let (Some(a), Some(b)) = (to_screen(node), to_screen(handles[*handle])) {
                     // Je weiter man vom Druckpunkt wegzieht, desto schneller ändert
                     // sich das Δv (wie in KSP). Umschalt: zehnmal feiner.
-                    let pull = (cursor - *press).dot((b - a).normalize_or_zero()) as f64;
+                    let pull = pull_along(cursor, *press, a, b) as f64;
                     let fine =
                         keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
                     let rate = pull.signum() * 0.02 * pull * pull * if fine { 0.1 } else { 1.0 };
                     let (axis, sign, _) = HANDLES[*handle];
                     let mut node = plan.node;
                     node.delta_v[axis] += sign * rate * real_time.delta_secs_f64();
+
+                    // Anschlag am Tankinhalt (Masse am Brennbeginn).
+                    let params = world.vessels[i].params;
+                    let available =
+                        params.exhaust_velocity * (plan.burn.start_mass / params.dry_mass).ln();
+                    let (limited, hit) =
+                        limit_to_tank(plan.node.delta_v, node.delta_v, axis, available);
+                    node.delta_v = limited;
+                    if hit {
+                        message.say(
+                            format!("Tank leer: höchstens {available:.0} m/s"),
+                            real_time.elapsed_secs_f64(),
+                        );
+                    }
                     if let Err(e) = world.set_node(i, node) {
                         failure = Some(e);
                         *drag = Drag::None;
@@ -480,12 +523,16 @@ fn ring(gizmos: &mut Gizmos<NodeGizmos>, center: Vec3, eye: Vec3, radius: f32, c
 }
 
 /// Node und Griffe des gewählten Schiffs zeichnen. Während des Brennens nur
-/// den Node, denn ändern lässt er sich dann nicht mehr.
+/// den Node, denn ändern lässt er sich dann nicht mehr. Ein gezogener Griff
+/// folgt der Maus entlang seiner Achse und springt beim Loslassen zurück.
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
     sim: Res<Sim>,
     selection: Res<Selection>,
     rig: Res<CameraRig>,
-    camera: Single<&Transform, With<MainCamera>>,
+    drag: Res<Drag>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    camera: Single<(&Camera, &Transform), With<MainCamera>>,
     mut gizmos: Gizmos<NodeGizmos>,
 ) {
     let world = &sim.0;
@@ -494,8 +541,22 @@ pub fn draw(
     let Some(plan) = trajectory.plan() else {
         return;
     };
-    let eye = camera.translation;
-    let (node, handles) = node_geometry(plan, rig.focus, eye);
+    let (camera, transform) = *camera;
+    let eye = transform.translation;
+    let (node, mut handles) = node_geometry(plan, rig.focus, eye);
+    if let Drag::Handle { handle, press } = &*drag
+        && let Some(cursor) = window.cursor_position()
+    {
+        let view = GlobalTransform::from(*transform);
+        if let (Ok(a), Ok(b)) = (
+            camera.world_to_viewport(&view, node),
+            camera.world_to_viewport(&view, handles[*handle]),
+        ) && a.distance(b) > 1.0
+        {
+            let factor = (1.0 + pull_along(cursor, *press, a, b) / a.distance(b)).max(0.3);
+            handles[*handle] = node + (handles[*handle] - node) * factor;
+        }
+    }
     let distance = node.distance(eye);
     let color = if plan.armed {
         ARMED_COLOR
@@ -515,5 +576,32 @@ pub fn draw(
             distance * HANDLE_RADIUS,
             *color,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tank_limit_caps_growth_but_allows_shrinking() {
+        let old = DVec3::new(500.0, 0.0, 0.0);
+        // Über den Vorrat hinaus: auf den Vorrat begrenzt.
+        let (dv, hit) = limit_to_tank(old, DVec3::new(800.0, 0.0, 0.0), 0, 669.0);
+        assert!(hit && (dv.length() - 669.0).abs() < 1e-9);
+        // Mit Anteil auf anderer Achse: Gesamtbetrag begrenzt.
+        let (dv, hit) = limit_to_tank(
+            DVec3::new(500.0, 300.0, 0.0),
+            DVec3::new(700.0, 300.0, 0.0),
+            0,
+            669.0,
+        );
+        assert!(hit && (dv.length() - 669.0).abs() < 1e-9 && dv.y == 300.0);
+        // Verkleinern geht immer, auch oberhalb des Vorrats.
+        let (dv, hit) = limit_to_tank(DVec3::X * 900.0, DVec3::X * 850.0, 0, 669.0);
+        assert!(!hit && dv.x == 850.0);
+        // Retrograd: Vorzeichen bleibt.
+        let (dv, _) = limit_to_tank(DVec3::X * -500.0, DVec3::X * -800.0, 0, 669.0);
+        assert!((dv.x + 669.0).abs() < 1e-9);
     }
 }

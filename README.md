@@ -56,7 +56,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Mausrad | Zoomen |
 | Linksklick auf ein Schiff / `Tab` | Schiff wählen / nächstes Schiff |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen |
-| Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein) |
+| Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
 | Node ziehen | Node entlang der Bahn verschieben |
 | Schaltfläche neben dem Node / `Enter` | Node scharf schalten / abschalten |
 | `Entf` / `Rücktaste` | Node löschen |
