@@ -1,9 +1,10 @@
 //! Textanzeige: Spielzeit, Zeitraffer, Zustand der Schiffe, Bedienhilfe.
 
+use crate::node_ui::Selection;
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use sim::{SurfacePoint, VesselStatus};
+use sim::{Segment, SurfacePoint, VesselStatus, World, kepler};
 
 #[derive(Component)]
 pub struct Hud;
@@ -43,6 +44,23 @@ fn format_time(seconds: f64) -> String {
     )
 }
 
+/// Zeitspanne, z. B. "00:12:34" oder "2 d 03:04:05".
+fn format_span(seconds: f64) -> String {
+    let total = seconds.max(0.0).round() as u64;
+    let (days, rest) = (total / 86_400, total % 86_400);
+    let clock = format!(
+        "{:02}:{:02}:{:02}",
+        rest / 3600,
+        rest % 3600 / 60,
+        rest % 60
+    );
+    if days > 0 {
+        format!("{days} d {clock}")
+    } else {
+        clock
+    }
+}
+
 fn km(meters: f64) -> String {
     format!("{:.1} km", meters / 1000.0)
 }
@@ -59,7 +77,87 @@ fn place(point: &SurfacePoint) -> String {
     )
 }
 
-pub fn update(sim: Res<Sim>, warp: Res<TimeWarp>, mut text: Single<&mut Text, With<Hud>>) {
+/// Kenndaten und Node des gewählten Schiffs.
+fn selected_details(world: &World, i: usize) -> Vec<String> {
+    let vessel = &world.vessels[i];
+    let trajectory = &vessel.trajectory;
+    let mut lines = vec![format!(
+        "{}: Treibstoff {:.1} kg, Δv {:.0} m/s",
+        vessel.name,
+        world.vessel_fuel(i),
+        world.vessel_delta_v(i)
+    )];
+    let flying = !matches!(trajectory.current(), Segment::Surface { .. });
+
+    match trajectory.plan() {
+        None if flying => lines.push("Linksklick auf die Bahn setzt einen Node.".into()),
+        None => {}
+        Some(plan) => {
+            let dv = plan.node.delta_v;
+            let burn = &plan.burn;
+            let when = if burn.start > world.time {
+                format!("Brennbeginn in {}", format_span(burn.start - world.time))
+            } else {
+                "Brennt".into()
+            };
+            lines.push(format!(
+                "Node: Δv {:.1} m/s (prograd {:.1}, normal {:.1}, radial {:.1})",
+                dv.length(),
+                dv.x,
+                dv.y,
+                dv.z
+            ));
+            lines.push(format!(
+                "{when}, Dauer {:.1} s, Treibstoff danach {:.1} kg",
+                burn.duration(),
+                burn.end_mass() - vessel.params.dry_mass
+            ));
+            if burn.delta_v() < dv.length() - 0.05 {
+                lines.push(format!(
+                    "Treibstoff reicht nur für {:.0} m/s!",
+                    burn.delta_v()
+                ));
+            }
+            match trajectory.segment_after_burn() {
+                Some(Segment::Kepler { state, end, .. }) => {
+                    let body = &world.bodies[plan.body];
+                    let info = kepler::orbit_info(body.gm, state);
+                    lines.push(format!(
+                        "Danach: Ap {}  Pe {}{}",
+                        info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
+                        km(info.periapsis - body.radius),
+                        if end.is_some() {
+                            "  – führt in die Atmosphäre!"
+                        } else {
+                            ""
+                        }
+                    ));
+                }
+                Some(Segment::Integrated { .. }) => {
+                    lines.push("Danach: weiter durch die Atmosphäre".into());
+                }
+                _ => {}
+            }
+        }
+    }
+    if let Some((time, _, point)) = trajectory.predicted_impact()
+        && time > world.time
+    {
+        lines.push(format!(
+            "Aufschlag in {} bei {}",
+            format_span(time - world.time),
+            place(&point)
+        ));
+    }
+    lines
+}
+
+pub fn update(
+    sim: Res<Sim>,
+    warp: Res<TimeWarp>,
+    selection: Res<Selection>,
+    mut text: Single<&mut Text, With<Hud>>,
+) {
     let world = &sim.0;
     let mut lines = vec![format!(
         "{}    Zeitraffer {}×{}",
@@ -87,14 +185,27 @@ pub fn update(sim: Res<Sim>, warp: Res<TimeWarp>, mut text: Single<&mut Text, Wi
             VesselStatus::Atmosphere { altitude } => {
                 format!("In der Atmosphäre, Höhe {}", km(altitude))
             }
+            VesselStatus::Burning { remaining } => {
+                format!("Brennt, noch {remaining:.1} s")
+            }
             VesselStatus::Landed { point } => format!("Gelandet bei {}", place(&point)),
             VesselStatus::Wreck { point } => format!("Wrack bei {}", place(&point)),
         };
-        lines.push(format!("{:<9} {status}", vessel.name));
+        let marker = if selection.0 == Some(i) { ">" } else { " " };
+        lines.push(format!("{marker} {:<9} {status}", vessel.name));
+    }
+    if let Some(i) = selection.0 {
+        lines.push(String::new());
+        lines.extend(selected_details(world, i));
     }
     lines.push(String::new());
     lines.push(
-        "Maus ziehen: drehen   Mausrad: zoomen   , / .: Zeitraffer   Leertaste: Pause".into(),
+        "Linksklick: Schiff wählen / Node setzen   Griffe ziehen: Δv (Umschalt: fein)".into(),
+    );
+    lines.push("Node ziehen: verschieben   Entf: Node löschen   Tab: nächstes Schiff".into());
+    lines.push(
+        "Rechte Maustaste ziehen: drehen   Mausrad: zoomen   , / .: Zeitraffer   Leertaste: Pause"
+            .into(),
     );
     text.0 = lines.join("\n");
 }

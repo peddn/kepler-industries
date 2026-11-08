@@ -1,12 +1,15 @@
 //! Schrittweise Berechnung von Bahnstücken, auf die außer der Schwerkraft noch
-//! andere Kräfte wirken (in PR 1: Luftwiderstand, später auch Schub).
+//! andere Kräfte wirken: Luftwiderstand und Schub.
 //!
-//! Das Kraftmodell ist überall dasselbe. Wo die Luftdichte null ist, bleibt
-//! nur die Schwerkraft übrig, und dafür gibt es mit der Keplerbahn eine exakte
-//! Lösung. Deshalb wird nur gerechnet, solange Luft im Spiel ist.
+//! Das Kraftmodell ist überall dasselbe: Schwerkraft + Luftwiderstand + Schub.
+//! Wo die Luftdichte null ist und kein Triebwerk läuft, bleibt nur die
+//! Schwerkraft, und dafür ist die Keplerbahn die exakte Lösung. Deshalb wird
+//! nur gerechnet, solange Luft oder Schub im Spiel ist.
 
 use crate::body::Body;
 use crate::kepler::StateVector;
+use crate::maneuver::Burn;
+use crate::trajectory::Event;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 
@@ -16,8 +19,8 @@ pub const STEP: f64 = 0.1;
 /// Jeder wievielte Schritt als Stützpunkt gespeichert wird (dazwischen wird
 /// interpoliert). Hält den Speicherbedarf klein.
 pub const SAMPLE_EVERY: usize = 10;
-/// Maximale Länge eines Bahnstücks in s. Längere Flüge durch die Luft werden
-/// in mehrere Stücke geteilt und erst berechnet, wenn sie gebraucht werden.
+/// Maximale Länge eines Bahnstücks in s. Längere Stücke werden geteilt und
+/// erst berechnet, wenn sie gebraucht werden.
 pub const MAX_ARC_DURATION: f64 = 1800.0;
 
 /// Stützpunkt eines berechneten Bahnstücks.
@@ -27,43 +30,55 @@ pub struct Sample {
     pub state: StateVector,
 }
 
-/// Womit ein berechnetes Bahnstück endet.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ArcEnd {
-    /// Die Luft ist verlassen, weiter geht es auf einer Keplerbahn.
-    AtmosphereExit,
-    /// Bodenberührung.
-    GroundContact,
-    /// Maximale Stücklänge erreicht, es folgt ein weiteres berechnetes Stück.
-    Continue,
+/// Alles, was neben dem Zustand die Bewegung bestimmt.
+pub struct Forces<'a> {
+    pub body: &'a Body,
+    /// Widerstandsbeiwert × Querschnittsfläche in m².
+    pub drag_area: f64,
+    /// Masse in kg, solange kein Triebwerk läuft.
+    pub mass: f64,
+    pub burn: Option<&'a Burn>,
 }
 
-/// Beschleunigung in m/s² aus Schwerkraft und Luftwiderstand.
-///
-/// `drag_per_mass` ist Widerstandsbeiwert × Fläche / Masse (m²/kg).
-/// Der Widerstand wirkt gegen die Geschwindigkeit relativ zur mitrotierenden Luft.
-pub fn acceleration(body: &Body, drag_per_mass: f64, s: &StateVector) -> DVec3 {
-    let r = s.position.length();
-    let gravity = -body.gm / (r * r * r) * s.position;
-    let density = body.atmosphere.density(r - body.radius);
-    if density == 0.0 || drag_per_mass == 0.0 {
-        return gravity;
+impl Forces<'_> {
+    pub fn mass_at(&self, t: f64) -> f64 {
+        self.burn.map_or(self.mass, |b| b.mass_at(t))
     }
-    let v_rel = s.velocity - body.co_rotating_velocity(s.position);
-    gravity - 0.5 * density * drag_per_mass * v_rel.length() * v_rel
+
+    /// Beschleunigung in m/s² zum Zeitpunkt `t`.
+    pub fn acceleration(&self, t: f64, s: &StateVector) -> DVec3 {
+        let body = self.body;
+        let r = s.position.length();
+        let mut a = -body.gm / (r * r * r) * s.position;
+        let mass = self.mass_at(t);
+
+        // Luftwiderstand gegen die Geschwindigkeit relativ zur mitrotierenden Luft.
+        let density = body.atmosphere.density(r - body.radius);
+        if density > 0.0 && self.drag_area > 0.0 {
+            let v_rel = s.velocity - body.co_rotating_velocity(s.position);
+            a -= 0.5 * density * self.drag_area / mass * v_rel.length() * v_rel;
+        }
+
+        if let Some(burn) = self.burn
+            && burn.is_active(t)
+        {
+            a += burn.direction * (burn.thrust / mass);
+        }
+        a
+    }
 }
 
 /// Ein klassischer Runge-Kutta-Schritt (4. Ordnung).
-fn rk4(body: &Body, k: f64, s: &StateVector, dt: f64) -> StateVector {
-    let deriv = |s: &StateVector| (s.velocity, acceleration(body, k, s));
+fn rk4(forces: &Forces, t: f64, s: &StateVector, dt: f64) -> StateVector {
+    let deriv = |t: f64, s: &StateVector| (s.velocity, forces.acceleration(t, s));
     let add = |s: &StateVector, (dp, dv): (DVec3, DVec3), h: f64| StateVector {
         position: s.position + dp * h,
         velocity: s.velocity + dv * h,
     };
-    let k1 = deriv(s);
-    let k2 = deriv(&add(s, k1, dt / 2.0));
-    let k3 = deriv(&add(s, k2, dt / 2.0));
-    let k4 = deriv(&add(s, k3, dt));
+    let k1 = deriv(t, s);
+    let k2 = deriv(t + dt / 2.0, &add(s, k1, dt / 2.0));
+    let k3 = deriv(t + dt / 2.0, &add(s, k2, dt / 2.0));
+    let k4 = deriv(t + dt, &add(s, k3, dt));
     StateVector {
         position: s.position + (k1.0 + 2.0 * k2.0 + 2.0 * k3.0 + k4.0) * (dt / 6.0),
         velocity: s.velocity + (k1.1 + 2.0 * k2.1 + 2.0 * k3.1 + k4.1) * (dt / 6.0),
@@ -72,41 +87,62 @@ fn rk4(body: &Body, k: f64, s: &StateVector, dt: f64) -> StateVector {
 
 /// Berechnet ein Bahnstück ab `start` bis zum ersten Ereignis.
 ///
-/// Der letzte Stützpunkt liegt genau auf dem Ereignis (Luftgrenze bzw. Boden).
-pub fn integrate_arc(body: &Body, drag_per_mass: f64, start: Sample) -> (Vec<Sample>, ArcEnd) {
+/// Ereignisse: Bodenkontakt; ohne Schub zusätzlich das Verlassen der Luft;
+/// außerdem ein fester Zeitpunkt `stop` (Beginn oder Ende eines Brennmanövers).
+/// Der letzte Stützpunkt liegt genau auf dem Ereignis.
+pub fn integrate_arc(
+    forces: &Forces,
+    start: Sample,
+    stop: Option<(f64, Event)>,
+) -> (Vec<Sample>, Event) {
+    let body = forces.body;
     let boundary = body.boundary_radius();
+    let watch_exit = forces.burn.is_none() && body.atmosphere.exists();
     let mut samples = vec![start];
     let mut t = start.time;
     let mut s = start.state;
     let mut step = 0usize;
 
     loop {
-        let next = rk4(body, drag_per_mass, &s, STEP);
+        // Liegt der feste Zeitpunkt in diesem Schritt, genau bis dorthin rechnen.
+        let (h, timed) = match stop {
+            Some((stop_time, event)) if t + STEP >= stop_time => {
+                ((stop_time - t).max(0.0), Some(event))
+            }
+            _ => (STEP, None),
+        };
+        let next = rk4(forces, t, &s, h);
         let r0 = s.position.length();
         let r1 = next.position.length();
 
-        // Ereignisse: Boden geht vor, dann Verlassen der Luft.
-        let event = if r1 <= body.radius {
-            Some((body.radius, ArcEnd::GroundContact))
-        } else if body.atmosphere.exists() && r0 < boundary && r1 >= boundary {
-            Some((boundary, ArcEnd::AtmosphereExit))
+        let spatial = if r1 <= body.radius {
+            Some((body.radius, Event::GroundContact))
+        } else if watch_exit && r0 < boundary && r1 >= boundary {
+            Some((boundary, Event::AtmosphereExit))
         } else {
             None
         };
-        if let Some((radius, end)) = event {
+        if let Some((radius, event)) = spatial {
             // Genauen Zeitpunkt im Schritt bestimmen und den Teilschritt rechnen.
             let fraction = ((radius - r0) / (r1 - r0)).clamp(0.0, 1.0);
-            let exact = rk4(body, drag_per_mass, &s, STEP * fraction);
+            let exact = rk4(forces, t, &s, h * fraction);
             samples.push(Sample {
-                time: t + STEP * fraction,
+                time: t + h * fraction,
                 state: exact,
             });
-            return (samples, end);
+            return (samples, event);
+        }
+        if let Some(event) = timed {
+            samples.push(Sample {
+                time: t + h,
+                state: next,
+            });
+            return (samples, event);
         }
 
         s = next;
-        t = start.time + (step + 1) as f64 * STEP;
         step += 1;
+        t = start.time + step as f64 * STEP;
         if step.is_multiple_of(SAMPLE_EVERY) {
             samples.push(Sample { time: t, state: s });
         }
@@ -114,7 +150,7 @@ pub fn integrate_arc(body: &Body, drag_per_mass: f64, start: Sample) -> (Vec<Sam
             if samples.last().is_some_and(|last| last.time != t) {
                 samples.push(Sample { time: t, state: s });
             }
-            return (samples, ArcEnd::Continue);
+            return (samples, Event::Continue);
         }
     }
 }
@@ -124,7 +160,7 @@ pub fn integrate_arc(body: &Body, drag_per_mass: f64, start: Sample) -> (Vec<Sam
 pub fn interpolate(a: &Sample, b: &Sample, t: f64) -> StateVector {
     let h = b.time - a.time;
     if h <= 0.0 {
-        return a.state;
+        return b.state;
     }
     let u = ((t - a.time) / h).clamp(0.0, 1.0);
     let (u2, u3) = (u * u, u * u * u);

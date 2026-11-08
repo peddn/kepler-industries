@@ -1,14 +1,22 @@
 //! Darstellung: Planet, Atmosphäre, Basen, Schiffe und ihre Bahnen.
 
 use crate::Sim;
-use crate::camera::{self, CameraRig, to_view};
+use crate::camera::{self, CameraRig, MainCamera, to_view};
+use crate::node_ui::Selection;
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use sim::{Segment, SurfacePoint, VesselStatus};
+use sim::integrator::Sample;
+use sim::{Event, Segment, SurfacePoint, VesselStatus, World, kepler};
 
+/// Aktuelle Bahn.
 const ORBIT_COLOR: Color = Color::srgb(0.35, 0.75, 1.0);
 /// Bahnstücke durch die Luft heben sich farblich ab.
 const ATMOSPHERE_PATH_COLOR: Color = Color::srgb(1.0, 0.55, 0.15);
+/// Brennmanöver.
+const BURN_COLOR: Color = Color::srgb(1.0, 0.95, 0.45);
+/// Bahn nach einem geplanten Manöver.
+const PLANNED_COLOR: Color = Color::srgb(0.8, 0.5, 1.0);
+const IMPACT_COLOR: Color = Color::srgb(1.0, 0.25, 0.25);
 const GRID_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.12);
 /// Größe der Markierungen relativ zum Abstand zur Kamera (bleibt auf dem
 /// Bildschirm gleich groß, egal wie weit man herauszoomt).
@@ -26,6 +34,7 @@ pub struct VesselMarker(usize);
 #[derive(Resource)]
 pub struct MarkerMaterials {
     vessel: Handle<StandardMaterial>,
+    selected: Handle<StandardMaterial>,
     wreck: Handle<StandardMaterial>,
 }
 
@@ -97,6 +106,7 @@ pub fn setup(
 
     let markers = MarkerMaterials {
         vessel: materials.add(unlit(Color::srgb(1.0, 1.0, 1.0))),
+        selected: materials.add(unlit(Color::srgb(1.0, 0.85, 0.2))),
         wreck: materials.add(unlit(Color::srgb(1.0, 0.2, 0.2))),
     };
     for i in 0..sim.0.vessels.len() {
@@ -115,14 +125,15 @@ fn marker_scale(position: Vec3, camera: Vec3) -> Vec3 {
 }
 
 /// Überträgt die Positionen aus der Simulation auf die Bevy-Objekte.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn sync_markers(
     sim: Res<Sim>,
     rig: Res<CameraRig>,
+    selection: Res<Selection>,
     materials: Res<MarkerMaterials>,
-    camera: Single<&Transform, With<Camera3d>>,
-    mut planets: Query<(&PlanetMarker, &mut Transform), Without<Camera3d>>,
-    mut bases: Query<(&BaseMarker, &mut Transform), (Without<Camera3d>, Without<PlanetMarker>)>,
+    camera: Single<&Transform, With<MainCamera>>,
+    mut planets: Query<(&PlanetMarker, &mut Transform), Without<MainCamera>>,
+    mut bases: Query<(&BaseMarker, &mut Transform), (Without<MainCamera>, Without<PlanetMarker>)>,
     mut vessels: Query<
         (
             &VesselMarker,
@@ -130,7 +141,7 @@ pub fn sync_markers(
             &mut MeshMaterial3d<StandardMaterial>,
         ),
         (
-            Without<Camera3d>,
+            Without<MainCamera>,
             Without<PlanetMarker>,
             Without<BaseMarker>,
         ),
@@ -162,6 +173,7 @@ pub fn sync_markers(
         transform.scale = marker_scale(p, camera_position);
         let wanted = match world.vessel_status(*i) {
             VesselStatus::Wreck { .. } => &materials.wreck,
+            _ if selection.0 == Some(*i) => &materials.selected,
             _ => &materials.vessel,
         };
         if material.0 != *wanted {
@@ -195,43 +207,132 @@ pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) 
     }
 }
 
-/// Zeichnet für jedes Schiff die Bahn ab jetzt: den aktuellen Abschnitt und,
-/// falls schon bekannt, den nächsten. Stücke durch die Luft in Orange.
+/// Umlaufzeit eines Keplerabschnitts, bei offenen Bahnen drei Stunden.
+fn span(world: &World, segment: Option<&Segment>) -> f64 {
+    match segment {
+        Some(Segment::Kepler { state, .. }) => {
+            kepler::period(world.bodies[segment.unwrap().body()].gm, state).unwrap_or(3.0 * 3600.0)
+        }
+        _ => 3.0 * 3600.0,
+    }
+}
+
+/// Zeichnet für jedes Schiff die vorausberechnete Bahn ab jetzt.
+///
+/// Blau die aktuelle Bahn, orange Stücke durch die Luft, gelb das Brennen,
+/// violett die Bahn danach. Wie in KSP wird die aktuelle Bahn bei einem
+/// geplanten Manöver trotzdem ganz gezeigt (bis zum Eintritt in die Luft).
+/// Gezeichnet wird ein Umlauf voraus, bei einem Manöver zusätzlich ein Umlauf
+/// der neuen Bahn; sonst stapeln sich bei zerfallenden Bahnen die Ellipsen.
 pub fn draw_trajectories(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) {
     let world = &sim.0;
     let now = world.time;
     for vessel in &world.vessels {
-        for segment in vessel.trajectory.segments() {
-            let body = &world.bodies[segment.body()];
+        let trajectory = &vessel.trajectory;
+        let first_kepler = trajectory
+            .segments()
+            .find(|s| matches!(s, Segment::Kepler { .. }));
+        let mut horizon = now + span(world, first_kepler);
+        if let Some(plan) = trajectory.plan() {
+            let after = span(world, trajectory.segment_after_burn());
+            horizon = horizon.max(plan.burn.end + after);
+        }
+
+        let mut after_burn = false;
+        for segment in trajectory.segments() {
+            if segment.start() >= horizon {
+                break;
+            }
             let from = segment.start().max(now);
             match segment {
-                Segment::Kepler { state, .. } => {
+                Segment::Kepler {
+                    start, state, end, ..
+                } => {
+                    let body = &world.bodies[segment.body()];
                     // Eine geschlossene Bahn einmal ganz, eine offene drei Stunden weit.
-                    let span = sim::kepler::period(body.gm, state).unwrap_or(3.0 * 3600.0);
-                    let to = segment.end().min(from + span);
-                    let points = 256;
+                    let span = kepler::period(body.gm, state).unwrap_or(3.0 * 3600.0);
+                    let end = match end {
+                        Some((_, Event::BurnStart)) => {
+                            kepler::time_to_radius_inbound(body.gm, state, body.boundary_radius())
+                                .map_or(f64::INFINITY, |dt| start + dt)
+                        }
+                        _ => segment.end(),
+                    };
+                    let to = end.min(from + span).min(horizon.max(from));
+                    let color = if after_burn {
+                        PLANNED_COLOR
+                    } else {
+                        ORBIT_COLOR
+                    };
                     gizmos.linestrip(
-                        (0..=points).map(|i| {
-                            let t = from + (to - from) * i as f64 / points as f64;
+                        (0..=256).map(|i| {
+                            let t = from + (to - from) * i as f64 / 256.0;
                             to_view(segment.state_at(&world.bodies, t).position, rig.focus)
                         }),
-                        ORBIT_COLOR,
+                        color,
                     );
                 }
-                Segment::Integrated { samples, .. } => {
-                    let start = segment.state_at(&world.bodies, from).position;
-                    let rest = samples.iter().filter(|s| s.time > from);
-                    let step = (samples.len() / 400).max(1);
-                    gizmos.linestrip(
-                        std::iter::once(start)
-                            .chain(rest.step_by(step).map(|s| s.state.position))
-                            .chain(std::iter::once(samples[samples.len() - 1].state.position))
-                            .map(|p| to_view(p, rig.focus)),
-                        ATMOSPHERE_PATH_COLOR,
-                    );
+                Segment::Integrated { samples, burn, .. } => {
+                    let color = if burn.is_some() {
+                        after_burn = true;
+                        BURN_COLOR
+                    } else {
+                        ATMOSPHERE_PATH_COLOR
+                    };
+                    draw_samples(&mut gizmos, world, segment, samples, from, rig.focus, color);
                 }
                 Segment::Surface { .. } => {}
             }
+        }
+    }
+}
+
+fn draw_samples(
+    gizmos: &mut Gizmos,
+    world: &World,
+    segment: &Segment,
+    samples: &[Sample],
+    from: f64,
+    focus: DVec3,
+    color: Color,
+) {
+    let start = segment.state_at(&world.bodies, from).position;
+    let rest = samples.iter().filter(|s| s.time > from);
+    let step = (samples.len() / 400).max(1);
+    gizmos.linestrip(
+        std::iter::once(start)
+            .chain(rest.step_by(step).map(|s| s.state.position))
+            .chain(std::iter::once(samples[samples.len() - 1].state.position))
+            .map(|p| to_view(p, focus)),
+        color,
+    );
+}
+
+/// Rotes Kreuz auf der Oberfläche, wo ein Schiff laut Vorausberechnung
+/// aufschlagen wird. Es dreht sich mit dem Planeten.
+pub fn draw_impacts(
+    sim: Res<Sim>,
+    rig: Res<CameraRig>,
+    camera: Single<&Transform, With<MainCamera>>,
+    mut gizmos: Gizmos,
+) {
+    let world = &sim.0;
+    for vessel in &world.vessels {
+        let Some((time, body_id, point)) = vessel.trajectory.predicted_impact() else {
+            continue;
+        };
+        if time <= world.time {
+            continue; // schon abgestürzt, das Wrack ist markiert
+        }
+        let body = &world.bodies[body_id];
+        let up = body.body_fixed_to_inertial(point.body_fixed_direction(), world.time);
+        let east = DVec3::Z.cross(up).try_normalize().unwrap_or(DVec3::X);
+        let north = up.cross(east);
+        let center = to_view(up * body.radius * 1.002, rig.focus);
+        let arm = center.distance(camera.translation) * 0.015;
+        for d in [east + north, east - north] {
+            let d = camera::dir_to_view(d.normalize()) * arm;
+            gizmos.line(center - d, center + d, IMPACT_COLOR);
         }
     }
 }

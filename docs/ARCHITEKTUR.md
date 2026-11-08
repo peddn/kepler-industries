@@ -55,23 +55,26 @@ ohne Luftwiderstand oder werden in der Atmosphäre gelöscht. Für ein Spiel mit
 automatischen Routen wäre das fatal.
 
 **Regel:** Alle Schiffe werden gleich behandelt, egal ob sie im Bild sind.
-Flugabschnitte mit Luft (und später Schub) werden einmal vorausberechnet und
-danach nur abgespielt (`Segment::Integrated`).
+Flugabschnitte mit Luft oder Schub werden einmal vorausberechnet und danach
+nur abgespielt (`Segment::Integrated`).
 
 ### 5. Zeitraffer gilt immer
 *KSP:* Kein Schub unter Zeitraffer, Ionentriebwerke brennen stundenlang in Echtzeit.
 
 **Regel:** Weil berechnete Abschnitte nur abgespielt werden, funktioniert der
-Zeitraffer in jeder Lage, auch in der Luft und (ab PR 3) beim Brennen.
+Zeitraffer in jeder Lage, auch in der Luft und beim Brennen.
 
 ### 6. Ergebnis unabhängig von der Schrittgröße
 *KSP:* SOI-Wechsel im Hintergrund weichen bei hohem Zeitraffer von der Vorhersage ab.
 
-**Regel:** Ereignisse (Eintritt in die Luft, Austritt, Bodenkontakt) werden
-exakt bestimmt (Keplerbahn: analytisch, berechneter Abschnitt: im Schritt
-interpoliert). Ein Abschnitt hängt nur von seinem Anfangszustand ab. Der
-Integrator hat eine feste Schrittweite, unabhängig von Bildrate und Zeitraffer.
-*Test:* `result_is_independent_of_step_size` (1 Schritt == 10 000 Schritte, bitgenau).
+**Regel:** Ereignisse (Eintritt in die Luft, Austritt, Bodenkontakt, Beginn und
+Ende eines Brennmanövers) werden exakt bestimmt (Keplerbahn: analytisch,
+berechneter Abschnitt: im Schritt interpoliert bzw. genau bis zum Zeitpunkt
+gerechnet). Ein Abschnitt hängt nur von seinem Anfangszustand und dem
+geplanten Manöver ab. Der Integrator hat eine feste Schrittweite, unabhängig
+von Bildrate und Zeitraffer.
+*Test:* `result_is_independent_of_step_size`, `node_result_is_independent_of_step_size`
+(1 Schritt == 10 000 Schritte, bitgenau).
 
 ### 7. Keine Bauteil-Physik
 *KSP:* Wackelnde Raketen, Lag ab einigen hundert Teilen, Phantomkräfte. In KSP 2
@@ -105,10 +108,23 @@ ohne die Option `float_roundtrip` nicht bitgenau zurück. Jedes künftige
 Speicherformat muss Zahlen exakt erhalten. Der Spielstand trägt eine
 Versionsnummer (`SAVE_VERSION`).
 
+### 12. Die Vorschau ist die Ausführung
+Ein Manöver-Node ist der Plan selbst: `set_node` berechnet die Zeitleiste neu,
+und diese Zeitleiste wird später genau so abgespielt. Es gibt kein eigenes
+Vorschausystem, das von der Ausführung abweichen könnte.
+*Test:* `impact_prediction_matches_wreck`, `clearing_node_restores_trajectory`.
+
+### 13. Bedienelemente auf eigener Ebene
+Node und Griffe zeichnet eine zweite Kamera mit eigenem Tiefenpuffer
+(`OVERLAY_LAYER`). Sie liegen damit immer über der Welt und verschwinden nicht
+im Planeten. Der Versuch mit `depth_bias = -1` zeichnete Linien nur
+bruchstückhaft.
+
 ## Physikmodell
 
-**Ein Kraftmodell überall:** Schwerkraft + Luftwiderstand (+ später Schub).
-Ein Körper ohne Luft ist der Spezialfall Bodendichte 0.
+**Ein Kraftmodell überall:** Schwerkraft + Luftwiderstand + Schub.
+Ein Körper ohne Luft ist der Spezialfall Bodendichte 0, Freiflug der
+Spezialfall „kein Schub".
 
 **Atmosphäre:** verschobene Exponentialfunktion
 
@@ -122,20 +138,38 @@ schrittweise gerechnet werden (Drift, Rechenzeit).
 **Luftwiderstand:** `a = −½ · ρ · (c_w·A / m) · |v_rel| · v_rel`, mit `v_rel`
 relativ zur mitrotierenden Luft.
 
+**Brennmanöver:** konstanter Schub, konstanter Massenstrom. Die Masse wird
+analytisch aus der Zeit berechnet (nicht integriert), dadurch gilt die
+Raketengleichung exakt. Die Dauer folgt aus dem Δv:
+`m_end = m₀ · e^(−Δv/v_e)`, `Dauer = (m₀ − m_end) / ṁ`. Das Manöver liegt
+zeitlich mittig um den Node, die Schubrichtung bleibt im Raum fest (wie in KSP
+beim Zielen auf den Node). Reicht der Treibstoff nicht, endet es mit leerem Tank.
+
 **Zeitleiste eines Schiffs:** Folge von Abschnitten
 - `Kepler`: Freiflug ohne Luft, analytisch (universelle Variablen: eine Formel
   für Ellipse, Parabel, Hyperbel).
 - `Integrated`: vorausberechnet (RK4, 0,1 s, Stützpunkt jede Sekunde,
-  Hermite-Interpolation dazwischen, max. 30 min pro Stück).
+  Hermite-Interpolation dazwischen, max. 30 min pro Stück); mit oder ohne Schub.
 - `Surface`: am Boden (gelandet oder Wrack).
 
-Bekannt ist immer der aktuelle und der nächste Abschnitt (für die Vorschau).
-Übergänge: Kepler → (Eintritt) → Integrated → (Austritt) → Kepler, oder
+Vorausberechnet werden bis zu 8 Abschnitte (`LOOKAHEAD`), oder bis die
+Zeitleiste offen endet (stabile Bahn, am Boden). Das reicht, um nach einem
+Manöver die neue Bahn oder den Aufschlag zu sehen.
+Übergänge: Kepler → (Eintritt) → Integrated → (Austritt) → Kepler;
+Freiflug → (Brennbeginn) → Integrated mit Schub → (Brennende) → Freiflug;
 → (Bodenkontakt) → Surface/Wrack.
+
+**Aufschlagkreuz:** Es markiert die Stelle *auf dem Boden* und dreht sich mit
+dem Planeten. Die Bahnlinie ist im nicht rotierenden System gezeichnet. Bis
+zum Aufschlag dreht sich der Planet noch, deshalb liegt das Kreuz vorher nicht
+am Ende der Linie; beide treffen sich genau beim Aufschlag. Für den Vergleich
+mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 
 ## Getroffene Spielentscheidungen
 
 - 3D, kleine Planeten (Kerbin-Größe), **keine Raketenstufen**.
+- **Ein Manöver-Node pro Schiff.** Der nächste wird geplant, wenn der vorige
+  ausgeführt ist. Brennmanöver laufen automatisch.
 - **Startprofil** mit wenigen Parametern (Richtung, Wendebeginn, Ziel-Apoapsis);
   das Schiff kommt mit nicht mehr vollen Tanks oben an. Zirkularisieren per Manöver-Node.
 - **Landung über den Manöver-Node:** Die Vorschau rechnet bis zum Boden,
@@ -166,14 +200,15 @@ Bekannt ist immer der aktuelle und der nächste Abschnitt (für die Vorschau).
 - Scans, automatisierte Routen, Ressourcen, Basen, Wirtschaft
 - Bergung von Wracks (über Geld/Punkte)
 - „Hop zum Ziel": Parameter automatisch suchen, falls Zielen per Hand zu fummelig ist
-- **Geparkt:** Bandbreite, Modulslots, Gelände/Höhenkarte, Wiedereintrittshitze
+- **Geparkt:** Bandbreite, Modulslots, Gelände/Höhenkarte, Wiedereintrittshitze,
+  mehrere Nodes pro Schiff
 - **Gestrichen:** Technikalterung, Lagrange-Punkte (mit Patched Conics nicht möglich)
 
 ## Reihenfolge
 
-1. Fundament ← *dieser Stand*
-2. Startprofil (Schub im Integrator, Vorschau bis Orbit oder Aufschlag)
-3. Manöver-Node in 3D (endliche Brenndauer, Vorschau mit Aufschlagkreuz)
+1. Fundament ✓
+2. Manöver-Node in 3D (Schub, endliche Brenndauer, Vorschau mit Aufschlagkreuz) ← *dieser Stand*
+3. Startprofil (nutzt den Schub aus PR 2; Zirkularisieren per Node)
 4. Landung (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
 5. Rendezvous und Andocken
 6. Mond, Wechsel der Einflusssphäre
