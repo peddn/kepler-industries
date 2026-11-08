@@ -42,9 +42,10 @@ struct Options {
     camera: Option<(f32, f32, f64)>,
     /// Gewähltes Schiff.
     select: Option<usize>,
-    /// Node: Schiff, Zeitpunkt (s), Δv prograd, normal, radial (m/s), scharf
-    /// (ohne Angabe ja, wie im Spiel).
-    node: Option<(usize, f64, [f64; 3], bool)>,
+    /// Nodes: Schiff, Zeitpunkt (s), Δv prograd, normal, radial (m/s), scharf
+    /// (ohne Angabe ja, wie im Spiel). Mehrere Nodes eines Schiffs bilden eine
+    /// Kette; sie ist scharf, wenn keiner "nicht scharf" verlangt.
+    nodes: Vec<(usize, f64, [f64; 3], bool)>,
 }
 
 fn numbers(text: &str, what: &str) -> Vec<f64> {
@@ -74,7 +75,9 @@ fn parse_options() -> Options {
             ("--node", Some(n)) => {
                 let p = numbers(&n, "--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]");
                 let armed = p.get(5).is_none_or(|&a| a != 0.0);
-                options.node = Some((p[0] as usize, p[1], [p[2], p[3], p[4]], armed));
+                options
+                    .nodes
+                    .push((p[0] as usize, p[1], [p[2], p[3], p[4]], armed));
             }
             (other, _) => {
                 eprintln!("Unbekannte Option: {other}");
@@ -95,14 +98,18 @@ fn main() {
     let mut world = sim::scenario::demo();
     world.advance_to(options.time);
     let mut selection = node_ui::Selection(options.select);
-    if let Some((vessel, time, [p, n, r], armed)) = options.node {
+    for &(vessel, time, [p, n, r], _) in &options.nodes {
         let node = sim::ManeuverNode {
             time,
             delta_v: bevy::math::DVec3::new(p, n, r),
         };
+        let armed = options
+            .nodes
+            .iter()
+            .all(|&(v, .., armed)| v != vessel || armed);
         if let Err(e) = world
-            .set_node(vessel, node)
-            .and_then(|()| world.set_node_armed(vessel, armed))
+            .add_node(vessel, node)
+            .and_then(|_| world.set_armed(vessel, armed))
         {
             eprintln!("--node: {e}");
             std::process::exit(2);
@@ -136,6 +143,7 @@ fn main() {
     .insert_resource(warp)
     .insert_resource(rig)
     .insert_resource(selection)
+    .init_resource::<node_ui::SelectedNode>()
     .init_resource::<node_ui::Drag>()
     .init_resource::<node_ui::UiMessage>()
     .init_gizmo_group::<node_ui::NodeGizmos>()
@@ -144,7 +152,12 @@ fn main() {
         Startup,
         (
             hud::load_font,
-            (view::setup, node_ui::configure_gizmos, hud::setup),
+            (
+                view::setup,
+                node_ui::configure_gizmos,
+                node_ui::setup_label,
+                hud::setup,
+            ),
         )
             .chain(),
     )
@@ -158,6 +171,7 @@ fn main() {
             node_ui::input,
             view::sync_markers,
             node_ui::draw,
+            node_ui::sync_label,
             view::draw_planet_grid,
             view::draw_trajectories,
             view::draw_burn_points,

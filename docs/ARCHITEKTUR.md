@@ -109,8 +109,8 @@ Speicherformat muss Zahlen exakt erhalten. Der Spielstand trägt eine
 Versionsnummer (`SAVE_VERSION`).
 
 ### 12. Die Vorschau ist die Ausführung
-Ein Manöver-Node ist der Plan selbst: `set_node` berechnet die Zeitleiste neu,
-und diese Zeitleiste wird später genau so abgespielt. Es gibt kein eigenes
+Ein Manöver-Node ist der Plan selbst: `add_node`/`set_node` berechnen die
+Zeitleiste neu, und diese Zeitleiste wird später genau so abgespielt. Es gibt kein eigenes
 Vorschausystem, das von der Ausführung abweichen könnte.
 *Test:* `impact_prediction_matches_wreck`, `clearing_node_restores_trajectory`.
 
@@ -145,13 +145,31 @@ Raketengleichung exakt. Die Dauer folgt aus dem Δv:
 zeitlich mittig um den Node, die Schubrichtung bleibt im Raum fest (wie in KSP
 beim Zielen auf den Node). Reicht der Treibstoff nicht, endet es mit leerem Tank.
 
-**Brennen ganz in der Zukunft:** Läge der Brennbeginn beim Setzen oder Ändern
-eines Nodes in der Vergangenheit, rückt der Node genau einen Umlauf weiter
-(gleiche Stelle der Bahn, alle Zeiten + Umlaufzeit). Das geht nur auf einer
-geschlossenen Bahn, die bis zum Ende des verschobenen Brennens weder Luft noch
-Boden berührt; sonst wird der Node abgelehnt (`PlanError::TooLate`).
-Dieselbe Regel gilt für einen nicht scharfen Node, dessen Brennbeginn erreicht
-wird: Er rückt weiter oder verfällt.
+**Manöverkette:** Ein Schiff hat eine Kette von Nodes. Jeder liegt auf der
+Bahn nach den vorherigen Brennvorgängen; die Zeitleiste rechnet sie der Reihe
+nach aus (`Trajectory::rebuild`). Gespeichert wird pro Node, wohin er gesetzt
+wurde (Zeit, Δv); Lage, Richtung und Brennzeiten folgen daraus (`Plan`).
+Ändert sich ein früherer Node, behalten spätere Zeit und Δv und wandern mit
+der Bahn.
+
+**Brennen ganz in der Zukunft und nacheinander:** Ein Brennen beginnt nicht
+vor jetzt und echt nach dem Ende des vorherigen. Sonst rückt der Node genau
+einen Umlauf weiter (gleiche Stelle seiner Bahn, alle Zeiten + Umlaufzeit),
+so oft wie nötig. Das geht nur auf einer geschlossenen Bahn, die bis zum Ende
+des verschobenen Brennens weder Luft noch Boden berührt. Rückt ein Node nur
+wegen eines früheren weiter, wird das jedes Mal neu berechnet, nicht
+gespeichert; nimmt man das frühere Manöver zurück, kehrt er zurück.
+
+**Ungültige Nodes:** Gibt es für einen Node auf seiner Bahn keinen Platz
+(Absturz vorher `OnGround`, kein nächster Umlauf `TooLate`/`Overlaps`, hinter
+der Vorausberechnung), ist er ungültig. Beim Setzen oder Ändern wird so ein
+Node abgelehnt. Wird er es erst durch die Änderung eines früheren, bleibt er
+erhalten, wird nicht ausgeführt und erscheint nur in der Liste (rot). Alle
+späteren sind dann auch ungültig (`AfterInvalid`). Passt es wieder, ist er
+wieder gültig.
+
+**Nicht scharfe Kette:** Erreicht sie ihren ersten Brennbeginn, rückt sie als
+Ganzes einen Umlauf weiter (nach derselben Regel) oder verfällt.
 
 **Zeitleiste eines Schiffs:** Folge von Abschnitten
 - `Kepler`: Freiflug ohne Luft, analytisch (universelle Variablen: eine Formel
@@ -160,9 +178,12 @@ wird: Er rückt weiter oder verfällt.
   Hermite-Interpolation dazwischen, max. 30 min pro Stück); mit oder ohne Schub.
 - `Surface`: am Boden (gelandet oder Wrack).
 
-Vorausberechnet werden bis zu 8 Abschnitte (`LOOKAHEAD`), oder bis die
-Zeitleiste offen endet (stabile Bahn, am Boden). Das reicht, um nach einem
-Manöver die neue Bahn oder den Aufschlag zu sehen.
+Vorausberechnet werden 8 Abschnitte (`LOOKAHEAD`) nach dem Ende des letzten
+geplanten Brennens (ohne Manöver: ab jetzt), oder bis die Zeitleiste offen
+endet (stabile Bahn, am Boden). Das reicht, um nach dem letzten Manöver die
+neue Bahn oder den Aufschlag zu sehen. Auf einer Bahn, die bei jedem Umlauf
+durch die Luft führt, sind 8 Abschnitte vier Umläufe; weiter voraus lässt
+sich kein Node setzen.
 Übergänge: Kepler → (Eintritt) → Integrated → (Austritt) → Kepler;
 Freiflug → (Brennbeginn) → Integrated mit Schub → (Brennende) → Freiflug;
 → (Bodenkontakt) → Surface/Wrack.
@@ -180,18 +201,28 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Boden (dreht mit dem Planeten), die Bahn wird ohne Planetendrehung
   gezeichnet. Dass das Ende der Linie vor dem Aufschlag nicht am Kreuz liegt,
   ist gewollt (siehe „Aufschlagkreuz“ unter Physikmodell).
-- **Ein Manöver-Node pro Schiff.** Der nächste wird geplant, wenn der vorige
-  ausgeführt ist.
-- **Scharf schalten:** Nur ein scharfer Node wird ausgeführt (`Plan::armed`).
-  In der Simulation sind neue Nodes nicht scharf, ein geänderter behält seinen
-  Zustand. Ein nicht scharfer Node rückt bei Brennbeginn einen Umlauf weiter
-  (siehe „Brennen ganz in der Zukunft“), so geht kein Plan verloren, nur weil
-  der Zeitraffer läuft. Die Vorschau ist scharf wie nicht scharf dieselbe. Der
-  Zeitraffer-Stopp greift nur bei scharfen Nodes. **Vorerst schaltet das Spiel
-  jeden neuen Node sofort scharf**; die Schaltfläche dafür kommt später an
-  anderer Stelle in die Oberfläche (siehe UI-Ideen).
+- **Manöverketten:** mehrere Nodes pro Schiff (siehe „Manöverkette“ unter
+  Physikmodell). Ein Klick auf einen beliebigen gezeichneten Teil der Zukunft
+  fügt einen Node ein, auch auf die Bahn nach einem geplanten Manöver. Ein
+  Klick auf einen Node (oder `↑`/`↓`) wählt ihn; nur der gewählte hat Griffe,
+  `Entf` löscht ihn. Verschoben wird ein Node entlang seiner Bahn (der Bahn
+  nach den früheren Manövern). Auf einer zerfallenden Bahn liegen spätere
+  Umläufe weiter innen; zieht man dorthin, kommt der Node auf einen späteren
+  Umlauf. Das zeigen das Etikett „+N Umläufe“ am gewählten Node und die Liste.
+  Auf einer stabilen Bahn liegen die Umläufe übereinander, dort bleibt der
+  Node im ersten (später: „+1 Umlauf“ im Node-Manager).
+- **Scharf schalten pro Kette** (`Trajectory::armed`): Nur eine scharfe Kette
+  wird ausgeführt. In der Simulation ist eine neue Kette nicht scharf. Eine
+  nicht scharfe rückt bei Brennbeginn als Ganzes einen Umlauf weiter, so geht
+  kein Plan verloren, nur weil der Zeitraffer läuft. Die Vorschau ist scharf
+  wie nicht scharf dieselbe. Der Zeitraffer-Stopp greift nur bei scharfen
+  Ketten. Eine Kette passt auch zu späteren Routen. **Vorerst schaltet das
+  Spiel jede neue Kette sofort scharf**; die Schaltfläche dafür kommt später
+  an anderer Stelle in die Oberfläche (siehe UI-Ideen).
+- **Ungültige Nodes bleiben erhalten** (siehe Physikmodell), damit beim
+  Ausprobieren am frühen Node kein späterer Plan verloren geht.
 - **Brennpunkte:** Gelbe Ringe auf der Bahn markieren Beginn und Ende jedes
-  geplanten Brennens, für alle Schiffe mit Node.
+  geplanten Brennens, für alle Schiffe und alle gültigen Nodes.
 - **Griffe:** Ein gezogener Griff folgt der Maus entlang seiner Achse und
   springt beim Loslassen zurück (wie in KSP). Er kann das Δv nicht über den
   Tankinhalt am Brennbeginn hinaus erhöhen. Das begrenzt nur die Bedienung;
@@ -246,7 +277,10 @@ nichts verloren geht.
 - **Manöver-Node-Manager:** Übersicht und Bearbeitung der geplanten Nodes
   (sinnvoll, sobald es Manöverketten gibt)
 - **Scharf schalten:** Schaltfläche dafür, z. B. im Node-Manager. Die Mechanik
-  steckt schon in der Simulation; bis dahin ist jeder Node sofort scharf.
+  steckt schon in der Simulation; bis dahin ist jede Kette sofort scharf.
+- **„+1 Umlauf“ / „−1 Umlauf“** für den gewählten Node, z. B. im Node-Manager.
+  Damit kommt ein Node auch auf einer stabilen Bahn auf einen späteren Umlauf.
+- **Liste der Nodes anklickbar** statt `↑`/`↓`.
 
 ## Reihenfolge
 
@@ -254,8 +288,8 @@ nichts verloren geht.
 2. Manöver-Node in 3D ✓ (Schub, endliche Brenndauer, Aufschlagkreuz; dazu
    momentane Bahn beim Brennen, Zeitraffer-Stopp, scharf schalten,
    nächster Umlauf, Griffe mit Tank-Anschlag)
-3. Manöverketten: mehrere Nodes pro Schiff, Nodes auf zukünftigen Bahnen
-   (Grundlage für Startprofil + Zirkularisieren und für automatische Routen)
+3. Manöverketten ✓ (mehrere Nodes pro Schiff, Nodes auf zukünftigen Bahnen,
+   ungültige Nodes bleiben, Anzeige „+N Umläufe“)
 4. Startprofil (Zirkularisieren per Node in derselben Kette)
 5. Landung (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
 6. Rendezvous und Andocken

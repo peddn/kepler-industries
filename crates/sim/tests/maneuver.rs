@@ -24,7 +24,8 @@ fn prograde(dv: f64) -> DVec3 {
 /// Bahnwerte (Periapsis-, Apoapsis-Höhe) des ersten Keplerabschnitts nach dem Brennen.
 fn orbit_after_burn(world: &World, index: usize) -> (f64, f64) {
     let trajectory = &world.vessels[index].trajectory;
-    let Some(Segment::Kepler { state, .. }) = trajectory.segment_after_burn() else {
+    let burn = trajectory.plans().next().unwrap().burn;
+    let Some(Segment::Kepler { state, .. }) = trajectory.segment_after(&burn) else {
         panic!("nach dem Brennen muss eine Keplerbahn folgen");
     };
     let body = &world.bodies[0];
@@ -44,11 +45,16 @@ fn short_burn_matches_impulse() {
         time: 600.0,
         delta_v: prograde(50.0),
     };
-    world.set_node(0, node).unwrap();
+    world.add_node(0, node).unwrap();
     let (_, apoapsis) = orbit_after_burn(&world, 0);
 
     let gm = world.bodies[0].gm;
-    let mut impulse = world.vessels[0].trajectory.plan().unwrap().node_state;
+    let mut impulse = world.vessels[0]
+        .trajectory
+        .plans()
+        .next()
+        .unwrap()
+        .node_state;
     impulse.velocity += impulse.velocity.normalize() * 50.0;
     let expected = kepler::orbit_info(gm, &impulse).apoapsis.unwrap() - world.bodies[0].radius;
     // 12 s Brenndauer: Abweichung gemessen rund 5 m.
@@ -65,7 +71,7 @@ fn fuel_follows_rocket_equation() {
     let mut world = satellite(100_000.0, 100_000.0, 200.0);
     let m0 = world.vessel_mass(0);
     world
-        .set_node(
+        .add_node(
             0,
             ManeuverNode {
                 time: 600.0,
@@ -73,8 +79,8 @@ fn fuel_follows_rocket_equation() {
             },
         )
         .unwrap();
-    world.set_node_armed(0, true).unwrap();
-    let burn = world.vessels[0].trajectory.plan().unwrap().burn;
+    world.set_armed(0, true).unwrap();
+    let burn = world.vessels[0].trajectory.plans().next().unwrap().burn;
     world.advance_to(burn.start + 1.0);
     assert!(matches!(
         world.vessel_status(0),
@@ -84,7 +90,7 @@ fn fuel_follows_rocket_equation() {
     world.advance_to(burn.end + 1.0);
     let expected = m0 * (-300.0 / SATELLITE.exhaust_velocity).exp();
     assert!((world.vessel_mass(0) - expected).abs() < 1e-9);
-    assert!(world.vessels[0].trajectory.plan().is_none());
+    assert!(world.vessels[0].trajectory.nodes().is_empty());
     assert!(matches!(world.vessel_status(0), VesselStatus::Orbit { .. }));
 }
 
@@ -94,7 +100,7 @@ fn empty_tank_ends_burn_early() {
     let mut world = satellite(100_000.0, 100_000.0, 50.0);
     let available = world.vessel_delta_v(0);
     world
-        .set_node(
+        .add_node(
             0,
             ManeuverNode {
                 time: 600.0,
@@ -102,8 +108,8 @@ fn empty_tank_ends_burn_early() {
             },
         )
         .unwrap();
-    world.set_node_armed(0, true).unwrap();
-    let burn = world.vessels[0].trajectory.plan().unwrap().burn;
+    world.set_armed(0, true).unwrap();
+    let burn = world.vessels[0].trajectory.plans().next().unwrap().burn;
     assert!((burn.delta_v() - available).abs() < 1e-9);
     world.advance_to(burn.end + 1.0);
     assert!(world.vessel_fuel(0).abs() < 1e-9);
@@ -135,7 +141,7 @@ fn burn_inside_atmosphere() {
     };
 
     let mut with = without.clone();
-    with.set_node(
+    with.add_node(
         0,
         ManeuverNode {
             time: node_time,
@@ -143,7 +149,7 @@ fn burn_inside_atmosphere() {
         },
     )
     .unwrap();
-    let burn = with.vessels[0].trajectory.plan().unwrap().burn;
+    let burn = with.vessels[0].trajectory.plans().next().unwrap().burn;
     let body = &with.bodies[0];
     let altitude = with.vessels[0]
         .trajectory
@@ -164,7 +170,7 @@ fn impact_prediction_matches_wreck() {
     let mut world = satellite(100_000.0, 100_000.0, 200.0);
     assert!(world.vessels[0].trajectory.predicted_impact().is_none());
     world
-        .set_node(
+        .add_node(
             0,
             ManeuverNode {
                 time: 600.0,
@@ -172,7 +178,7 @@ fn impact_prediction_matches_wreck() {
             },
         )
         .unwrap();
-    world.set_node_armed(0, true).unwrap();
+    world.set_armed(0, true).unwrap();
     let (time, body, point) = world.vessels[0].trajectory.predicted_impact().unwrap();
     assert_eq!(body, 0);
     world.advance_to(time + 10.0);
@@ -189,7 +195,7 @@ fn rescue_probe_at_apoapsis() {
     let (_, state) = world.vessel_state(1);
     let apoapsis_in = kepler::time_to_apoapsis(world.bodies[0].gm, &state).unwrap();
     world
-        .set_node(
+        .add_node(
             1,
             ManeuverNode {
                 time: world.time + apoapsis_in,
@@ -197,11 +203,13 @@ fn rescue_probe_at_apoapsis() {
             },
         )
         .unwrap();
-    world.set_node_armed(1, true).unwrap();
+    world.set_armed(1, true).unwrap();
     let (periapsis, _) = orbit_after_burn(&world, 1);
     assert!(periapsis > BOUNDARY_ALT, "Periapsis {periapsis}");
+    let trajectory = &world.vessels[1].trajectory;
+    let burn = trajectory.plans().next().unwrap().burn;
     assert!(matches!(
-        world.vessels[1].trajectory.segment_after_burn(),
+        trajectory.segment_after(&burn),
         Some(Segment::Kepler { end: None, .. })
     ));
 
@@ -222,7 +230,7 @@ fn clearing_node_restores_trajectory() {
     world.advance_to(500.0);
     let before = world.vessels[1].trajectory.clone();
     world
-        .set_node(
+        .add_node(
             1,
             ManeuverNode {
                 time: 2_000.0,
@@ -231,7 +239,7 @@ fn clearing_node_restores_trajectory() {
         )
         .unwrap();
     assert_ne!(world.vessels[1].trajectory, before);
-    world.clear_node(1).unwrap();
+    world.remove_node(1, 0).unwrap();
     assert_eq!(world.vessels[1].trajectory, before);
 }
 
@@ -245,7 +253,7 @@ fn node_result_is_independent_of_step_size() {
         world.advance_to(100.0);
         for (index, delta_v) in [(0, prograde(-250.0)), (1, DVec3::new(30.0, 10.0, 5.0))] {
             world
-                .set_node(
+                .add_node(
                     index,
                     ManeuverNode {
                         time: 1_500.0,
@@ -254,7 +262,7 @@ fn node_result_is_independent_of_step_size() {
                 )
                 .unwrap();
         }
-        world.set_node_armed(0, true).unwrap();
+        world.set_armed(0, true).unwrap();
         world
     };
     let target = 4.0 * 3600.0 + 17.0;
@@ -277,7 +285,7 @@ fn node_result_is_independent_of_step_size() {
 fn save_and_load_with_node() {
     let mut world = demo();
     world
-        .set_node(
+        .add_node(
             1,
             ManeuverNode {
                 time: 2_000.0,
@@ -298,7 +306,7 @@ fn invalid_nodes_are_rejected() {
         time,
         delta_v: prograde(10.0),
     };
-    assert_eq!(world.set_node(0, node(50.0)), Err(PlanError::InPast));
+    assert_eq!(world.add_node(0, node(50.0)), Err(PlanError::InPast));
 
     let mut no_engine = World::new(vec![home_planet()]);
     let (gm, r) = (no_engine.bodies[0].gm, no_engine.bodies[0].radius);
@@ -308,27 +316,27 @@ fn invalid_nodes_are_rejected() {
     };
     let state = state_from_apsides(gm, r + 1e5, r + 1e5, 0.0, 0.0, 0.0, false);
     no_engine.spawn_vessel("Passiv", params, 0.0, 0, state);
-    assert_eq!(no_engine.set_node(0, node(500.0)), Err(PlanError::NoEngine));
+    assert_eq!(no_engine.add_node(0, node(500.0)), Err(PlanError::NoEngine));
 
     // Nach dem Absturz gibt es nichts mehr zu planen.
     let mut crashed = satellite(30_000.0, 60_000.0, 200.0);
     crashed.advance_to(DAY);
     assert_eq!(
-        crashed.set_node(0, node(DAY + 100.0)),
+        crashed.add_node(0, node(DAY + 100.0)),
         Err(PlanError::NotFlying)
     );
 
     // Ohne Node gibt es nichts scharf zu schalten.
-    assert_eq!(world.set_node_armed(0, true), Err(PlanError::NoNode));
+    assert_eq!(world.set_armed(0, true), Err(PlanError::NoNode));
 
     // Während des Brennens lässt sich der Node nicht ändern.
-    world.set_node(0, node(600.0)).unwrap();
-    world.set_node_armed(0, true).unwrap();
-    let burn = world.vessels[0].trajectory.plan().unwrap().burn;
+    world.add_node(0, node(600.0)).unwrap();
+    world.set_armed(0, true).unwrap();
+    let burn = world.vessels[0].trajectory.plans().next().unwrap().burn;
     world.advance_to(0.5 * (burn.start + burn.end));
-    assert_eq!(world.set_node(0, node(900.0)), Err(PlanError::Burning));
-    assert_eq!(world.clear_node(0), Err(PlanError::Burning));
-    assert_eq!(world.set_node_armed(0, false), Err(PlanError::Burning));
+    assert_eq!(world.set_node(0, 0, node(900.0)), Err(PlanError::Burning));
+    assert_eq!(world.remove_node(0, 0), Err(PlanError::Burning));
+    assert_eq!(world.set_armed(0, false), Err(PlanError::Burning));
 }
 
 /// Nur Schiffe mit gesetzter Markierung halten den Zeitraffer an, und nur vor
@@ -340,16 +348,22 @@ fn halting_burn_respects_flag() {
         time,
         delta_v: prograde(20.0),
     };
-    world.set_node(0, node(1_000.0)).unwrap();
-    world.set_node(1, node(2_000.0)).unwrap();
+    world.add_node(0, node(1_000.0)).unwrap();
+    world.add_node(1, node(2_000.0)).unwrap();
     assert_eq!(world.next_halting_burn(), None);
 
     // Markiert, aber der Node ist nicht scharf: kein Anhalten.
     world.vessels[1].halt_warp_at_burn = true;
     assert_eq!(world.next_halting_burn(), None);
 
-    world.set_node_armed(1, true).unwrap();
-    let start = world.vessels[1].trajectory.plan().unwrap().burn.start;
+    world.set_armed(1, true).unwrap();
+    let start = world.vessels[1]
+        .trajectory
+        .plans()
+        .next()
+        .unwrap()
+        .burn
+        .start;
     assert_eq!(world.next_halting_burn(), Some(start));
 
     // Genau am Brennbeginn: kein zweites Anhalten.
@@ -372,7 +386,7 @@ fn late_node_moves_to_next_orbit() {
     let period = kepler::period(gm, &world.vessel_state(0).1).unwrap();
     // 300 m/s brauchen rund 86 s, der Node liegt nur 10 s voraus.
     world
-        .set_node(
+        .add_node(
             0,
             ManeuverNode {
                 time: 110.0,
@@ -380,7 +394,7 @@ fn late_node_moves_to_next_orbit() {
             },
         )
         .unwrap();
-    let plan = *world.vessels[0].trajectory.plan().unwrap();
+    let plan = *world.vessels[0].trajectory.plans().next().unwrap();
     assert!((plan.node.time - (110.0 + period)).abs() < 1e-6);
     assert!(plan.burn.start > world.time);
     assert!(((plan.burn.start + plan.burn.end) / 2.0 - plan.node.time).abs() < 1e-6);
@@ -395,7 +409,7 @@ fn late_node_moves_to_next_orbit() {
 fn late_node_without_next_orbit_is_rejected() {
     let mut world = satellite(62_000.0, 150_000.0, 200.0);
     world.advance_to(10.0);
-    let result = world.set_node(
+    let result = world.add_node(
         0,
         ManeuverNode {
             time: 20.0,
@@ -403,7 +417,7 @@ fn late_node_without_next_orbit_is_rejected() {
         },
     );
     assert_eq!(result, Err(PlanError::TooLate));
-    assert!(world.vessels[0].trajectory.plan().is_none());
+    assert!(world.vessels[0].trajectory.nodes().is_empty());
 }
 
 /// Ein nicht scharfer Node brennt nicht: Bei Brennbeginn rückt er einen
@@ -415,7 +429,7 @@ fn unarmed_node_waits_one_orbit() {
     let period = kepler::period(gm, &world.vessel_state(0).1).unwrap();
     let m0 = world.vessel_mass(0);
     world
-        .set_node(
+        .add_node(
             0,
             ManeuverNode {
                 time: 600.0,
@@ -423,16 +437,16 @@ fn unarmed_node_waits_one_orbit() {
             },
         )
         .unwrap();
-    assert!(!world.vessels[0].trajectory.plan().unwrap().armed);
+    assert!(!world.vessels[0].trajectory.armed());
 
     world.advance_to(700.0);
-    let plan = *world.vessels[0].trajectory.plan().unwrap();
+    let plan = *world.vessels[0].trajectory.plans().next().unwrap();
     assert!((plan.node.time - (600.0 + period)).abs() < 1e-6);
     assert_eq!(world.vessel_mass(0), m0);
 
-    world.set_node_armed(0, true).unwrap();
+    world.set_armed(0, true).unwrap();
     world.advance_to(plan.burn.end + 1.0);
-    assert!(world.vessels[0].trajectory.plan().is_none());
+    assert!(world.vessels[0].trajectory.nodes().is_empty());
     assert!(world.vessel_mass(0) < m0);
 }
 
@@ -447,7 +461,7 @@ fn unarmed_node_expires_without_next_orbit() {
         w.vessel_state(0)
     };
     world
-        .set_node(
+        .add_node(
             0,
             ManeuverNode {
                 time: 300.0,
@@ -456,6 +470,6 @@ fn unarmed_node_expires_without_next_orbit() {
         )
         .unwrap();
     world.advance_to(1_000.0);
-    assert!(world.vessels[0].trajectory.plan().is_none());
+    assert!(world.vessels[0].trajectory.nodes().is_empty());
     assert_eq!(world.vessel_state(0), untouched);
 }

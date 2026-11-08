@@ -222,8 +222,9 @@ fn span(world: &World, segment: Option<&Segment>) -> f64 {
 /// Blau die aktuelle Bahn, orange Stücke durch die Luft, gelb das Brennen,
 /// violett die Bahn danach. Wie in KSP wird die aktuelle Bahn bei einem
 /// geplanten Manöver trotzdem ganz gezeigt (bis zum Eintritt in die Luft).
-/// Gezeichnet wird ein Umlauf voraus, bei einem Manöver zusätzlich ein Umlauf
-/// der neuen Bahn; sonst stapeln sich bei zerfallenden Bahnen die Ellipsen.
+/// Gezeichnet wird ein Umlauf voraus, mit Manövern bis zum letzten und dann
+/// noch ein Umlauf der Bahn danach; sonst stapeln sich bei zerfallenden Bahnen
+/// die Ellipsen.
 pub fn draw_trajectories(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) {
     let world = &sim.0;
     let now = world.time;
@@ -233,8 +234,8 @@ pub fn draw_trajectories(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos)
             .segments()
             .find(|s| matches!(s, Segment::Kepler { .. }));
         let mut horizon = now + span(world, first_kepler);
-        if let Some(plan) = trajectory.plan() {
-            let after = span(world, trajectory.segment_after_burn());
+        if let Some(plan) = trajectory.plans().last() {
+            let after = span(world, trajectory.segment_after(&plan.burn));
             horizon = horizon.max(plan.burn.end + after);
         }
 
@@ -341,7 +342,8 @@ fn draw_samples(
 }
 
 /// Gelbe Ringe auf der Bahn, wo ein geplantes Brennen beginnt und endet. Für
-/// alle Schiffe mit Node, damit man geplante Manöver auf einen Blick sieht.
+/// alle Schiffe und alle gültigen Nodes, damit man geplante Manöver auf einen
+/// Blick sieht.
 pub fn draw_burn_points(
     sim: Res<Sim>,
     rig: Res<CameraRig>,
@@ -351,10 +353,11 @@ pub fn draw_burn_points(
     let world = &sim.0;
     let eye = camera.translation;
     for vessel in &world.vessels {
-        let Some(plan) = vessel.trajectory.plan() else {
-            continue;
-        };
-        for t in [plan.burn.start, plan.burn.end] {
+        let times = vessel
+            .trajectory
+            .plans()
+            .flat_map(|p| [p.burn.start, p.burn.end]);
+        for t in times {
             if t <= world.time {
                 continue;
             }

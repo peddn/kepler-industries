@@ -8,7 +8,7 @@ use crate::trajectory::{Segment, Trajectory};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 2;
+pub const SAVE_VERSION: u32 = 3;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -127,12 +127,57 @@ impl World {
         }
     }
 
-    /// Setzt oder ändert den Manöver-Node eines Schiffs.
-    pub fn set_node(&mut self, index: usize, node: ManeuverNode) -> Result<(), PlanError> {
-        let vessel = &mut self.vessels[index];
-        vessel
-            .trajectory
-            .set_node(&self.bodies, &vessel.params, self.time, node)
+    /// Fügt einen Node in die Manöverkette eines Schiffs ein und liefert seine
+    /// Stelle in der Kette.
+    pub fn add_node(&mut self, vessel: usize, node: ManeuverNode) -> Result<usize, PlanError> {
+        let v = &mut self.vessels[vessel];
+        v.trajectory
+            .add_node(&self.bodies, &v.params, self.time, node)
+    }
+
+    /// Ändert den Node `index` der Kette eines Schiffs.
+    pub fn set_node(
+        &mut self,
+        vessel: usize,
+        index: usize,
+        node: ManeuverNode,
+    ) -> Result<(), PlanError> {
+        let v = &mut self.vessels[vessel];
+        v.trajectory
+            .set_node(&self.bodies, &v.params, self.time, index, node)
+    }
+
+    /// Löscht den Node `index` der Kette eines Schiffs.
+    pub fn remove_node(&mut self, vessel: usize, index: usize) -> Result<(), PlanError> {
+        let v = &mut self.vessels[vessel];
+        v.trajectory
+            .remove_node(&self.bodies, &v.params, self.time, index)
+    }
+
+    /// Schaltet die Kette eines Schiffs scharf (oder ab). Nur eine scharfe
+    /// Kette wird ausgeführt.
+    pub fn set_armed(&mut self, vessel: usize, armed: bool) -> Result<(), PlanError> {
+        self.vessels[vessel].trajectory.set_armed(armed)
+    }
+
+    /// Die Zeitleiste eines Schiffs nur mit den ersten `count` Nodes.
+    pub fn trajectory_with_first_nodes(&self, vessel: usize, count: usize) -> Trajectory {
+        let v = &self.vessels[vessel];
+        v.trajectory
+            .with_first_nodes(&self.bodies, &v.params, self.time, count)
+    }
+
+    /// Volle Umläufe vor dem Node `index` eines Schiffs: ab jetzt (erster
+    /// Node) oder ab dem Ende des vorherigen Brennens. `None` für ungültige
+    /// Nodes.
+    pub fn revolutions_before_node(&self, vessel: usize, index: usize) -> Option<u32> {
+        let trajectory = &self.vessels[vessel].trajectory;
+        let plan = trajectory.nodes().get(index)?.plan.ok()?;
+        let from = match index {
+            0 => self.time,
+            _ => trajectory.nodes()[index - 1].plan.ok()?.burn.end,
+        };
+        Some(trajectory.revolutions(&self.bodies, from.max(self.time), plan.node.time))
     }
 
     /// Frühester Brennbeginn nach jetzt unter den Schiffen, bei denen der
@@ -140,26 +185,10 @@ impl World {
     pub fn next_halting_burn(&self) -> Option<f64> {
         self.vessels
             .iter()
-            .filter(|v| v.halt_warp_at_burn)
-            .filter_map(|v| {
-                v.trajectory
-                    .plan()
-                    .filter(|p| p.armed)
-                    .map(|p| p.burn.start)
-            })
+            .filter(|v| v.halt_warp_at_burn && v.trajectory.armed())
+            .filter_map(|v| v.trajectory.plans().next().map(|p| p.burn.start))
             .filter(|&start| start > self.time)
             .min_by(f64::total_cmp)
-    }
-
-    pub fn clear_node(&mut self, index: usize) -> Result<(), PlanError> {
-        let vessel = &mut self.vessels[index];
-        vessel.trajectory.clear_node(&self.bodies, &vessel.params)
-    }
-
-    /// Schaltet den Node eines Schiffs scharf (oder ab). Nur scharfe Nodes
-    /// werden ausgeführt.
-    pub fn set_node_armed(&mut self, index: usize, armed: bool) -> Result<(), PlanError> {
-        self.vessels[index].trajectory.set_armed(armed)
     }
 
     /// Körper und Zustand eines Schiffs zur aktuellen Zeit.
