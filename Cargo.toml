@@ -1,0 +1,11 @@
+[workspace]
+resolver = "3"
+members = ["crates/sim", "crates/game"]
+
+# Empfehlung aus dem Bevy-Handbuch: eigener Code schnell kompilieren,
+# Abhängigkeiten (Bevy) optimieren, sonst läuft das Spiel im Debug-Build zäh.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
