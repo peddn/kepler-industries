@@ -170,6 +170,14 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 - 3D, kleine Planeten (Kerbin-Größe), **keine Raketenstufen**.
 - **Ein Manöver-Node pro Schiff.** Der nächste wird geplant, wenn der vorige
   ausgeführt ist. Brennmanöver laufen automatisch.
+- **Während des Brennens** zeigt die Karte die momentane Bahn (die Keplerbahn
+  aus dem aktuellen Zustand, wie in KSP). Reine Darstellung, die Simulation
+  rechnet unverändert den ganzen Brennvorgang voraus.
+- **Zeitraffer-Stopp pro Schiff** (`halt_warp_at_burn`, Taste `H`, anfangs aus):
+  Beginnt ein markiertes Schiff zu brennen, hält der Zeitraffer genau am
+  Brennbeginn an und schaltet auf 1×. Pro Schiff statt für alle, damit spätere
+  automatische Routen den Zeitraffer nicht ständig bremsen. Die Markierung
+  gehört zum Spielstand.
 - **Startprofil** mit wenigen Parametern (Richtung, Wendebeginn, Ziel-Apoapsis);
   das Schiff kommt mit nicht mehr vollen Tanks oben an. Zirkularisieren per Manöver-Node.
 - **Landung über den Manöver-Node:** Die Vorschau rechnet bis zum Boden,

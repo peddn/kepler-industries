@@ -29,6 +29,10 @@ pub struct Vessel {
     pub name: String,
     pub params: VesselParams,
     pub trajectory: Trajectory,
+    /// Zeitraffer anhalten, wenn dieses Schiff zu brennen beginnt (vom
+    /// Spieler pro Schiff gesetzt). Fehlt in älteren Spielständen: dann aus.
+    #[serde(default)]
+    pub halt_warp_at_burn: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -102,6 +106,7 @@ impl World {
             name: name.to_owned(),
             params,
             trajectory,
+            halt_warp_at_burn: false,
         });
         self.vessels.len() - 1
     }
@@ -128,6 +133,17 @@ impl World {
         vessel
             .trajectory
             .set_node(&self.bodies, &vessel.params, self.time, node)
+    }
+
+    /// Frühester Brennbeginn nach jetzt unter den Schiffen, bei denen der
+    /// Zeitraffer dafür anhalten soll.
+    pub fn next_halting_burn(&self) -> Option<f64> {
+        self.vessels
+            .iter()
+            .filter(|v| v.halt_warp_at_burn)
+            .filter_map(|v| v.trajectory.plan().map(|p| p.burn.start))
+            .filter(|&start| start > self.time)
+            .min_by(f64::total_cmp)
     }
 
     pub fn clear_node(&mut self, index: usize) -> Result<(), PlanError> {

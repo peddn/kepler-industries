@@ -201,6 +201,12 @@ pub fn input(
         // Während des Brennens nicht möglich; dann passiert einfach nichts.
         let _ = world.clear_node(i);
     }
+    if keys.just_pressed(KeyCode::KeyH)
+        && let Some(i) = selection.0
+    {
+        let vessel = &mut world.vessels[i];
+        vessel.halt_warp_at_burn = !vessel.halt_warp_at_burn;
+    }
 
     let Some(cursor) = window.cursor_position() else {
         return;

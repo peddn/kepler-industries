@@ -176,13 +176,22 @@ fn controls(keys: Res<ButtonInput<KeyCode>>, mut warp: ResMut<TimeWarp>) {
     }
 }
 
-fn advance_simulation(time: Res<Time>, warp: Res<TimeWarp>, mut sim: ResMut<Sim>) {
+fn advance_simulation(time: Res<Time>, mut warp: ResMut<TimeWarp>, mut sim: ResMut<Sim>) {
     if warp.paused {
         return;
     }
     // Ruckler (z. B. beim Start) nicht in einen Zeitsprung verwandeln.
     let real_dt = time.delta_secs_f64().min(0.1);
-    sim.0.advance(real_dt * warp.factor());
+    let target = sim.0.time + real_dt * warp.factor();
+    // Beginnt ein markiertes Schiff in diesem Schritt zu brennen: genau dort
+    // anhalten und auf 1× schalten, damit man das Brennen sieht.
+    match sim.0.next_halting_burn() {
+        Some(start) if warp.level > 0 && start <= target => {
+            sim.0.advance_to(start);
+            warp.level = 0;
+        }
+        _ => sim.0.advance_to(target),
+    }
 }
 
 /// Wartet, bis alles geladen und gezeichnet ist, speichert ein Bild und beendet.
