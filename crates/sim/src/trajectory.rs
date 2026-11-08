@@ -271,6 +271,21 @@ fn coast(
     }
 }
 
+/// Derselbe Plan einen Umlauf später. `segment` ist der Keplerabschnitt, in
+/// dem der Node liegt. Nur möglich, wenn die Bahn geschlossen ist und bis zum
+/// Ende des verschobenen Brennens weder Luft noch Boden berührt.
+fn next_orbit(bodies: &[Body], segment: &Segment, plan: &Plan) -> Option<Plan> {
+    let Segment::Kepler { start, state, .. } = segment else {
+        return None;
+    };
+    let body = &bodies[segment.body()];
+    let period = kepler::period(body.gm, state)?;
+    let natural_end = kepler::time_to_radius_inbound(body.gm, state, body.boundary_radius())
+        .map_or(f64::INFINITY, |dt| start + dt);
+    let later = plan.one_orbit_later(period);
+    (later.burn.end <= natural_end).then_some(later)
+}
+
 fn wreck(bodies: &[Body], body_id: BodyId, t: f64, state: StateVector, mass: f64) -> Segment {
     let (point, _) = bodies[body_id].inertial_to_surface(state.position, t);
     Segment::Surface {
@@ -386,10 +401,19 @@ impl Trajectory {
 
     /// Rückt bis zum Zeitpunkt `t` vor: Vergangene Abschnitte fallen weg,
     /// neue werden bei Bedarf berechnet. Ein ausgeführter Node verschwindet.
+    /// Ein nicht scharfer Node rückt bei Brennbeginn einen Umlauf weiter oder
+    /// verfällt, wenn es keinen nächsten Umlauf gibt.
     pub fn advance_to(&mut self, bodies: &[Body], t: f64, params: &VesselParams) {
         loop {
             self.extend(bodies, params);
             if self.segments.len() > 1 && self.segments[0].end() <= t {
+                if self.segments[0].end_event() == Some(Event::BurnStart)
+                    && let Some(plan) = self.plan.filter(|p| !p.armed)
+                {
+                    self.plan = next_orbit(bodies, &self.segments[0], &plan);
+                    self.rebuild(bodies, params);
+                    continue;
+                }
                 let done = self
                     .segments
                     .pop_front()
@@ -407,7 +431,12 @@ impl Trajectory {
     }
 
     /// Setzt (oder ändert) den Manöver-Node und berechnet die Zeitleiste neu.
-    /// Bei einem Fehler bleibt alles unverändert.
+    /// Ein neuer Node ist nicht scharf, ein geänderter behält seinen Zustand.
+    ///
+    /// Das Brennen muss ganz in der Zukunft liegen. Läge sein Beginn in der
+    /// Vergangenheit, rückt der Node einen Umlauf weiter (an dieselbe Stelle
+    /// der Bahn). Gibt es keinen nächsten Umlauf ohne Luft oder Boden dazwischen,
+    /// wird er abgelehnt. Bei einem Fehler bleibt alles unverändert.
     pub fn set_node(
         &mut self,
         bodies: &[Body],
@@ -445,15 +474,30 @@ impl Trajectory {
         let direction = delta_v
             .try_normalize()
             .unwrap_or_else(|| node_state.velocity.normalize());
-        let burn = Burn::centered(node.time, now, mass, params, direction, delta_v.length());
+        let burn = Burn::centered(node.time, mass, params, direction, delta_v.length());
 
-        self.plan = Some(Plan {
+        let mut plan = Plan {
             node,
             body: segment.body(),
             node_state,
             burn,
-        });
+            armed: self.plan.is_some_and(|p| p.armed),
+        };
+        while plan.burn.start < now {
+            plan = next_orbit(bodies, segment, &plan).ok_or(PlanError::TooLate)?;
+        }
+        self.plan = Some(plan);
         self.rebuild(bodies, params);
+        Ok(())
+    }
+
+    /// Schaltet den Node scharf (oder wieder ab). Während des Brennens nicht möglich.
+    pub fn set_armed(&mut self, armed: bool) -> Result<(), PlanError> {
+        if self.current().is_burn() {
+            return Err(PlanError::Burning);
+        }
+        let plan = self.plan.as_mut().ok_or(PlanError::NoNode)?;
+        plan.armed = armed;
         Ok(())
     }
 

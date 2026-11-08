@@ -340,6 +340,44 @@ fn draw_samples(
     );
 }
 
+/// Gelbe Ringe auf der Bahn, wo ein geplantes Brennen beginnt und endet. Für
+/// alle Schiffe mit Node, damit man geplante Manöver auf einen Blick sieht.
+pub fn draw_burn_points(
+    sim: Res<Sim>,
+    rig: Res<CameraRig>,
+    camera: Single<&Transform, With<MainCamera>>,
+    mut gizmos: Gizmos,
+) {
+    let world = &sim.0;
+    let eye = camera.translation;
+    for vessel in &world.vessels {
+        let Some(plan) = vessel.trajectory.plan() else {
+            continue;
+        };
+        for t in [plan.burn.start, plan.burn.end] {
+            if t <= world.time {
+                continue;
+            }
+            let Some(segment) = vessel
+                .trajectory
+                .segments()
+                .find(|s| s.start() <= t && t <= s.end())
+            else {
+                continue;
+            };
+            let p = to_view(segment.state_at(&world.bodies, t).position, rig.focus);
+            let rotation = Quat::from_rotation_arc(Vec3::Z, (eye - p).normalize());
+            gizmos
+                .circle(
+                    Isometry3d::new(p, rotation),
+                    p.distance(eye) * 0.006,
+                    BURN_COLOR,
+                )
+                .resolution(16);
+        }
+    }
+}
+
 /// Rotes Kreuz auf der Oberfläche, wo ein Schiff laut Vorausberechnung
 /// aufschlagen wird. Es dreht sich mit dem Planeten.
 pub fn draw_impacts(

@@ -141,7 +141,12 @@ impl World {
         self.vessels
             .iter()
             .filter(|v| v.halt_warp_at_burn)
-            .filter_map(|v| v.trajectory.plan().map(|p| p.burn.start))
+            .filter_map(|v| {
+                v.trajectory
+                    .plan()
+                    .filter(|p| p.armed)
+                    .map(|p| p.burn.start)
+            })
             .filter(|&start| start > self.time)
             .min_by(f64::total_cmp)
     }
@@ -149,6 +154,12 @@ impl World {
     pub fn clear_node(&mut self, index: usize) -> Result<(), PlanError> {
         let vessel = &mut self.vessels[index];
         vessel.trajectory.clear_node(&self.bodies, &vessel.params)
+    }
+
+    /// Schaltet den Node eines Schiffs scharf (oder ab). Nur scharfe Nodes
+    /// werden ausgeführt.
+    pub fn set_node_armed(&mut self, index: usize, armed: bool) -> Result<(), PlanError> {
+        self.vessels[index].trajectory.set_armed(armed)
     }
 
     /// Körper und Zustand eines Schiffs zur aktuellen Zeit.

@@ -1,6 +1,6 @@
 //! Textanzeige: Spielzeit, Zeitraffer, Zustand der Schiffe, Bedienhilfe.
 
-use crate::node_ui::Selection;
+use crate::node_ui::{Selection, UiMessage};
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
@@ -9,18 +9,26 @@ use sim::{Segment, SurfacePoint, VesselStatus, World, kepler};
 #[derive(Component)]
 pub struct Hud;
 
-pub fn setup(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
+/// Schrift für alle Texte.
+#[derive(Resource)]
+pub struct UiFont(pub Handle<Font>);
+
+pub fn load_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
     // Bevys eingebaute Schrift hat nur ASCII (keine Umlaute). Fira Mono ist die
     // vollständige Fassung davon (SIL Open Font License, siehe assets/fonts).
     // Eingebettet statt geladen: funktioniert unabhängig vom Arbeitsverzeichnis.
     let font = fonts.add(Font::from_bytes(
         include_bytes!("../assets/fonts/FiraMono-Regular.ttf").to_vec(),
     ));
+    commands.insert_resource(UiFont(font));
+}
+
+pub fn setup(mut commands: Commands, font: Res<UiFont>) {
     commands.spawn((
         Hud,
         Text::new(""),
         TextFont {
-            font: font.into(),
+            font: font.0.clone().into(),
             font_size: FontSize::Px(15.0),
             ..default()
         },
@@ -122,6 +130,14 @@ fn selected_details(world: &World, i: usize) -> Vec<String> {
                 burn.duration(),
                 burn.end_mass() - vessel.params.dry_mass
             ));
+            lines.push(
+                if plan.armed {
+                    "Scharf: wird ausgeführt (Enter: abschalten)"
+                } else {
+                    "Nicht scharf: rückt bei Brennbeginn einen Umlauf weiter (Enter: scharf)"
+                }
+                .into(),
+            );
             if burn.delta_v() < dv.length() - 0.05 {
                 lines.push(format!(
                     "Treibstoff reicht nur für {:.0} m/s!",
@@ -166,6 +182,8 @@ pub fn update(
     sim: Res<Sim>,
     warp: Res<TimeWarp>,
     selection: Res<Selection>,
+    message: Res<UiMessage>,
+    real_time: Res<Time<Real>>,
     mut text: Single<&mut Text, With<Hud>>,
 ) {
     let world = &sim.0;
@@ -175,6 +193,9 @@ pub fn update(
         warp.factor(),
         if warp.paused { "  (Pause)" } else { "" }
     )];
+    if real_time.elapsed_secs_f64() < message.until {
+        lines.push(format!("» {}", message.text));
+    }
     lines.push(String::new());
     for (i, vessel) in world.vessels.iter().enumerate() {
         let status = match world.vessel_status(i) {
@@ -221,7 +242,7 @@ pub fn update(
         "Linksklick: Schiff wählen / Node setzen   Griffe ziehen: Δv (Umschalt: fein)".into(),
     );
     lines.push(
-        "Node ziehen: verschieben   Entf: Node löschen   Tab: nächstes Schiff   H: Zeitraffer-Stopp"
+        "Node ziehen: verschieben   Enter: scharf   Entf: Node löschen   Tab: nächstes Schiff   H: Zeitraffer-Stopp"
             .into(),
     );
     lines.push(

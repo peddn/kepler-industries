@@ -40,11 +40,9 @@ pub struct Burn {
 
 impl Burn {
     /// Brennmanöver mit dem Δv `delta_v`, zeitlich mittig um `node_time`.
-    /// Beginnt frühestens zum Zeitpunkt `now`. Reicht der Treibstoff nicht,
-    /// endet es mit leerem Tank.
+    /// Reicht der Treibstoff nicht, endet es mit leerem Tank.
     pub fn centered(
         node_time: f64,
-        now: f64,
         start_mass: f64,
         params: &crate::world::VesselParams,
         direction: DVec3,
@@ -54,7 +52,7 @@ impl Burn {
         let wanted_end_mass = start_mass * (-delta_v / params.exhaust_velocity).exp();
         let end_mass = wanted_end_mass.max(params.dry_mass.min(start_mass));
         let duration = (start_mass - end_mass) / mass_flow;
-        let start = (node_time - duration / 2.0).max(now);
+        let start = node_time - duration / 2.0;
         Self {
             start,
             end: start + duration,
@@ -98,6 +96,22 @@ pub struct Plan {
     /// prograd/normal/radial fest und ist der Ort der Node-Markierung.
     pub node_state: StateVector,
     pub burn: Burn,
+    /// Nur ein scharfer Node wird ausgeführt. Ein nicht scharfer rückt bei
+    /// Brennbeginn einen Umlauf weiter. Neue Nodes sind nicht scharf.
+    #[serde(default)]
+    pub armed: bool,
+}
+
+impl Plan {
+    /// Derselbe Plan einen Umlauf später: gleiche Stelle der Bahn, gleiche
+    /// Richtung, alle Zeiten um die Umlaufzeit verschoben.
+    pub fn one_orbit_later(&self, period: f64) -> Plan {
+        let mut later = *self;
+        later.node.time += period;
+        later.burn.start += period;
+        later.burn.end += period;
+        later
+    }
 }
 
 /// Einheitsvektoren am Node: prograd, normal, radial nach außen.
@@ -122,6 +136,10 @@ pub enum PlanError {
     NoEngine,
     InPast,
     BeyondPrediction,
+    /// Brennbeginn läge in der Vergangenheit, und es gibt keinen nächsten
+    /// Umlauf ohne Luft oder Boden dazwischen.
+    TooLate,
+    NoNode,
 }
 
 impl fmt::Display for PlanError {
@@ -132,6 +150,8 @@ impl fmt::Display for PlanError {
             PlanError::NoEngine => "Schiff hat kein Triebwerk",
             PlanError::InPast => "Zeitpunkt liegt in der Vergangenheit",
             PlanError::BeyondPrediction => "Zeitpunkt liegt hinter der Vorausschau",
+            PlanError::TooLate => "Zu spät zum Brennen, und kein nächster Umlauf",
+            PlanError::NoNode => "Kein Node geplant",
         })
     }
 }
@@ -150,7 +170,7 @@ mod tests {
 
     #[test]
     fn rocket_equation_holds() {
-        let burn = Burn::centered(1000.0, 0.0, 600.0, &PARAMS, DVec3::X, 500.0);
+        let burn = Burn::centered(1000.0, 600.0, &PARAMS, DVec3::X, 500.0);
         assert!((burn.delta_v() - 500.0).abs() < 1e-9);
         assert!((burn.end_mass() - 600.0 * (-500.0f64 / 3000.0).exp()).abs() < 1e-9);
         // Mittig um den Node.
@@ -159,16 +179,10 @@ mod tests {
 
     #[test]
     fn empty_tank_limits_delta_v() {
-        let burn = Burn::centered(1000.0, 0.0, 600.0, &PARAMS, DVec3::X, 5000.0);
+        let burn = Burn::centered(1000.0, 600.0, &PARAMS, DVec3::X, 5000.0);
         assert!((burn.end_mass() - 400.0).abs() < 1e-9);
         let available = 3000.0 * (600.0f64 / 400.0).ln();
         assert!((burn.delta_v() - available).abs() < 1e-9);
-    }
-
-    #[test]
-    fn burn_never_starts_in_the_past() {
-        let burn = Burn::centered(10.0, 5.0, 600.0, &PARAMS, DVec3::X, 1000.0);
-        assert_eq!(burn.start, 5.0);
     }
 
     #[test]

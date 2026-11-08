@@ -145,6 +145,14 @@ Raketengleichung exakt. Die Dauer folgt aus dem Δv:
 zeitlich mittig um den Node, die Schubrichtung bleibt im Raum fest (wie in KSP
 beim Zielen auf den Node). Reicht der Treibstoff nicht, endet es mit leerem Tank.
 
+**Brennen ganz in der Zukunft:** Läge der Brennbeginn beim Setzen oder Ändern
+eines Nodes in der Vergangenheit, rückt der Node genau einen Umlauf weiter
+(gleiche Stelle der Bahn, alle Zeiten + Umlaufzeit). Das geht nur auf einer
+geschlossenen Bahn, die bis zum Ende des verschobenen Brennens weder Luft noch
+Boden berührt; sonst wird der Node abgelehnt (`PlanError::TooLate`).
+Dieselbe Regel gilt für einen nicht scharfen Node, dessen Brennbeginn erreicht
+wird: Er rückt weiter oder verfällt.
+
 **Zeitleiste eines Schiffs:** Folge von Abschnitten
 - `Kepler`: Freiflug ohne Luft, analytisch (universelle Variablen: eine Formel
   für Ellipse, Parabel, Hyperbel).
@@ -173,7 +181,16 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   gezeichnet. Dass das Ende der Linie vor dem Aufschlag nicht am Kreuz liegt,
   ist gewollt (siehe „Aufschlagkreuz“ unter Physikmodell).
 - **Ein Manöver-Node pro Schiff.** Der nächste wird geplant, wenn der vorige
-  ausgeführt ist. Brennmanöver laufen automatisch.
+  ausgeführt ist.
+- **Scharf schalten:** Nur ein scharfer Node wird ausgeführt (`Plan::armed`,
+  Schaltfläche neben dem Node oder `Enter`). Neue Nodes sind nicht scharf, ein
+  geänderter behält seinen Zustand. Ein nicht scharfer Node rückt bei
+  Brennbeginn einen Umlauf weiter (siehe „Brennen ganz in der Zukunft“), so
+  geht kein Plan verloren, nur weil der Zeitraffer läuft. Die Vorschau ist
+  scharf wie nicht scharf dieselbe. Der Zeitraffer-Stopp greift nur bei
+  scharfen Nodes.
+- **Brennpunkte:** Gelbe Ringe auf der Bahn markieren Beginn und Ende jedes
+  geplanten Brennens, für alle Schiffe mit Node.
 - **Während des Brennens** zeigt die Karte die momentane Bahn (die Keplerbahn
   aus dem aktuellen Zustand, wie in KSP). Reine Darstellung, die Simulation
   rechnet unverändert den ganzen Brennvorgang voraus.
