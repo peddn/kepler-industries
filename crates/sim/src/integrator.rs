@@ -8,6 +8,7 @@
 
 use crate::body::Body;
 use crate::kepler::StateVector;
+use crate::landing;
 use crate::maneuver::Burn;
 use crate::trajectory::Event;
 use glam::DVec3;
@@ -35,6 +36,8 @@ pub struct Forces<'a> {
     pub body: &'a Body,
     /// Widerstandsbeiwert × Querschnittsfläche in m².
     pub drag_area: f64,
+    /// Zusätzlich bei offenem Fallschirm (siehe `landing::parachute_open`).
+    pub parachute_area: f64,
     /// Masse in kg, solange kein Triebwerk läuft.
     pub mass: f64,
     pub burn: Option<&'a Burn>,
@@ -53,16 +56,21 @@ impl Forces<'_> {
         let mass = self.mass_at(t);
 
         // Luftwiderstand gegen die Geschwindigkeit relativ zur mitrotierenden Luft.
+        // Ein offener Fallschirm ist nur eine größere Fläche im selben Modell.
         let density = body.atmosphere.density(r - body.radius);
-        if density > 0.0 && self.drag_area > 0.0 {
+        let mut area = self.drag_area;
+        if self.parachute_area > 0.0 && landing::parachute_open(body, s) {
+            area += self.parachute_area;
+        }
+        if density > 0.0 && area > 0.0 {
             let v_rel = s.velocity - body.co_rotating_velocity(s.position);
-            a -= 0.5 * density * self.drag_area / mass * v_rel.length() * v_rel;
+            a -= 0.5 * density * area / mass * v_rel.length() * v_rel;
         }
 
         if let Some(burn) = self.burn
             && burn.is_active(t)
         {
-            a += burn.direction_at(s.position) * (burn.thrust / mass);
+            a += burn.direction_at(s) * (burn.thrust / mass);
         }
         a
     }

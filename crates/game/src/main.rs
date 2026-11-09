@@ -214,7 +214,8 @@ fn main() {
             view::draw_planet_grid,
             view::draw_trajectories,
             view::draw_burn_points,
-            view::draw_impacts,
+            view::draw_zones,
+            view::draw_touchdowns,
             hud::update,
         )
             .chain(),

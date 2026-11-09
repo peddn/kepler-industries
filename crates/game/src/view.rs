@@ -17,6 +17,10 @@ const BURN_COLOR: Color = Color::srgb(1.0, 0.95, 0.45);
 /// Bahn nach einem geplanten Manöver.
 const PLANNED_COLOR: Color = Color::srgb(0.8, 0.5, 1.0);
 const IMPACT_COLOR: Color = Color::srgb(1.0, 0.25, 0.25);
+/// Zielgebiete und Landung darin.
+const ZONE_COLOR: Color = Color::srgb(0.3, 1.0, 0.45);
+/// Aufsetzen außerhalb eines Zielgebiets.
+const OUTSIDE_COLOR: Color = Color::srgb(1.0, 0.9, 0.2);
 const GRID_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.12);
 /// Größe der Markierungen relativ zum Abstand zur Kamera (bleibt auf dem
 /// Bildschirm gleich groß, egal wie weit man herauszoomt).
@@ -379,31 +383,55 @@ pub fn draw_burn_points(
     }
 }
 
-/// Rotes Kreuz auf der Oberfläche, wo ein Schiff laut Vorausberechnung
-/// aufschlagen wird. Es dreht sich mit dem Planeten.
-pub fn draw_impacts(
+/// Vorausgesagter Bodenkontakt als Kreuz auf der Oberfläche: grün im
+/// Zielgebiet, gelb außerhalb (danach Hop), rot bei einem Absturz. Das Kreuz
+/// dreht sich mit dem Planeten (die Bahn selbst ist ohne Drehung gezeichnet).
+pub fn draw_touchdowns(
     sim: Res<Sim>,
     rig: Res<CameraRig>,
     camera: Single<&Transform, With<MainCamera>>,
     mut gizmos: Gizmos,
 ) {
     let world = &sim.0;
-    for vessel in &world.vessels {
-        let Some((time, body_id, point)) = vessel.trajectory.predicted_impact() else {
+    for i in 0..world.vessels.len() {
+        let Some(t) = world.touchdown(i) else {
             continue;
         };
-        if time <= world.time {
-            continue; // schon abgestürzt, das Wrack ist markiert
-        }
-        let body = &world.bodies[body_id];
-        let up = body.body_fixed_to_inertial(point.body_fixed_direction(), world.time);
+        let color = match (t.braking, t.zone) {
+            (Ok(_), Some(_)) => ZONE_COLOR,
+            (Ok(_), None) => OUTSIDE_COLOR,
+            (Err(_), _) => IMPACT_COLOR,
+        };
+        let body = &world.bodies[t.body];
+        let up = body.body_fixed_to_inertial(t.point.body_fixed_direction(), world.time);
         let east = DVec3::Z.cross(up).try_normalize().unwrap_or(DVec3::X);
         let north = up.cross(east);
         let center = to_view(up * body.radius * 1.002, rig.focus);
         let arm = center.distance(camera.translation) * 0.015;
         for d in [east + north, east - north] {
             let d = camera::dir_to_view(d.normalize()) * arm;
-            gizmos.line(center - d, center + d, IMPACT_COLOR);
+            gizmos.line(center - d, center + d, color);
         }
+    }
+}
+
+/// Zielgebiete als Kreise auf der Oberfläche, mit dem Planeten drehend. Aus
+/// der Ferne mindestens so groß wie ein Markierungspunkt, damit man sie findet.
+pub fn draw_zones(
+    sim: Res<Sim>,
+    rig: Res<CameraRig>,
+    camera: Single<&Transform, With<MainCamera>>,
+    mut gizmos: Gizmos,
+) {
+    let world = &sim.0;
+    for zone in &world.zones {
+        let body = &world.bodies[zone.body];
+        let up = body.body_fixed_to_inertial(zone.center.body_fixed_direction(), world.time);
+        let center = to_view(up * body.radius * 1.002, rig.focus);
+        let rotation = Quat::from_rotation_arc(Vec3::Z, camera::dir_to_view(up));
+        let radius = (zone.radius as f32).max(center.distance(camera.translation) * 0.012);
+        gizmos
+            .circle(Isometry3d::new(center, rotation), radius, ZONE_COLOR)
+            .resolution(48);
     }
 }

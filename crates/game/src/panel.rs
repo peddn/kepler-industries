@@ -260,7 +260,20 @@ fn landed_selection(world: &World, selection: &Selection) -> Option<usize> {
 fn launch_result(world: &World, i: usize) -> String {
     let trajectory = &world.vessels[i].trajectory;
     let Some(plan) = trajectory.launch() else {
-        return "Kurs 90° ist Osten. Danach mit einem Node an der Apoapsis zirkularisieren.".into();
+        let (body, point) = match trajectory.current() {
+            Segment::Surface { body, point, .. } => (*body, *point),
+            _ => return String::new(),
+        };
+        let place = match world.zone_at(body, &point) {
+            Some(k) => format!("Gelandet in {}.", world.zones[k].name),
+            None => "Außerhalb eines Zielgebiets: mit einem Hop (Start mit niedriger \
+                     Ziel-Apoapsis) ins Ziel."
+                .into(),
+        };
+        return format!(
+            "{place} Kurs 90° ist Osten. In den Orbit: danach mit einem Node an der \
+             Apoapsis zirkularisieren."
+        );
     };
     let burn = &plan.burn;
     let params = &world.vessels[i].params;
@@ -291,25 +304,38 @@ fn launch_result(world: &World, i: usize) -> String {
     let orbit = trajectory
         .segments()
         .find(|s| s.start() >= burn.end && matches!(s, Segment::Kepler { .. }));
-    match orbit {
-        Some(Segment::Kepler { state, body, .. }) => {
-            let body = &world.bodies[*body];
-            let info = kepler::orbit_info(body.gm, state);
-            let h = state.position.cross(state.velocity);
-            lines.push(row(
-                "Bahn danach",
-                format!(
-                    "Ap {}",
-                    info.apoapsis.map_or("–".into(), |r| km(r - body.radius))
-                ),
-            ));
-            lines.push(row("", format!("Pe {}", km(info.periapsis - body.radius))));
-            lines.push(row(
-                "Bahnneigung",
-                format!("{:.1}°", (h.z / h.length()).acos().to_degrees()),
-            ));
-        }
-        _ => lines.push("Kommt nicht über die Luft hinaus!".into()),
+    if let Some(Segment::Kepler { state, body, .. }) = orbit {
+        let body = &world.bodies[*body];
+        let info = kepler::orbit_info(body.gm, state);
+        let h = state.position.cross(state.velocity);
+        lines.push(row(
+            "Bahn danach",
+            format!(
+                "Ap {}",
+                info.apoapsis.map_or("–".into(), |r| km(r - body.radius))
+            ),
+        ));
+        lines.push(row("", format!("Pe {}", km(info.periapsis - body.radius))));
+        lines.push(row(
+            "Bahnneigung",
+            format!("{:.1}°", (h.z / h.length()).acos().to_degrees()),
+        ));
+    }
+    // Kommt die Fähre wieder herunter (Hop), wo und heil?
+    if let Some(t) = world.touchdown(i) {
+        let label = if t.braking.is_ok() {
+            "Aufsetzen"
+        } else {
+            "Absturz!"
+        };
+        lines.push(row(
+            label,
+            match (t.zone, t.nearest) {
+                (Some(k), _) => format!("in {}", world.zones[k].name),
+                (None, Some((k, d))) => format!("{} von {}", km(d), world.zones[k].name),
+                (None, None) => "außerhalb".into(),
+            },
+        ));
     }
     lines.join("\n")
 }
@@ -392,7 +418,7 @@ fn adjust(world: &mut World, i: usize, param: Param, delta: f64) -> Result<(), P
         // Die ganze Kette wandert mit.
         Param::StartIn => return world.shift_launch(i, delta),
         Param::Heading => p.heading = (p.heading + delta).rem_euclid(360.0),
-        Param::Apoapsis => p.target_apoapsis = (p.target_apoapsis + delta).clamp(10_000.0, 5e6),
+        Param::Apoapsis => p.target_apoapsis = (p.target_apoapsis + delta).clamp(1_000.0, 5e6),
         Param::Turn => p.turn_altitude = (p.turn_altitude + delta).max(0.0),
     }
     p.turn_altitude = p.turn_altitude.min(0.5 * p.target_apoapsis);

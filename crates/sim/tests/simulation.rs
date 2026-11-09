@@ -17,6 +17,7 @@ fn single_vessel(periapsis_alt: f64, apoapsis_alt: f64, drag_area: f64) -> World
         thrust: 0.0,
         exhaust_velocity: 3_000.0,
         fuel_capacity: 0.0,
+        parachute_area: 0.0,
     };
     world.spawn_vessel("Test", params, 0.0, 0, state);
     world

@@ -69,10 +69,10 @@ impl Burn {
         }
     }
 
-    /// Schubrichtung an der Position `position`.
-    pub fn direction_at(&self, position: DVec3) -> DVec3 {
+    /// Schubrichtung im Zustand `state`.
+    pub fn direction_at(&self, state: &StateVector) -> DVec3 {
         self.ascent
-            .map_or(self.direction, |ascent| ascent.direction(position))
+            .map_or(self.direction, |ascent| ascent.direction(state))
     }
 
     pub fn duration(&self) -> f64 {
@@ -196,6 +196,7 @@ mod tests {
         thrust: 2000.0,
         exhaust_velocity: 3000.0,
         fuel_capacity: 200.0,
+        parachute_area: 0.0,
     };
 
     #[test]

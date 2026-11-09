@@ -49,7 +49,12 @@ fn launch_and_nodes_add_up() {
     let budget = world.delta_v_budget(0);
     assert_adds_up(&budget);
     let items: Vec<BudgetItem> = budget.burns.iter().map(|(item, _)| *item).collect();
-    assert_eq!(items, [BudgetItem::Launch, BudgetItem::Node(0)]);
+    // Ohne Zirkularisieren kommt die Fähre wieder herunter und landet am
+    // Fallschirm: Das Bremsen gehört mit in den Haushalt.
+    assert_eq!(
+        items,
+        [BudgetItem::Launch, BudgetItem::Node(0), BudgetItem::Landing]
+    );
     assert!((budget.burns[1].1 - 50.0).abs() < 1e-6);
     assert_eq!(budget.missing, 0.0);
     // Voller Tank wäre mehr.

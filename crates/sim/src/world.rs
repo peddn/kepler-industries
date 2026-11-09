@@ -3,13 +3,14 @@
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::kepler::{self, StateVector};
+use crate::landing::{self, Crash, LandingZone};
 use crate::launch::Launch;
 use crate::maneuver::{ManeuverNode, PlanError};
 use crate::trajectory::{Segment, Trajectory};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 5;
+pub const SAVE_VERSION: u32 = 6;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -25,6 +26,8 @@ pub struct VesselParams {
     pub exhaust_velocity: f64,
     /// Fassungsvermögen des Tanks in kg.
     pub fuel_capacity: f64,
+    /// Widerstandsbeiwert × Fläche des offenen Fallschirms in m² (0 = keiner).
+    pub parachute_area: f64,
 }
 
 impl VesselParams {
@@ -40,6 +43,24 @@ pub enum BudgetItem {
     Launch,
     /// Node der Kette (Stelle in der Kette).
     Node(usize),
+    /// Bremsen beim Aufsetzen.
+    Landing,
+}
+
+/// Vorausgesagter Bodenkontakt eines Schiffs.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Touchdown {
+    pub time: f64,
+    pub body: BodyId,
+    pub point: SurfacePoint,
+    /// Geschwindigkeit relativ zum Boden kurz vor dem Aufsetzen (m/s).
+    pub speed: f64,
+    /// Δv fürs Bremsen, oder warum es ein Absturz wird.
+    pub braking: Result<f64, Crash>,
+    /// Zielgebiet, in dem der Punkt liegt.
+    pub zone: Option<usize>,
+    /// Nächstes Zielgebiet auf dem Körper und Abstand zum Mittelpunkt (m).
+    pub nearest: Option<(usize, f64)>,
 }
 
 /// Wie sich das Δv eines Schiffs auf die geplanten Brennvorgänge verteilt.
@@ -112,6 +133,8 @@ pub struct World {
     pub bodies: Vec<Body>,
     pub vessels: Vec<Vessel>,
     pub bases: Vec<Base>,
+    /// Zielgebiete zum Landen.
+    pub zones: Vec<LandingZone>,
 }
 
 impl World {
@@ -122,7 +145,48 @@ impl World {
             bodies,
             vessels: Vec::new(),
             bases: Vec::new(),
+            zones: Vec::new(),
         }
+    }
+
+    /// Nächstes Zielgebiet auf dem Körper und Abstand zum Mittelpunkt (m).
+    pub fn nearest_zone(&self, body: BodyId, point: &SurfacePoint) -> Option<(usize, f64)> {
+        self.zones
+            .iter()
+            .enumerate()
+            .filter(|(_, z)| z.body == body)
+            .map(|(k, z)| (k, z.distance(&self.bodies[body], point)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+    }
+
+    /// Das Zielgebiet, in dem der Punkt liegt.
+    pub fn zone_at(&self, body: BodyId, point: &SurfacePoint) -> Option<usize> {
+        self.nearest_zone(body, point)
+            .filter(|&(k, d)| d <= self.zones[k].radius)
+            .map(|(k, _)| k)
+    }
+
+    /// Vorausgesagter Bodenkontakt (nur in der Zukunft): wann, wo, wie schnell,
+    /// ob das Schiff aufsetzt, und das Zielgebiet.
+    pub fn touchdown(&self, vessel: usize) -> Option<Touchdown> {
+        let v = &self.vessels[vessel];
+        let segment = v.trajectory.segments().find(|s| {
+            s.end_event() == Some(crate::trajectory::Event::GroundContact) && s.end() > self.time
+        })?;
+        let (body_id, time) = (segment.body(), segment.end());
+        let body = &self.bodies[body_id];
+        let state = segment.state_at(&self.bodies, time);
+        let mass = segment.mass_at(time);
+        let (point, _) = body.inertial_to_surface(state.position, time);
+        Some(Touchdown {
+            time,
+            body: body_id,
+            point,
+            speed: landing::ground_speed(body, &state),
+            braking: landing::braking(body, &v.params, &state, mass),
+            zone: self.zone_at(body_id, &point),
+            nearest: self.nearest_zone(body_id, &point),
+        })
     }
 
     /// Stellt ein Schiff mit `fuel` kg Treibstoff auf den Boden, z. B. an
@@ -336,11 +400,27 @@ impl World {
             end_mass = burn.end_mass();
             burns.push((item, delta_v));
         }
+        let mut rest = ve * (end_mass / params.dry_mass).ln();
+        // Bremsen beim Aufsetzen; reicht der Rest nicht, fehlt die Differenz.
+        if let Some(touchdown) = self.touchdown(index) {
+            match touchdown.braking {
+                Ok(delta_v) if delta_v > 0.0 => {
+                    burns.push((BudgetItem::Landing, delta_v));
+                    rest -= delta_v;
+                }
+                Err(Crash::NoFuel { available }) => {
+                    burns.push((BudgetItem::Landing, available));
+                    missing += touchdown.speed - available;
+                    rest = 0.0;
+                }
+                _ => {}
+            }
+        }
         DeltaVBudget {
             full: params.full_delta_v(),
             available: ve * (mass / params.dry_mass).ln(),
             burns,
-            rest: ve * (end_mass / params.dry_mass).ln(),
+            rest: rest.max(0.0),
             missing,
         }
     }
