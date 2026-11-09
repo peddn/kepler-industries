@@ -230,15 +230,25 @@ pub fn sync_label(
 }
 
 /// Bildschirmprojektion mit Verdeckung durch den Planeten.
-struct Projector<'a> {
+pub(crate) struct Projector<'a> {
     camera: &'a Camera,
     transform: GlobalTransform,
     eye: Vec3,
     planet_radius: f32,
 }
 
-impl Projector<'_> {
-    fn project(&self, p: Vec3) -> Option<Vec2> {
+impl<'a> Projector<'a> {
+    pub(crate) fn new(camera: &'a Camera, transform: &Transform, planet_radius: f64) -> Self {
+        Self {
+            camera,
+            transform: GlobalTransform::from(*transform),
+            eye: transform.translation,
+            planet_radius: planet_radius as f32,
+        }
+    }
+
+    /// Auf den Bildschirm; `None`, wenn der Planet davor liegt.
+    pub(crate) fn project(&self, p: Vec3) -> Option<Vec2> {
         if self.occluded(p) {
             return None;
         }
@@ -436,12 +446,7 @@ pub fn input(
         return;
     };
     let (camera, transform) = *camera;
-    let projector = Projector {
-        camera,
-        transform: GlobalTransform::from(*transform),
-        eye: transform.translation,
-        planet_radius: world.bodies[0].radius as f32,
-    };
+    let projector = Projector::new(camera, transform, world.bodies[0].radius);
 
     // Klicks auf Seitenleiste und Δv-Balken gehören diesen.
     let over_ui = over_panel(&shown, &window, cursor) || over_bar(&bar, &shown, &window, cursor);
