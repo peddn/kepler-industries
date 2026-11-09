@@ -90,6 +90,14 @@ pub fn draw(
         ring(own, APPROACH_RADIUS, 24, OWN_COLOR);
         ring(target, APPROACH_RADIUS, 24, TARGET_COLOR);
     }
+    // Automatischer Node "Angleichen" beim Andocken: doppelter rosa Ring.
+    if let Some(plan) = sim.0.vessels[info.vessel].trajectory.dock_plan()
+        && plan.matching.burn.end > sim.0.time
+    {
+        let p = to_view(plan.matching.node_state.position, rig.focus);
+        ring(p, APPROACH_RADIUS * 1.4, 24, TARGET_COLOR);
+        ring(p, APPROACH_RADIUS * 0.8, 24, TARGET_COLOR);
+    }
     if let Some(plane) = &info.plane {
         for t in [plane.ascending, plane.descending].into_iter().flatten() {
             if let Some(p) = own_position(&sim, info, t) {

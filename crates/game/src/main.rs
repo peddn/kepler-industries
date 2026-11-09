@@ -55,6 +55,8 @@ struct Options {
     launch: Option<(usize, sim::Launch)>,
     /// Ziel: Schiff, Zielschiff.
     targets: Vec<(usize, usize)>,
+    /// Andocken einschalten (Schiff mit Ziel).
+    dock: Vec<usize>,
     /// Kamera auf dieses Schiff bzw. Zielgebiet richten.
     focus: Option<camera::Focus>,
     /// Nahansicht einschalten.
@@ -123,6 +125,9 @@ fn parse_options() -> Options {
                         .expect("--focus-zone erwartet die Nummer eines Zielgebiets"),
                 ))
             }
+            ("--dock", Some(v)) => options
+                .dock
+                .push(v.parse().expect("--dock erwartet eine Schiffsnummer")),
             ("--target", Some(t)) => {
                 let p = numbers(&t, "--target SCHIFF,ZIEL");
                 options.targets.push((p[0] as usize, p[1] as usize));
@@ -133,7 +138,7 @@ fn parse_options() -> Options {
                     "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM\n\
                      \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]\n\
                      \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM  --target SCHIFF,ZIEL\n\
-                     \x20         --focus SCHIFF  --focus-zone ZIELGEBIET  --near"
+                     \x20         --focus SCHIFF  --focus-zone ZIELGEBIET  --near  --dock SCHIFF"
                 );
                 std::process::exit(2);
             }
@@ -180,6 +185,12 @@ fn main() {
 
     for &(vessel, target) in &options.targets {
         world.set_target(vessel, Some(target));
+    }
+    for &vessel in &options.dock {
+        if let Err(e) = world.set_docking(vessel, true) {
+            eprintln!("--dock: {e}");
+            std::process::exit(2);
+        }
     }
     world.advance_to(options.time);
 

@@ -53,11 +53,18 @@ pub struct LaunchCard;
 #[derive(Component)]
 pub struct TargetCard;
 
-#[derive(Component)]
-pub struct TargetName;
+/// Texte der Karte "Ziel": Name, Werte, Beschriftung der Schaltfläche
+/// "Andocken".
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub enum TargetText {
+    Name,
+    Result,
+    Dock,
+}
 
+/// Schaltfläche "Andocken bei Annäherung" / "Andocken abbrechen".
 #[derive(Component)]
-pub struct TargetResult;
+pub struct DockButton;
 
 /// ◄ (−1) oder ► (+1) auf der Karte "Ziel".
 #[derive(Component)]
@@ -294,7 +301,7 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>) {
                         };
                         arrow(row, -1, "◄");
                         row.spawn((
-                            TargetName,
+                            TargetText::Name,
                             text(font, "", 14.0),
                             TextLayout::justify(Justify::Center),
                             Node {
@@ -304,7 +311,15 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>) {
                         ));
                         arrow(row, 1, "►");
                     });
-                    card.spawn((TargetResult, text(font, "", 14.0)));
+                    card.spawn((TargetText::Result, text(font, "", 14.0)));
+                    card.spawn((
+                        PanelButton,
+                        DockButton,
+                        button_node(percent(100)),
+                        BackgroundColor(BUTTON_COLOR),
+                        BorderColor::all(BORDER_COLOR),
+                    ))
+                    .with_child((TargetText::Dock, text(font, "", 14.0)));
                 });
         });
 }
@@ -347,6 +362,44 @@ fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
             "Abstand",
             distance_text(own.1.position.distance(target.1.position)),
         ));
+    }
+    // Mit geplantem Andocken: dessen Ablauf statt der Annäherung.
+    if let Some(docking) = world.vessels[info.vessel].trajectory.docking() {
+        match &docking.plan {
+            Ok(plan) => {
+                let now = world.time;
+                if plan.matching.burn.start > now {
+                    lines.push(row(
+                        "Angleichen",
+                        format!("in {}", format_span(plan.matching.burn.start - now)),
+                    ));
+                    lines.push(row(
+                        "  Δv",
+                        format!("{:.0} m/s", plan.matching.node.delta_v.length()),
+                    ));
+                }
+                lines.push(row(
+                    "Anflug",
+                    format!(
+                        "{}, {}",
+                        distance_text(plan.distance),
+                        format_span(plan.contact - plan.matching.burn.end)
+                    ),
+                ));
+                if let sim::VesselStatus::Approaching { distance } =
+                    world.vessel_status(info.vessel)
+                {
+                    lines.push(row("  noch", distance_text(distance)));
+                }
+                lines.push(row("  Δv", format!("{:.1} m/s", plan.approach_delta_v)));
+                lines.push(row(
+                    "Kontakt",
+                    format!("in {}", format_span(plan.contact - now)),
+                ));
+            }
+            Err(e) => lines.push(format!("Andocken geht nicht: {e}")),
+        }
+        return lines.join("\n");
     }
     match &info.approach {
         Some(a) => {
@@ -489,10 +542,18 @@ pub fn sync(
     mut panel: Single<&mut Node, With<Panel>>,
     mut rows: Single<&mut Node, (With<LaunchRows>, Without<Panel>)>,
     mut launch_card: Single<&mut Node, (With<LaunchCard>, Without<Panel>, Without<LaunchRows>)>,
-    mut target_texts: Query<
-        (&mut Text, &mut TextColor, Has<TargetName>),
+    mut dock_button: Single<
+        &mut Node,
         (
-            Or<(With<TargetName>, With<TargetResult>)>,
+            With<DockButton>,
+            Without<LaunchCard>,
+            Without<Panel>,
+            Without<LaunchRows>,
+        ),
+    >,
+    mut target_texts: Query<
+        (&TargetText, &mut Text, &mut TextColor),
+        (
             Without<LaunchTitle>,
             Without<PlanButtonText>,
             Without<LaunchResult>,
@@ -528,20 +589,36 @@ pub fn sync(
     panel.display = Display::Flex;
 
     let info = rendezvous.0.as_ref();
-    for (mut text, mut color, is_name) in &mut target_texts {
-        let (value, wanted) = if is_name {
-            match world.vessels[vessel].target {
+    let trajectory = &world.vessels[vessel].trajectory;
+    for (part, mut text, mut color) in &mut target_texts {
+        let (value, wanted) = match part {
+            TargetText::Name => match world.vessels[vessel].target {
                 Some(t) => (world.vessels[t].name.clone(), TARGET_COLOR),
                 None => ("kein Ziel".into(), HINT_COLOR),
-            }
-        } else {
-            (target_result(world, info), Color::WHITE)
+            },
+            TargetText::Result => (target_result(world, info), Color::WHITE),
+            TargetText::Dock => (
+                if trajectory.docking().is_some() {
+                    "Andocken abbrechen"
+                } else {
+                    "Andocken bei Annäherung"
+                }
+                .into(),
+                Color::WHITE,
+            ),
         };
         if text.0 != value {
             text.0 = value;
         }
         color.0 = wanted;
     }
+    // Andocken nur mit Ziel, und nicht mehr, wenn es schon läuft.
+    dock_button.display =
+        if world.vessels[vessel].target.is_some() && !trajectory.docking_underway() {
+            Display::Flex
+        } else {
+            Display::None
+        };
 
     let landed = landed_selection(world, &selection);
     launch_card.display = if landed.is_some() {
@@ -617,6 +694,7 @@ pub fn buttons(
     adjusts: Query<(&Adjust, &ComputedNode, &UiGlobalTransform)>,
     plan: Single<(&ComputedNode, &UiGlobalTransform), With<PlanButton>>,
     targets: Query<(&TargetButton, &ComputedNode, &UiGlobalTransform)>,
+    dock: Single<(&ComputedNode, &UiGlobalTransform), With<DockButton>>,
     status: Res<StatusBar>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
@@ -640,6 +718,13 @@ pub fn buttons(
     if let Some((TargetButton(step), ..)) = targets.iter().find(|(_, n, t)| hit(n, t)) {
         let target = cycle_target(world, vessel, *step);
         world.set_target(vessel, target);
+        return;
+    }
+    if world.vessels[vessel].target.is_some() && hit(dock.0, dock.1) {
+        let on = world.vessels[vessel].trajectory.docking().is_none();
+        if let Err(e) = world.set_docking(vessel, on) {
+            message.say(e.to_string(), world.time, real_time.elapsed_secs_f64());
+        }
         return;
     }
     // Die Karte "Start" gibt es nur am Boden.

@@ -2,11 +2,12 @@
 //! serialisierbar, und es gibt keinen Zustand außerhalb.
 
 use crate::body::{Body, BodyId, SurfacePoint};
+use crate::docking::{self, DOCKING_RANGE, DockError, DockRequest};
 use crate::kepler::{self, StateVector};
 use crate::landing::{self, Crash, LandingZone};
 use crate::launch::Launch;
 use crate::log::{LOG_LIMIT, LogEntry, LogKind};
-use crate::maneuver::{ManeuverNode, PlanError};
+use crate::maneuver::{self, ManeuverNode, PlanError};
 use crate::rendezvous::{self, Approach, PlaneCrossing};
 use crate::trajectory::{Segment, Trajectory};
 use serde::{Deserialize, Serialize};
@@ -47,6 +48,8 @@ pub enum BudgetItem {
     Node(usize),
     /// Bremsen beim Aufsetzen.
     Landing,
+    /// Andocken: Angleichen und Anflug.
+    Docking,
 }
 
 /// Vorausgesagter Bodenkontakt eines Schiffs.
@@ -96,6 +99,12 @@ pub struct Vessel {
     /// Spielständen: keins.
     #[serde(default)]
     pub target: Option<usize>,
+    /// Angedockt an dieses Schiff (das Hauptschiff des Verbunds). Dann zählen
+    /// Lage und Kette des Hauptschiffs, die eigenen Werte gehen in dessen
+    /// wirksame Werte ein (`World::params`). Fehlt in älteren Spielständen:
+    /// frei.
+    #[serde(default)]
+    pub docked_to: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -129,6 +138,41 @@ pub enum VesselStatus {
     Wreck {
         point: SurfacePoint,
     },
+    /// Im Anflug zum Andocken, noch `distance` m bis zum Kontakt.
+    Approaching {
+        distance: f64,
+    },
+    /// Teil des Verbunds um das Hauptschiff `host`.
+    Docked {
+        host: usize,
+    },
+}
+
+/// Wirksame Werte eines Verbunds: Hauptschiff `host` und angedockte Teile.
+/// Massen, Tanks, Widerstand und Fallschirme addieren sich; der Schub auch,
+/// die Ausströmgeschwindigkeit ist nach Massenstrom gemittelt (alle
+/// Triebwerke brennen zusammen).
+pub fn combine(host: VesselParams, parts: impl IntoIterator<Item = VesselParams>) -> VesselParams {
+    let mut total = host;
+    let mut mass_flow = if host.exhaust_velocity > 0.0 {
+        host.thrust / host.exhaust_velocity
+    } else {
+        0.0
+    };
+    for p in parts {
+        total.dry_mass += p.dry_mass;
+        total.drag_area += p.drag_area;
+        total.thrust += p.thrust;
+        total.fuel_capacity += p.fuel_capacity;
+        total.parachute_area += p.parachute_area;
+        if p.exhaust_velocity > 0.0 {
+            mass_flow += p.thrust / p.exhaust_velocity;
+        }
+    }
+    if mass_flow > 0.0 {
+        total.exhaust_velocity = total.thrust / mass_flow;
+    }
+    total
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -180,7 +224,7 @@ impl World {
     /// Vorausgesagter Bodenkontakt (nur in der Zukunft): wann, wo, wie schnell,
     /// ob das Schiff aufsetzt, und das Zielgebiet.
     pub fn touchdown(&self, vessel: usize) -> Option<Touchdown> {
-        let v = &self.vessels[vessel];
+        let v = &self.vessels[self.host(vessel)];
         let segment = v.trajectory.segments().find(|s| {
             s.end_event() == Some(crate::trajectory::Event::GroundContact) && s.end() > self.time
         })?;
@@ -194,7 +238,7 @@ impl World {
             body: body_id,
             point,
             speed: landing::ground_speed(body, &state),
-            braking: landing::braking(body, &v.params, &state, mass),
+            braking: landing::braking(body, &self.params(vessel), &state, mass),
             zone: self.zone_at(body_id, &point),
             nearest: self.nearest_zone(body_id, &point),
         })
@@ -221,29 +265,50 @@ impl World {
             trajectory: Trajectory::new_landed(body, self.time, point, mass),
             halt_warp_at_burn: false,
             target: None,
+            docked_to: None,
         });
         self.vessels.len() - 1
     }
 
     /// Plant oder ändert den Start eines gelandeten Schiffs.
     pub fn set_launch(&mut self, vessel: usize, launch: Launch) -> Result<(), PlanError> {
-        let v = &mut self.vessels[vessel];
-        v.trajectory
-            .set_launch(&self.bodies, &v.params, self.time, launch)
+        self.command(vessel, |t, bodies, params, now| {
+            t.set_launch(bodies, params, now, launch)
+        })
     }
 
     /// Verschiebt den Start um `dt` s; die ganze Kette wandert mit.
     pub fn shift_launch(&mut self, vessel: usize, dt: f64) -> Result<(), PlanError> {
-        let v = &mut self.vessels[vessel];
-        v.trajectory
-            .shift_launch(&self.bodies, &v.params, self.time, dt)
+        self.command(vessel, |t, bodies, params, now| {
+            t.shift_launch(bodies, params, now, dt)
+        })
     }
 
     /// Sagt den geplanten Start ab.
     pub fn clear_launch(&mut self, vessel: usize) -> Result<(), PlanError> {
-        let v = &mut self.vessels[vessel];
-        v.trajectory
-            .clear_launch(&self.bodies, &v.params, self.time)
+        self.command(vessel, |t, bodies, params, now| {
+            t.clear_launch(bodies, params, now)
+        })
+    }
+
+    /// Ein Befehl an die Zeitleiste eines Schiffs (bei einem Verbund: des
+    /// Hauptschiffs, mit dessen wirksamen Werten). Danach wird jedes geplante
+    /// Andocken neu berechnet, denn es hängt von beiden Schiffen ab.
+    fn command<T>(
+        &mut self,
+        vessel: usize,
+        f: impl FnOnce(&mut Trajectory, &[Body], &VesselParams, f64) -> Result<T, PlanError>,
+    ) -> Result<T, PlanError> {
+        let host = self.host(vessel);
+        let params = self.params(host);
+        let result = f(
+            &mut self.vessels[host].trajectory,
+            &self.bodies,
+            &params,
+            self.time,
+        );
+        self.refresh_dockings();
+        result
     }
 
     /// Setzt ein Schiff mit dem gegebenen Zustand und `fuel` kg Treibstoff zur
@@ -269,6 +334,7 @@ impl World {
             trajectory,
             halt_warp_at_burn: false,
             target: None,
+            docked_to: None,
         });
         self.vessels.len() - 1
     }
@@ -279,17 +345,40 @@ impl World {
     }
 
     /// Lässt die Zeit bis `t` voranschreiten. Das Ergebnis hängt nur von `t`
-    /// ab, nicht davon, in wie vielen Schritten man dorthin kommt.
+    /// ab, nicht davon, in wie vielen Schritten man dorthin kommt: Ein Kontakt
+    /// beim Andocken wird immer genau zu seinem Zeitpunkt ausgeführt.
     ///
     /// Was dabei passiert, kommt ins Protokoll (`log`), geordnet nach Zeit und
     /// bei gleicher Zeit nach Schiff.
     pub fn advance_to(&mut self, t: f64) {
+        loop {
+            let contact = (0..self.vessels.len())
+                .filter(|&i| self.vessels[i].docked_to.is_none())
+                .filter_map(|i| {
+                    let plan = self.vessels[i].trajectory.dock_plan()?;
+                    (plan.contact <= t).then_some((plan.contact, i))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            match contact {
+                Some((time, i)) => {
+                    self.advance_all(time.max(self.time));
+                    self.dock(i);
+                }
+                None => return self.advance_all(t),
+            }
+        }
+    }
+
+    /// Alle freien Schiffe bis `t` vorrücken (ohne Andocken).
+    fn advance_all(&mut self, t: f64) {
         self.time = t;
+        let params: Vec<VesselParams> = (0..self.vessels.len()).map(|i| self.params(i)).collect();
         let mut entries = Vec::new();
         for (i, vessel) in self.vessels.iter_mut().enumerate() {
-            let happened = vessel
-                .trajectory
-                .advance_to(&self.bodies, t, &vessel.params);
+            if vessel.docked_to.is_some() {
+                continue;
+            }
+            let happened = vessel.trajectory.advance_to(&self.bodies, t, &params[i]);
             entries.extend(happened.into_iter().map(|(time, kind)| LogEntry {
                 time,
                 vessel: i,
@@ -306,18 +395,183 @@ impl World {
                 *zone = self.zone_at(body, point);
             }
         }
+        self.push_log(entries);
+    }
+
+    fn push_log(&mut self, entries: impl IntoIterator<Item = LogEntry>) {
         self.log.extend(entries);
         if self.log.len() > LOG_LIMIT {
             self.log.drain(..self.log.len() - LOG_LIMIT);
         }
     }
 
+    /// Hauptschiff des Verbunds, zu dem ein Schiff gehört (sonst es selbst).
+    pub fn host(&self, vessel: usize) -> usize {
+        self.vessels[vessel].docked_to.unwrap_or(vessel)
+    }
+
+    /// Die an `host` angedockten Schiffe.
+    pub fn parts(&self, host: usize) -> Vec<usize> {
+        (0..self.vessels.len())
+            .filter(|&k| self.vessels[k].docked_to == Some(host))
+            .collect()
+    }
+
+    /// Wirksame Werte: bei einem Hauptschiff samt angedockter Teile.
+    pub fn params(&self, vessel: usize) -> VesselParams {
+        combine(
+            self.vessels[vessel].params,
+            self.parts(vessel)
+                .into_iter()
+                .map(|k| self.vessels[k].params),
+        )
+    }
+
+    /// Andocken an das Ziel (genauer: an das Hauptschiff von dessen Verbund)
+    /// als letzter Schritt der Kette einschalten oder zurücknehmen.
+    pub fn set_docking(&mut self, vessel: usize, on: bool) -> Result<(), DockError> {
+        let trajectory = &self.vessels[vessel].trajectory;
+        if trajectory.docking_underway() || trajectory.current().is_burn() {
+            return Err(DockError::Busy);
+        }
+        let docking = if on {
+            let target = self.vessels[vessel].target.ok_or(DockError::NoTarget)?;
+            Some((target, self.dock_request(vessel, target)))
+        } else {
+            None
+        };
+        let params = self.params(vessel);
+        self.vessels[vessel]
+            .trajectory
+            .set_docking(&self.bodies, &params, self.time, docking);
+        self.refresh_dockings();
+        Ok(())
+    }
+
+    /// Rechnet jedes geplante Andocken neu (nach jeder Änderung an einer
+    /// Kette: Annäherung und Zielbahn können sich verschoben haben). Zweimal,
+    /// damit auch ein Ziel, dessen eigenes Andocken sich ändert, stimmt.
+    fn refresh_dockings(&mut self) {
+        for _ in 0..2 {
+            for i in 0..self.vessels.len() {
+                let v = &self.vessels[i];
+                let Some(target) = v.trajectory.docking().map(|d| d.target) else {
+                    continue;
+                };
+                if v.docked_to.is_some() || v.trajectory.docking_underway() {
+                    continue;
+                }
+                let request = self.dock_request(i, target);
+                if v.trajectory.docking().is_some_and(|d| d.request == request) {
+                    continue;
+                }
+                let params = self.params(i);
+                self.vessels[i].trajectory.set_docking(
+                    &self.bodies,
+                    &params,
+                    self.time,
+                    Some((target, request)),
+                );
+            }
+        }
+    }
+
+    /// Was das Andocken von `vessel` an `target` braucht: die engste Annäherung
+    /// (ohne das Andocken selbst gesucht), dort Δv = Geschwindigkeit des Ziels
+    /// minus eigene, und die Bahn des Ziels, die ab dann stabil sein muss.
+    fn dock_request(&self, vessel: usize, target: usize) -> Result<DockRequest, DockError> {
+        let host = self.host(target);
+        if host == self.host(vessel) {
+            return Err(DockError::NoTarget);
+        }
+        let params = self.params(vessel);
+        let base =
+            self.vessels[vessel]
+                .trajectory
+                .without_docking(&self.bodies, &params, self.time);
+        let goal = &self.vessels[host].trajectory;
+        let approach = rendezvous::approach(&self.bodies, self.time, &base, goal)
+            .ok_or(DockError::NoApproach)?;
+        if approach.distance > DOCKING_RANGE {
+            return Err(DockError::TooFar {
+                distance: approach.distance,
+            });
+        }
+        let Some(
+            segment @ Segment::Kepler {
+                start,
+                state,
+                end: None,
+                ..
+            },
+        ) = goal.predicted_segment(approach.time)
+        else {
+            return Err(DockError::TargetNotStable);
+        };
+        let (_, own) = base
+            .predicted_state(&self.bodies, approach.time)
+            .ok_or(DockError::NoApproach)?;
+        let relative = segment.state_at(&self.bodies, approach.time).velocity - own.velocity;
+        let [prograde, normal, radial] = maneuver::node_frame(&own);
+        Ok(DockRequest {
+            node: ManeuverNode {
+                time: approach.time,
+                delta_v: glam::DVec3::new(
+                    relative.dot(prograde),
+                    relative.dot(normal),
+                    relative.dot(radial),
+                ),
+            },
+            target_epoch: *start,
+            target_state: *state,
+        })
+    }
+
+    /// Kontakt: `vessel` wird Teil des Verbunds um das Hauptschiff seines
+    /// Ziels. Das Hauptschiff fliegt mit der Summe der Massen auf seiner Bahn
+    /// weiter (sie plant ab dem Angleichen nichts, siehe `docking`).
+    fn dock(&mut self, vessel: usize) {
+        let target = self.vessels[vessel]
+            .trajectory
+            .docking()
+            .expect("Andocken geplant")
+            .target;
+        let host = self.host(target);
+        let time = self.time;
+        let part_mass = self.vessels[vessel].trajectory.current().mass_at(time);
+        let (body, state) = self.vessel_state(host);
+        let host_mass = self.vessel_mass(host);
+        // Das Schiff und alles, was schon an ihm hing, hängt jetzt am Hauptschiff.
+        for k in 0..self.vessels.len() {
+            if k == vessel || self.vessels[k].docked_to == Some(vessel) {
+                self.vessels[k].docked_to = Some(host);
+            }
+        }
+        self.vessels[vessel].target = None;
+        self.vessels[vessel].trajectory.finish_docking();
+        let params = self.params(host);
+        self.vessels[host].trajectory = Trajectory::new_flying(
+            &self.bodies,
+            &params,
+            body,
+            time,
+            state,
+            host_mass + part_mass,
+        );
+        self.push_log([LogEntry {
+            time,
+            vessel,
+            kind: LogKind::Docked { host },
+        }]);
+        self.refresh_dockings();
+    }
+
     /// Fügt einen Node in die Manöverkette eines Schiffs ein und liefert seine
     /// Stelle in der Kette.
     pub fn add_node(&mut self, vessel: usize, node: ManeuverNode) -> Result<usize, PlanError> {
-        let v = &mut self.vessels[vessel];
-        v.trajectory
-            .add_node(&self.bodies, &v.params, self.time, node)
+        self.command(vessel, |t, bodies, params, now| {
+            t.add_node(bodies, params, now, node)
+        })
     }
 
     /// Ändert den Node `index` der Kette eines Schiffs.
@@ -327,16 +581,16 @@ impl World {
         index: usize,
         node: ManeuverNode,
     ) -> Result<(), PlanError> {
-        let v = &mut self.vessels[vessel];
-        v.trajectory
-            .set_node(&self.bodies, &v.params, self.time, index, node)
+        self.command(vessel, |t, bodies, params, now| {
+            t.set_node(bodies, params, now, index, node)
+        })
     }
 
     /// Löscht den Node `index` der Kette eines Schiffs.
     pub fn remove_node(&mut self, vessel: usize, index: usize) -> Result<(), PlanError> {
-        let v = &mut self.vessels[vessel];
-        v.trajectory
-            .remove_node(&self.bodies, &v.params, self.time, index)
+        self.command(vessel, |t, bodies, params, now| {
+            t.remove_node(bodies, params, now, index)
+        })
     }
 
     /// Schaltet die Kette eines Schiffs scharf (oder ab). Nur eine scharfe
@@ -347,9 +601,13 @@ impl World {
 
     /// Die Zeitleiste eines Schiffs nur mit den ersten `count` Nodes.
     pub fn trajectory_with_first_nodes(&self, vessel: usize, count: usize) -> Trajectory {
-        let v = &self.vessels[vessel];
-        v.trajectory
-            .with_first_nodes(&self.bodies, &v.params, self.time, count)
+        let host = self.host(vessel);
+        self.vessels[host].trajectory.with_first_nodes(
+            &self.bodies,
+            &self.params(host),
+            self.time,
+            count,
+        )
     }
 
     /// Volle Umläufe vor dem Node `index` eines Schiffs: ab dem Ende des
@@ -370,66 +628,97 @@ impl World {
     pub fn next_halting_burn(&self) -> Option<f64> {
         self.vessels
             .iter()
-            .filter(|v| v.halt_warp_at_burn && v.trajectory.armed())
+            .filter(|v| v.halt_warp_at_burn && v.docked_to.is_none() && v.trajectory.armed())
             .filter_map(|v| v.trajectory.burns().first().map(|b| b.start))
             .filter(|&start| start > self.time)
             .min_by(f64::total_cmp)
     }
 
     /// Setzt das Ziel eines Schiffs: ein anderes Schiff oder keins.
+    /// Ein geplantes Andocken an ein anderes Ziel wird zurückgenommen.
     pub fn set_target(&mut self, vessel: usize, target: Option<usize>) {
         assert!(
             target.is_none_or(|t| t != vessel && t < self.vessels.len()),
             "ungültiges Ziel {target:?} für Schiff {vessel}"
         );
         self.vessels[vessel].target = target;
+        let trajectory = &self.vessels[vessel].trajectory;
+        if trajectory
+            .docking()
+            .is_some_and(|d| Some(d.target) != target)
+            && !trajectory.docking_underway()
+        {
+            let params = self.params(vessel);
+            self.vessels[vessel]
+                .trajectory
+                .set_docking(&self.bodies, &params, self.time, None);
+            self.refresh_dockings();
+        }
     }
 
     /// Engste Annäherung eines Schiffs an sein Ziel (siehe
     /// `rendezvous::approach`).
     pub fn approach(&self, vessel: usize) -> Option<Approach> {
-        let v = &self.vessels[vessel];
-        let target = &self.vessels[v.target?];
-        rendezvous::approach(&self.bodies, self.time, &v.trajectory, &target.trajectory)
+        let host = self.host(self.vessels[vessel].target?);
+        if host == self.host(vessel) {
+            return None;
+        }
+        rendezvous::approach(
+            &self.bodies,
+            self.time,
+            &self.vessels[self.host(vessel)].trajectory,
+            &self.vessels[host].trajectory,
+        )
     }
 
     /// Lage der Bahn eines Schiffs zur Bahnebene seines Ziels (siehe
     /// `rendezvous::plane_crossing`).
     pub fn plane_to_target(&self, vessel: usize) -> Option<PlaneCrossing> {
-        let v = &self.vessels[vessel];
-        let target = &self.vessels[v.target?];
-        rendezvous::plane_crossing(&self.bodies, self.time, &v.trajectory, &target.trajectory)
+        let host = self.host(self.vessels[vessel].target?);
+        if host == self.host(vessel) {
+            return None;
+        }
+        rendezvous::plane_crossing(
+            &self.bodies,
+            self.time,
+            &self.vessels[self.host(vessel)].trajectory,
+            &self.vessels[host].trajectory,
+        )
     }
 
-    /// Körper und Zustand eines Schiffs zur aktuellen Zeit.
+    /// Körper und Zustand eines Schiffs zur aktuellen Zeit (angedockt: des
+    /// Hauptschiffs).
     pub fn vessel_state(&self, index: usize) -> (BodyId, StateVector) {
-        self.vessels[index]
+        self.vessels[self.host(index)]
             .trajectory
             .state_at(&self.bodies, self.time)
     }
 
-    /// Aktuelle Masse in kg.
+    /// Aktuelle Masse in kg (angedockt: des ganzen Verbunds).
     pub fn vessel_mass(&self, index: usize) -> f64 {
-        self.vessels[index].trajectory.current().mass_at(self.time)
+        self.vessels[self.host(index)]
+            .trajectory
+            .current()
+            .mass_at(self.time)
     }
 
-    /// Verbleibender Treibstoff in kg.
+    /// Verbleibender Treibstoff in kg (im Verbund: der gemeinsame Vorrat).
     pub fn vessel_fuel(&self, index: usize) -> f64 {
-        self.vessel_mass(index) - self.vessels[index].params.dry_mass
+        self.vessel_mass(index) - self.params(self.host(index)).dry_mass
     }
 
-    /// Verbleibendes Δv in m/s (Raketengleichung).
+    /// Verbleibendes Δv in m/s (Raketengleichung, wirksame Werte).
     pub fn vessel_delta_v(&self, index: usize) -> f64 {
-        let params = &self.vessels[index].params;
+        let params = self.params(self.host(index));
         params.exhaust_velocity * (self.vessel_mass(index) / params.dry_mass).ln()
     }
 
     /// Δv-Haushalt eines Schiffs: voller Tank, jetzt, geplante Brennvorgänge
     /// (Start und gültige Nodes), Rest und was fehlt.
     pub fn delta_v_budget(&self, index: usize) -> DeltaVBudget {
-        let vessel = &self.vessels[index];
-        let params = &vessel.params;
-        let trajectory = &vessel.trajectory;
+        let index = self.host(index);
+        let params = &self.params(index);
+        let trajectory = &self.vessels[index].trajectory;
         let ve = params.exhaust_velocity;
         let now = self.time;
         let mass = self.vessel_mass(index);
@@ -443,7 +732,14 @@ impl World {
                     .plans()
                     .enumerate()
                     .map(|(k, p)| (BudgetItem::Node(k), p.burn, Some(p.node.delta_v.length()))),
-            );
+            )
+            .chain(trajectory.dock_plan().map(|p| {
+                (
+                    BudgetItem::Docking,
+                    p.matching.burn,
+                    Some(p.matching.node.delta_v.length()),
+                )
+            }));
         let mut burns = Vec::new();
         let mut missing = 0.0;
         let mut end_mass = mass;
@@ -460,6 +756,22 @@ impl World {
             }
             end_mass = burn.end_mass();
             burns.push((item, delta_v));
+        }
+        // Der Anflug nach dem Angleichen gehört mit zum Andocken.
+        if let Some(plan) = trajectory.dock_plan()
+            && plan.contact > now
+        {
+            let from = if now < plan.matching.burn.end {
+                plan.mass
+            } else {
+                mass
+            };
+            let approach = ve * (from / plan.end_mass).ln();
+            match burns.last_mut() {
+                Some((BudgetItem::Docking, delta_v)) => *delta_v += approach,
+                _ => burns.push((BudgetItem::Docking, approach)),
+            }
+            end_mass = plan.end_mass;
         }
         let mut rest = ve * (end_mass / params.dry_mass).ln();
         // Bremsen beim Aufsetzen; reicht der Rest nicht, fehlt die Differenz.
@@ -487,9 +799,18 @@ impl World {
     }
 
     pub fn vessel_status(&self, index: usize) -> VesselStatus {
+        if let Some(host) = self.vessels[index].docked_to {
+            return VesselStatus::Docked { host };
+        }
         let segment = self.vessels[index].trajectory.current();
         let body = &self.bodies[segment.body()];
         match segment {
+            Segment::Approach { start, offset, .. } => {
+                let profile = docking::Profile::new(offset.length());
+                VesselStatus::Approaching {
+                    distance: offset.length() - profile.covered(self.time - start),
+                }
+            }
             Segment::Surface { point, wreck, .. } => {
                 if *wreck {
                     VesselStatus::Wreck { point: *point }

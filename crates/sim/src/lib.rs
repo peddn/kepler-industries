@@ -7,6 +7,7 @@
 //! Einheiten: SI (m, s, kg), alles in `f64`.
 
 pub mod body;
+pub mod docking;
 pub mod integrator;
 pub mod kepler;
 pub mod landing;
@@ -19,6 +20,7 @@ pub mod trajectory;
 pub mod world;
 
 pub use body::{Atmosphere, Body, BodyId, SurfacePoint};
+pub use docking::{DockError, DockPlan, DockRequest, Docking};
 pub use kepler::StateVector;
 pub use landing::{Crash, LandingZone};
 pub use launch::{Launch, LaunchPlan, LaunchProfile};

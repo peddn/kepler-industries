@@ -1,7 +1,7 @@
 //! Δv-Balken unten: der Tank des gewählten Schiffs als Balken. Die volle
 //! Breite ist der volle Tank; gefüllt ist, was an Bord ist. Darin liegen die
 //! geplanten Brennvorgänge der Kette (Start gelb, Nodes violett, Bremsen beim
-//! Landen türkis), dahinter der Rest (grün). Verlangt die Kette mehr, als an Bord ist, steht der Fehlbetrag
+//! Landen türkis, Andocken rosa), dahinter der Rest (grün). Verlangt die Kette mehr, als an Bord ist, steht der Fehlbetrag
 //! rot dahinter.
 //!
 //! Die Zahlen kommen aus `World::delta_v_budget`; hier wird nur gezeichnet.
@@ -11,6 +11,7 @@ use crate::Sim;
 use crate::hud::UiFont;
 use crate::node_ui::{SelectedNode, Selection, selected_node};
 use crate::panel::{PANEL_WIDTH, PanelShown};
+use crate::rendezvous::TARGET_COLOR;
 use crate::status_bar::STATUS_HEIGHT;
 use bevy::prelude::*;
 use bevy::text::FontSize;
@@ -209,6 +210,12 @@ pub fn sync(
                 delta_v,
                 color: LANDING_COLOR,
                 label: format!("Landen {delta_v:.0}"),
+                selected: false,
+            },
+            BudgetItem::Docking => Piece {
+                delta_v,
+                color: TARGET_COLOR,
+                label: format!("Andocken {delta_v:.0}"),
                 selected: false,
             },
         })

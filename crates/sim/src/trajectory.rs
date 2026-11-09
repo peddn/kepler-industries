@@ -4,6 +4,8 @@
 //! - `Kepler`: Freiflug ohne Luft und ohne Schub, analytisch.
 //! - `Integrated`: vorausberechnet, wenn Luft oder Schub im Spiel ist.
 //! - `Surface`: am Boden, fest mit dem Körper verbunden.
+//! - `Approach`: Anflug zum Andocken, gerade Linie im mitbewegten System des
+//!   Ziels (siehe `docking`); danach endet die Zeitleiste im Verbund.
 //!
 //! "Wo ist das Schiff zum Zeitpunkt t?" heißt immer: passenden Abschnitt suchen.
 //! Ein Abschnitt hängt nur von seinem Anfangszustand und dem geplanten Manöver
@@ -15,6 +17,7 @@
 //! Vorschau ist einfach die vorausberechnete Zeitleiste.
 
 use crate::body::{Body, BodyId, SurfacePoint};
+use crate::docking::{self, DockError, DockPlan, DockRequest, Docking};
 use crate::integrator::{self, Forces, Sample};
 use crate::kepler::{self, StateVector};
 use crate::landing;
@@ -48,6 +51,8 @@ pub enum Event {
     Continue,
     /// Abheben vom Boden: Beginn des Aufstiegs.
     Liftoff,
+    /// Kontakt beim Andocken: Das Schiff wird Teil eines Verbunds.
+    Docking,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -83,6 +88,19 @@ pub enum Segment {
         #[serde(default)]
         liftoff: Option<f64>,
     },
+    /// Anflug zum Andocken (siehe `docking`).
+    Approach {
+        body: BodyId,
+        start: f64,
+        /// Bahn des Ziels: sein Zustand zu Beginn (eine Kopie, damit der
+        /// Abschnitt von keinem anderen Schiff abhängt).
+        target: StateVector,
+        /// Lage relativ zum Ziel zu Beginn, im mitbewegten System des Ziels.
+        offset: glam::DVec3,
+        mass: f64,
+        /// Masse beim Kontakt.
+        end_mass: f64,
+    },
 }
 
 impl Segment {
@@ -90,13 +108,16 @@ impl Segment {
         match self {
             Segment::Kepler { body, .. }
             | Segment::Integrated { body, .. }
-            | Segment::Surface { body, .. } => *body,
+            | Segment::Surface { body, .. }
+            | Segment::Approach { body, .. } => *body,
         }
     }
 
     pub fn start(&self) -> f64 {
         match self {
-            Segment::Kepler { start, .. } | Segment::Surface { start, .. } => *start,
+            Segment::Kepler { start, .. }
+            | Segment::Surface { start, .. }
+            | Segment::Approach { start, .. } => *start,
             Segment::Integrated { samples, .. } => samples[0].time,
         }
     }
@@ -107,6 +128,9 @@ impl Segment {
             Segment::Kepler { end, .. } => end.map_or(f64::INFINITY, |(t, _)| t),
             Segment::Integrated { samples, .. } => samples[samples.len() - 1].time,
             Segment::Surface { liftoff, .. } => liftoff.unwrap_or(f64::INFINITY),
+            Segment::Approach { start, offset, .. } => {
+                start + docking::Profile::new(offset.length()).duration()
+            }
         }
     }
 
@@ -115,6 +139,7 @@ impl Segment {
             Segment::Kepler { end, .. } => end.map(|(_, e)| e),
             Segment::Integrated { end_event, .. } => Some(*end_event),
             Segment::Surface { liftoff, .. } => liftoff.map(|_| Event::Liftoff),
+            Segment::Approach { .. } => Some(Event::Docking),
         }
     }
 
@@ -128,6 +153,12 @@ impl Segment {
             Segment::Integrated {
                 burn: Some(burn), ..
             } => burn.mass_at(t),
+            Segment::Approach { mass, end_mass, .. } => {
+                // Gleichmäßig über den Anflug verbraucht.
+                let (start, end) = (self.start(), self.end());
+                let f = ((t - start) / (end - start)).clamp(0.0, 1.0);
+                mass + (end_mass - mass) * f
+            }
             Segment::Kepler { mass, .. }
             | Segment::Integrated { mass, .. }
             | Segment::Surface { mass, .. } => *mass,
@@ -157,6 +188,12 @@ impl Segment {
                     velocity: body.co_rotating_velocity(position),
                 }
             }
+            Segment::Approach {
+                start,
+                target,
+                offset,
+                ..
+            } => docking::approach_state(body.gm, *start, target, *offset, t),
         }
     }
 
@@ -189,6 +226,8 @@ impl Segment {
                 } => integrated(bodies, params, body, t, state, mass, Some(*burn), None),
                 _ => integrated(bodies, params, body, t, state, mass, None, pending),
             },
+            // Danach geht es im Verbund weiter (siehe `World`).
+            Event::Docking => return None,
         })
     }
 }
@@ -297,8 +336,6 @@ fn next_orbit(bodies: &[Body], segment: &Segment, plan: &Plan) -> Option<Plan> {
     (later.burn.end <= natural_end).then_some(later)
 }
 
-/// Bodenkontakt: aufsetzen (Treibstoff fürs Bremsen abgezogen) oder Wrack,
-/// siehe `landing`.
 /// Protokolleintrag für das Ende des Abschnitts `done` (auf ihn folgt `next`).
 /// Zielgebiete kennt die Zeitleiste nicht, die trägt `World` nach.
 fn log_entry(
@@ -345,10 +382,13 @@ fn log_entry(
                 }
             }
         }
-        Event::AtmosphereExit | Event::Continue => return None,
+        // Andocken trägt `World` ein (sie kennt das Hauptschiff).
+        Event::AtmosphereExit | Event::Continue | Event::Docking => return None,
     })
 }
 
+/// Bodenkontakt: aufsetzen (Treibstoff fürs Bremsen abgezogen) oder Wrack,
+/// siehe `landing`.
 fn touchdown(
     bodies: &[Body],
     params: &VesselParams,
@@ -589,6 +629,10 @@ pub struct Trajectory {
     /// rückt bei Brennbeginn als Ganzes einen Umlauf weiter, beim Abheben eine
     /// Planetendrehung.
     armed: bool,
+    /// Andocken als letzter Schritt der Kette (siehe `docking`): Angleichen,
+    /// dann Anflug. Fehlt in älteren Spielständen: keins.
+    #[serde(default)]
+    docking: Option<Docking>,
 }
 
 impl Trajectory {
@@ -607,6 +651,7 @@ impl Trajectory {
             launch: None,
             nodes: Vec::new(),
             armed: false,
+            docking: None,
         };
         trajectory.extend(bodies, params);
         trajectory
@@ -626,16 +671,18 @@ impl Trajectory {
             launch: None,
             nodes: Vec::new(),
             armed: false,
+            docking: None,
         }
     }
 
-    /// Alle geplanten Brennvorgänge in Reihenfolge: Aufstieg, dann die
-    /// gültigen Nodes.
+    /// Alle geplanten Brennvorgänge in Reihenfolge: Aufstieg, die gültigen
+    /// Nodes, zuletzt das Angleichen beim Andocken.
     pub fn burns(&self) -> Vec<Burn> {
         self.launch
             .iter()
             .map(|l| l.burn)
             .chain(self.plans().map(|p| p.burn))
+            .chain(self.dock_plan().map(|p| p.matching.burn))
             .collect()
     }
 
@@ -681,9 +728,107 @@ impl Trajectory {
             }
             self.nodes[k].plan = result;
         }
-        if let Some(segments) = self.compute(bodies, params, &burns) {
+        // Andocken als letzter Schritt: Angleichen, dann Anflug.
+        if let Some(mut docking) = self.docking {
+            docking.plan = match docking.request {
+                _ if broken => Err(DockError::AfterInvalid),
+                Err(e) => Err(e),
+                Ok(request) => self.plan_docking(bodies, params, now, &burns, &request),
+            };
+            if let Ok(plan) = &docking.plan {
+                burns.push(plan.matching.burn);
+            }
+            self.docking = Some(docking);
+        }
+        if let Some(mut segments) = self.compute(bodies, params, &burns) {
+            if let Some(plan) = self.dock_plan() {
+                // Nach dem Angleichen kein Freiflug, sondern der Anflug.
+                let end = plan.matching.burn.end;
+                segments.retain(|s| s.start() < end);
+                segments.push_back(Segment::Approach {
+                    body: plan.matching.body,
+                    start: end,
+                    target: plan.target,
+                    offset: plan.offset,
+                    mass: plan.mass,
+                    end_mass: plan.end_mass,
+                });
+            }
             self.segments = segments;
         }
+    }
+
+    /// Angleichen und Anflug für `request` nach den Brennvorgängen `burns`.
+    fn plan_docking(
+        &self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        burns: &[Burn],
+        request: &DockRequest,
+    ) -> Result<DockPlan, DockError> {
+        if params.thrust <= 0.0 || params.exhaust_velocity <= 0.0 {
+            return Err(DockError::NoEngine);
+        }
+        let ve = params.exhaust_velocity;
+        let leg = self
+            .compute(bodies, params, burns)
+            .ok_or(DockError::Overlaps)?;
+        let matching = locate(bodies, params, &leg, now, burns.last(), request.node)
+            .map_err(|_| DockError::Overlaps)?;
+        // Das Angleichen gehört an genau diese Stelle, nicht einen Umlauf später.
+        if matching.node.time != request.node.time {
+            return Err(DockError::Overlaps);
+        }
+        if matching.burn.start < request.target_epoch {
+            return Err(DockError::TargetNotStable);
+        }
+        let on_board = ve * (matching.burn.start_mass / params.dry_mass).ln();
+        let wanted = request.node.delta_v.length();
+        if matching.burn.delta_v() < wanted - 0.05 {
+            return Err(DockError::NoFuel {
+                needed: wanted,
+                available: on_board,
+            });
+        }
+
+        // Lage nach dem Angleichen relativ zum Ziel.
+        let mut all = burns.to_vec();
+        all.push(matching.burn);
+        let segments = self
+            .compute(bodies, params, &all)
+            .ok_or(DockError::Overlaps)?;
+        let end = matching.burn.end;
+        let segment = segments
+            .iter()
+            .find(|s| s.start() < end && end <= s.end())
+            .ok_or(DockError::Overlaps)?;
+        let own = segment.state_at(bodies, end);
+        let mass = segment.mass_at(end);
+        let body = &bodies[matching.body];
+        let target = kepler::propagate(body.gm, request.target_state, end - request.target_epoch);
+        let (offset, residual) = docking::relative(&target, &own);
+        let (cost, peak) = docking::approach_cost(body, end, &target, offset);
+        if peak > params.thrust / mass {
+            return Err(DockError::TooWeak);
+        }
+        let approach_delta_v = residual + cost;
+        if approach_delta_v > ve * (mass / params.dry_mass).ln() {
+            return Err(DockError::NoFuel {
+                needed: wanted + approach_delta_v,
+                available: on_board,
+            });
+        }
+        Ok(DockPlan {
+            matching,
+            distance: offset.length(),
+            approach_delta_v,
+            contact: end + docking::Profile::new(offset.length()).duration(),
+            target,
+            offset,
+            mass,
+            end_mass: mass * (-approach_delta_v / ve).exp(),
+        })
     }
 
     /// Dieselbe Kette um `dt` verschoben: Start und alle Nodes (wie gesetzt).
@@ -732,6 +877,7 @@ impl Trajectory {
             let first = self.plans().next().copied();
             match self.segments[0].end_event() {
                 Some(Event::Liftoff) if !self.armed => {
+                    self.docking = None;
                     let day = bodies[self.segments[0].body()].rotation_period;
                     match self.shifted(bodies, params, at, day) {
                         Ok(changed) => *self = changed,
@@ -744,6 +890,8 @@ impl Trajectory {
                     continue;
                 }
                 Some(Event::BurnStart) if !self.armed && self.launch.is_none() => {
+                    // Eine verschobene Kette passt nicht mehr zur Annäherung.
+                    self.docking = None;
                     if let Some(first) = first {
                         match next_orbit(bodies, &self.segments[0], &first) {
                             Some(later) => {
@@ -772,8 +920,10 @@ impl Trajectory {
                 // Am Boden (gelandet oder Wrack): Die Kette ist erledigt.
                 self.launch = None;
                 self.nodes.clear();
+                self.docking = None;
             } else if done.is_burn() && done.end_event() != Some(Event::Continue) {
-                // Ausgeführt: zuerst der Aufstieg, dann die Nodes der Reihe nach.
+                // Ausgeführt: zuerst der Aufstieg, dann die Nodes der Reihe
+                // nach. Das Angleichen bleibt stehen, bis angedockt ist.
                 if self.launch.is_some() {
                     self.launch = None;
                 } else if !self.nodes.is_empty() {
@@ -785,6 +935,7 @@ impl Trajectory {
         if matches!(self.segments[0], Segment::Surface { wreck: true, .. }) {
             self.launch = None;
             self.nodes.clear();
+            self.docking = None;
         }
         log
     }
@@ -793,6 +944,7 @@ impl Trajectory {
     fn check_editable(&self, params: &VesselParams) -> Result<(), PlanError> {
         match self.current() {
             Segment::Surface { .. } if self.launch.is_none() => Err(PlanError::NotFlying),
+            Segment::Approach { .. } => Err(PlanError::Docking),
             segment if segment.is_burn() => Err(PlanError::Burning),
             _ if params.thrust <= 0.0 || params.exhaust_velocity <= 0.0 => Err(PlanError::NoEngine),
             _ => Ok(()),
@@ -982,8 +1134,66 @@ impl Trajectory {
         count: usize,
     ) -> Trajectory {
         let mut trajectory = self.clone();
-        if count < trajectory.nodes.len() {
+        if count < trajectory.nodes.len() || trajectory.docking.is_some() {
             trajectory.nodes.truncate(count);
+            trajectory.docking = None;
+            trajectory.rebuild(bodies, params, now);
+        }
+        trajectory
+    }
+
+    /// Geplantes Andocken (auch ungültiges).
+    pub fn docking(&self) -> Option<&Docking> {
+        self.docking.as_ref()
+    }
+
+    /// Das berechnete Andocken, wenn es gültig ist.
+    pub fn dock_plan(&self) -> Option<&DockPlan> {
+        self.docking.as_ref().and_then(|d| d.plan.as_ref().ok())
+    }
+
+    /// Setzt das Andocken (von `World` berechnet) oder nimmt es zurück und
+    /// berechnet die Zeitleiste neu. Während des Angleichens und des Anflugs
+    /// bleibt es, wie es ist.
+    pub(crate) fn set_docking(
+        &mut self,
+        bodies: &[Body],
+        params: &VesselParams,
+        now: f64,
+        docking: Option<(usize, Result<DockRequest, DockError>)>,
+    ) {
+        if self.docking_underway() {
+            return;
+        }
+        self.docking = docking.map(|(target, request)| Docking {
+            target,
+            request,
+            plan: Err(DockError::NoApproach),
+        });
+        self.rebuild(bodies, params, now);
+    }
+
+    /// Angedockt: Die eigene Kette ist erledigt (weiter geht es im Verbund).
+    pub(crate) fn finish_docking(&mut self) {
+        self.launch = None;
+        self.nodes.clear();
+        self.docking = None;
+    }
+
+    /// Läuft das Andocken schon (Angleichen oder Anflug)?
+    pub fn docking_underway(&self) -> bool {
+        match self.current() {
+            Segment::Approach { .. } => true,
+            segment => self
+                .dock_plan()
+                .is_some_and(|p| segment.is_burn() && segment.start() >= p.matching.burn.start),
+        }
+    }
+
+    /// Dieselbe Zeitleiste ohne Andocken (für die Suche nach der Annäherung).
+    pub fn without_docking(&self, bodies: &[Body], params: &VesselParams, now: f64) -> Trajectory {
+        let mut trajectory = self.clone();
+        if trajectory.docking.take().is_some() {
             trajectory.rebuild(bodies, params, now);
         }
         trajectory
@@ -1049,6 +1259,7 @@ impl Trajectory {
                         .sum()
                 }
                 Segment::Surface { .. } => 0.0,
+                Segment::Approach { .. } => forward_angle(&at(a), at(b).position),
             };
         }
         (angle / std::f64::consts::TAU + 1e-9).floor() as u32
