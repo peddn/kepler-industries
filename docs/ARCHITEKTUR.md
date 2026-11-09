@@ -209,6 +209,18 @@ Basis, Andocken und Aufträge. Außerhalb steht das Schiff „außerhalb“ und
 kommt mit einem Hop (Start mit niedriger Ziel-Apoapsis) ins Ziel. Nach dem
 Aufsetzen ist die Kette erledigt.
 
+**Rendezvous:** reine Auswertung der vorausberechneten Zeitleisten zweier
+Schiffe (`rendezvous.rs`), nichts wird verändert. Engste Annäherung: ab jetzt
+(am Boden ab dem Abheben, Zeit am Boden zählt nicht) bis vier Umläufe nach
+dem letzten geplanten Brennen; grob abgetastet (2000 Stützstellen), jedes
+Minimum mit dem Goldenen Schnitt genau gesucht. Nimmt der Abstand nur ab, ist
+das Ende des Zeitraums die engste Stelle (wichtig fürs Aufholen auf fast
+derselben Bahn). Bahnebene: Winkel zwischen den Drehimpulsen der eigenen Bahn
+nach dem letzten Brennen und der Zielbahn; die Knoten (AN/DN) sind die
+Vorzeichenwechsel des Abstands zur Zielebene, per Bisektion. Weniger als 1 ms
+pro Bild, deshalb ohne Zwischenspeicher. Das Ziel gehört zum Schiff und zum
+Spielstand (`Vessel::target`).
+
 **Zeitleiste eines Schiffs:** Folge von Abschnitten
 - `Kepler`: Freiflug ohne Luft, analytisch (universelle Variablen: eine Formel
   für Ellipse, Parabel, Hyperbel).
@@ -281,8 +293,8 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Manöver-Node, auch schon vor dem Abheben geplant. Feste Startzeit mit
   Countdown (Vorgabe 2 min); verschieben verschiebt die ganze Kette.
 - **Seitenleiste rechts** für alles, was man bedient, als Karten je nach Lage
-  (zuerst „Start“ bei einem gelandeten Schiff). Die Anzeige links bleibt reine
-  Information. Klicks auf die Leiste gehen nicht an die Karte dahinter.
+  („Start“ bei einem gelandeten Schiff, „Ziel“ bei jedem Schiff außer
+  Wracks). Die Anzeige links bleibt reine Information. Klicks auf die Leiste gehen nicht an die Karte dahinter.
   Schaltflächen prüfen Treffer selbst, ohne Bevys Picking.
 - **Δv-Balken unten** für das gewählte Schiff: volle Breite = voller Tank
   (`VesselParams::fuel_capacity`), gefüllt = Δv an Bord. Darin die geplanten
@@ -304,9 +316,16 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   niedriger Apoapsis, keine eigene Mechanik). Ohne Treibstoff oder Schub ein
   Wrack.
 - **Satelliten** sind normale Schiffe. Zu tief ausgesetzt = Fehlschlag (Absturz).
-- **Rendezvous:** nächste Annäherung anzeigen, mit Manöver-Nodes verbessern,
-  Andocken abstrahiert (kostet Relativgeschwindigkeit als Delta-v),
-  Abschnittstyp „angedockt an X".
+- **Rendezvous:** Ziel pro Schiff (Karte „Ziel“, ◄ ►), engste Annäherung
+  und Neigung zur Zielebene anzeigen, verbessert wird mit normalen
+  Manöver-Nodes. Zielbahn rosa, Annäherung als zwei Ringe mit Linie, Knoten
+  als Rauten „AN“/„DN“. Das Startfenster findet man von Hand: Startzeit und
+  Kurs verschieben, bis die Neigung klein ist.
+- **Andocken (nächster Schritt):** abstrahiert, kostet die
+  Relativgeschwindigkeit als Δv. Die Schiffe werden zu einem Verbund, die
+  Massen addieren sich. Im angedockten Zustand zündet kein Triebwerk; so hängt
+  keine Bahn von Masse oder Manövern des anderen Schiffs ab. Details im Plan
+  zu PR 12.
 - **Basis-Schiff:** Rohbau im Orbit, Transporter liefern „Bauteile" per
   Andocken, voll → Vorlage wechselt zum Basis-Schiff. Landet einmalig und
   gründet die Basis dort, wo es aufsetzt.
@@ -345,7 +364,9 @@ nichts verloren geht.
   Damit kommt ein Node auch auf einer stabilen Bahn auf einen späteren Umlauf.
 - **Liste der Nodes anklickbar** statt `↑`/`↓`.
 - Alles davon als Karten in der **Seitenleiste** (gibt es seit dem Startprofil).
-- **Startfenster:** Startzeit so wählen, dass die Bahnebene zu einem Ziel passt.
+- **Startfenster automatisch:** Startzeit und Kurs suchen, bei denen die
+  Bahnebene zum Ziel passt (von Hand geht es über die Neigung in der Karte
+  „Ziel“).
 
 ## Reihenfolge
 
@@ -358,6 +379,7 @@ nichts verloren geht.
 4. Startprofil ✓ (Kurs, Wendebeginn, Ziel-Apoapsis; Zirkularisieren per Node
    in derselben Kette; Seitenleiste mit Karte „Start“)
 5. Landung ✓ (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
-6. Rendezvous und Andocken
+6. Rendezvous ✓ (Ziel, engste Annäherung, Neigung und Knoten, Startfenster
+   von Hand) und Andocken
 7. Mond, Wechsel der Einflusssphäre
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

@@ -6,6 +6,7 @@ use crate::kepler::{self, StateVector};
 use crate::landing::{self, Crash, LandingZone};
 use crate::launch::Launch;
 use crate::maneuver::{ManeuverNode, PlanError};
+use crate::rendezvous::{self, Approach, PlaneCrossing};
 use crate::trajectory::{Segment, Trajectory};
 use serde::{Deserialize, Serialize};
 
@@ -90,6 +91,10 @@ pub struct Vessel {
     /// Spieler pro Schiff gesetzt). Fehlt in älteren Spielständen: dann aus.
     #[serde(default)]
     pub halt_warp_at_burn: bool,
+    /// Ziel für ein Rendezvous (ein anderes Schiff). Fehlt in älteren
+    /// Spielständen: keins.
+    #[serde(default)]
+    pub target: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -209,6 +214,7 @@ impl World {
             params,
             trajectory: Trajectory::new_landed(body, self.time, point, mass),
             halt_warp_at_burn: false,
+            target: None,
         });
         self.vessels.len() - 1
     }
@@ -256,6 +262,7 @@ impl World {
             params,
             trajectory,
             halt_warp_at_burn: false,
+            target: None,
         });
         self.vessels.len() - 1
     }
@@ -338,6 +345,31 @@ impl World {
             .filter_map(|v| v.trajectory.burns().first().map(|b| b.start))
             .filter(|&start| start > self.time)
             .min_by(f64::total_cmp)
+    }
+
+    /// Setzt das Ziel eines Schiffs: ein anderes Schiff oder keins.
+    pub fn set_target(&mut self, vessel: usize, target: Option<usize>) {
+        assert!(
+            target.is_none_or(|t| t != vessel && t < self.vessels.len()),
+            "ungültiges Ziel {target:?} für Schiff {vessel}"
+        );
+        self.vessels[vessel].target = target;
+    }
+
+    /// Engste Annäherung eines Schiffs an sein Ziel (siehe
+    /// `rendezvous::approach`).
+    pub fn approach(&self, vessel: usize) -> Option<Approach> {
+        let v = &self.vessels[vessel];
+        let target = &self.vessels[v.target?];
+        rendezvous::approach(&self.bodies, self.time, &v.trajectory, &target.trajectory)
+    }
+
+    /// Lage der Bahn eines Schiffs zur Bahnebene seines Ziels (siehe
+    /// `rendezvous::plane_crossing`).
+    pub fn plane_to_target(&self, vessel: usize) -> Option<PlaneCrossing> {
+        let v = &self.vessels[vessel];
+        let target = &self.vessels[v.target?];
+        rendezvous::plane_crossing(&self.bodies, self.time, &v.trajectory, &target.trajectory)
     }
 
     /// Körper und Zustand eines Schiffs zur aktuellen Zeit.

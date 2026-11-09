@@ -8,6 +8,7 @@ mod dv_bar;
 mod hud;
 mod node_ui;
 mod panel;
+mod rendezvous;
 mod view;
 
 use bevy::prelude::*;
@@ -50,6 +51,8 @@ struct Options {
     nodes: Vec<(usize, f64, [f64; 3], bool)>,
     /// Start: Schiff, Zeitpunkt (s), Kurs (°), Wendebeginn (km), Ziel-Apoapsis (km).
     launch: Option<(usize, sim::Launch)>,
+    /// Ziel: Schiff, Zielschiff.
+    targets: Vec<(usize, usize)>,
 }
 
 fn numbers(text: &str, what: &str) -> Vec<f64> {
@@ -98,12 +101,16 @@ fn parse_options() -> Options {
                     },
                 ));
             }
+            ("--target", Some(t)) => {
+                let p = numbers(&t, "--target SCHIFF,ZIEL");
+                options.targets.push((p[0] as usize, p[1] as usize));
+            }
             (other, _) => {
                 eprintln!("Unbekannte Option: {other}");
                 eprintln!(
                     "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM\n\
                      \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]\n\
-                     \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM"
+                     \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM  --target SCHIFF,ZIEL"
                 );
                 std::process::exit(2);
             }
@@ -148,6 +155,10 @@ fn main() {
         selection.0 = Some(vessel);
     }
 
+    for &(vessel, target) in &options.targets {
+        world.set_target(vessel, Some(target));
+    }
+
     let mut rig = camera::CameraRig::new(world.bodies[0].radius);
     if let Some((yaw, pitch, km)) = options.camera {
         rig.yaw = yaw.to_radians();
@@ -177,6 +188,7 @@ fn main() {
     .init_resource::<node_ui::SelectedNode>()
     .init_resource::<panel::PanelShown>()
     .init_resource::<dv_bar::BarShown>()
+    .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<node_ui::Drag>()
     .init_resource::<node_ui::UiMessage>()
     .init_gizmo_group::<node_ui::NodeGizmos>()
@@ -189,6 +201,7 @@ fn main() {
                 view::setup,
                 node_ui::configure_gizmos,
                 node_ui::setup_label,
+                rendezvous::setup_labels,
                 panel::setup,
                 dv_bar::setup,
                 hud::setup,
@@ -203,11 +216,12 @@ fn main() {
             advance_simulation,
             camera::input,
             camera::apply,
-            panel::buttons,
-            node_ui::input,
+            // Eingaben ändern die Simulation; danach wird nur noch gelesen.
+            (panel::buttons, node_ui::input, rendezvous::update).chain(),
             view::sync_markers,
             node_ui::draw,
             node_ui::sync_label,
+            rendezvous::sync_labels,
             panel::sync,
             panel::hover,
             dv_bar::sync,
@@ -216,6 +230,7 @@ fn main() {
             view::draw_burn_points,
             view::draw_zones,
             view::draw_touchdowns,
+            rendezvous::draw,
             hud::update,
         )
             .chain(),

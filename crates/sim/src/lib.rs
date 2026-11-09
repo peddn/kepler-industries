@@ -12,6 +12,7 @@ pub mod kepler;
 pub mod landing;
 pub mod launch;
 pub mod maneuver;
+pub mod rendezvous;
 pub mod scenario;
 pub mod trajectory;
 pub mod world;
@@ -21,6 +22,7 @@ pub use kepler::StateVector;
 pub use landing::{Crash, LandingZone};
 pub use launch::{Launch, LaunchPlan, LaunchProfile};
 pub use maneuver::{Burn, ManeuverNode, Plan, PlanError};
+pub use rendezvous::{Approach, PlaneCrossing};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
 pub use world::{
     Base, BudgetItem, DeltaVBudget, Touchdown, Vessel, VesselParams, VesselStatus, World,

@@ -1007,6 +1007,20 @@ impl Trajectory {
         })
     }
 
+    /// Der Abschnitt, der den Zeitpunkt `t` enthält (auch in der Zukunft);
+    /// `None` außerhalb der vorausberechneten Zeitleiste.
+    pub fn predicted_segment(&self, t: f64) -> Option<&Segment> {
+        let k = self.segments.partition_point(|s| s.start() <= t);
+        let segment = self.segments.get(k.checked_sub(1)?)?;
+        (t <= segment.end()).then_some(segment)
+    }
+
+    /// Körper und vorausberechneter Zustand zum Zeitpunkt `t`.
+    pub fn predicted_state(&self, bodies: &[Body], t: f64) -> Option<(BodyId, StateVector)> {
+        let segment = self.predicted_segment(t)?;
+        Some((segment.body(), segment.state_at(bodies, t)))
+    }
+
     /// Körper und Zustand zum Zeitpunkt `t` (muss im aktuellen Abschnitt liegen).
     pub fn state_at(&self, bodies: &[Body], t: f64) -> (BodyId, StateVector) {
         let segment = self.current();

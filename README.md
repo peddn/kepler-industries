@@ -15,8 +15,8 @@ abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
 mit einem Manöver. „Fähre-3" steht an der Startbasis und kann starten.
 
 Gestartet wird mit einem Startprofil aus drei Werten: Kurs, Wendebeginn und
-Ziel-Apoapsis. Eingestellt wird es in der Seitenleiste rechts, die erscheint,
-sobald ein gelandetes Schiff gewählt ist. Die Vorschau zeigt den ganzen
+Ziel-Apoapsis. Eingestellt wird es in der Karte „Start“ der Seitenleiste
+rechts, die erscheint, sobald ein gelandetes Schiff gewählt ist. Die Vorschau zeigt den ganzen
 Aufstieg (gelb) und die Bahn danach. Den Node zum Zirkularisieren an der
 Apoapsis kann man schon vor dem Abheben setzen.
 
@@ -30,6 +30,16 @@ niedriger Ziel-Apoapsis, zum Beispiel von der Startbasis zum Übungsfeld 60 km
 östlich (Kurs 90°, Ziel-Apoapsis etwa 27 km). Relais-1 und Sonde-2 sind
 Satelliten ohne Fallschirm und mit weniger Schub als Gewicht: Sie stürzen beim
 Landen immer ab. Die Anzeige nennt dann Ort (auch das Zielgebiet) und Grund.
+
+Für ein Rendezvous wählt man in der Karte „Ziel“ der Seitenleiste ein
+anderes Schiff (◄ ►). Dessen Bahn wird rosa. Die Karte zeigt den Abstand,
+die engste Annäherung (wann, wie nah, wie schnell relativ zueinander) und die
+Neigung zur Bahnebene des Ziels. Gesucht wird bis vier Umläufe nach dem
+letzten geplanten Manöver, also auch auf den geplanten Bahnen. Auf der Karte
+markieren zwei Ringe mit einer Linie die Annäherung, Rauten mit „AN“/„DN“
+die Knoten, an denen ein Node die Bahnebene angleicht. Am Boden gilt das für
+die Bahn nach dem geplanten Start: Startzeit und Kurs so lange verschieben,
+bis die Neigung klein ist, ergibt das Startfenster.
 
 Unten zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
 ist der volle Tank, darin die geplanten Brennvorgänge der Kette (Start gelb,
@@ -47,6 +57,13 @@ der Liste stehen, bis es wieder passt. Gelbe Ringe auf der Bahn zeigen Beginn
 und Ende jedes Brennens. Während des Brennens zeigt die blaue Linie die momentane Bahn, die sich
 sichtbar zur geplanten (violetten) hin verformt. Endet eine Bahn am Boden,
 zeigt ein rotes Kreuz den Aufschlagpunkt.
+
+![Rendezvous](docs/screenshots/rendezvous.png)
+
+*Fähre-3 zu Relais-1 (rosa): Start im Startfenster (Kurs 120°, Neigung zum
+Ziel 0,3°), Node 1 macht die Bahn auf 100 km rund, Node 2 hebt sie leicht
+an, damit die Fähre aufholt. Nach drei Umläufen kommt sie Relais-1 auf 641 m
+nahe (Ringe mit Linie). Nachspielen mit den Optionen unten.*
 
 ![Landung](docs/screenshots/landung.png)
 
@@ -109,6 +126,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Mausrad | Zoomen |
 | Linksklick auf ein Schiff / `Tab` | Schiff wählen / nächstes Schiff |
 | Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
+| Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
@@ -136,7 +154,16 @@ cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,
 - `--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]`: Node setzen (Zeit in s,
   Δv in m/s), mehrfach für eine Kette; scharf wie im Spiel, `SCHARF` = 0 lässt
   die Kette zum Testen nicht scharf
+- `--target SCHIFF,ZIEL`: Ziel für ein Rendezvous setzen
 - `--screenshot DATEI.png`: Bild speichern und beenden (Zeit steht dabei still)
+
+Rendezvous Fähre-3 → Relais-1 aus dem Bild oben (Start im Startfenster,
+Zirkularisieren, Aufholen):
+
+```sh
+cargo run -p game -- --time 11100 --launch 2,11325,120,1.5,100 --target 2,0 \
+  --node 2,11638,682,0,0 --node 2,12616,99.75,0,0
+```
 
 ## Tests
 
@@ -149,6 +176,6 @@ in Sekunden.
 
 ## Aufbau
 
-- `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Start, Zeitleiste, Spielstand)
+- `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Start, Landung, Rendezvous, Zeitleiste, Spielstand)
 - `crates/game`: Darstellung und Eingabe mit Bevy (Anzeige links, Seitenleiste rechts)
 - `docs/ARCHITEKTUR.md`: Regeln, Physikmodell, Entscheidungen, Merkliste

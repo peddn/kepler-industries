@@ -3,6 +3,7 @@
 use crate::Sim;
 use crate::camera::{self, CameraRig, MainCamera, to_view};
 use crate::node_ui::Selection;
+use crate::rendezvous::TARGET_COLOR;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use sim::integrator::Sample;
@@ -39,6 +40,8 @@ pub struct VesselMarker(usize);
 pub struct MarkerMaterials {
     vessel: Handle<StandardMaterial>,
     selected: Handle<StandardMaterial>,
+    /// Ziel des gewählten Schiffs.
+    target: Handle<StandardMaterial>,
     wreck: Handle<StandardMaterial>,
 }
 
@@ -111,6 +114,7 @@ pub fn setup(
     let markers = MarkerMaterials {
         vessel: materials.add(unlit(Color::srgb(1.0, 1.0, 1.0))),
         selected: materials.add(unlit(Color::srgb(1.0, 0.85, 0.2))),
+        target: materials.add(unlit(TARGET_COLOR)),
         wreck: materials.add(unlit(Color::srgb(1.0, 0.2, 0.2))),
     };
     for i in 0..sim.0.vessels.len() {
@@ -153,6 +157,7 @@ pub fn sync_markers(
 ) {
     let world = &sim.0;
     let camera_position = camera.translation;
+    let target = selection.0.and_then(|i| world.vessels[i].target);
 
     for (_, mut transform) in &mut planets {
         // In PR 1 sitzt der einzige Körper im Ursprung der Simulation.
@@ -178,6 +183,7 @@ pub fn sync_markers(
         let wanted = match world.vessel_status(*i) {
             VesselStatus::Wreck { .. } => &materials.wreck,
             _ if selection.0 == Some(*i) => &materials.selected,
+            _ if target == Some(*i) => &materials.target,
             _ => &materials.vessel,
         };
         if material.0 != *wanted {
@@ -223,16 +229,27 @@ fn span(world: &World, segment: Option<&Segment>) -> f64 {
 
 /// Zeichnet für jedes Schiff die vorausberechnete Bahn ab jetzt.
 ///
-/// Blau die aktuelle Bahn, orange Stücke durch die Luft, gelb das Brennen,
-/// violett die Bahn danach. Wie in KSP wird die aktuelle Bahn bei einem
+/// Blau die aktuelle Bahn (beim Ziel des gewählten Schiffs rosa), orange
+/// Stücke durch die Luft, gelb das Brennen, violett die Bahn danach. Wie in KSP wird die aktuelle Bahn bei einem
 /// geplanten Manöver trotzdem ganz gezeigt (bis zum Eintritt in die Luft).
 /// Gezeichnet wird ein Umlauf voraus, mit Manövern bis zum letzten und dann
 /// noch ein Umlauf der Bahn danach; sonst stapeln sich bei zerfallenden Bahnen
 /// die Ellipsen.
-pub fn draw_trajectories(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) {
+pub fn draw_trajectories(
+    sim: Res<Sim>,
+    rig: Res<CameraRig>,
+    selection: Res<Selection>,
+    mut gizmos: Gizmos,
+) {
     let world = &sim.0;
     let now = world.time;
-    for vessel in &world.vessels {
+    let target = selection.0.and_then(|i| world.vessels[i].target);
+    for (i, vessel) in world.vessels.iter().enumerate() {
+        let orbit_color = if target == Some(i) {
+            TARGET_COLOR
+        } else {
+            ORBIT_COLOR
+        };
         let trajectory = &vessel.trajectory;
         let first_kepler = trajectory
             .segments()
@@ -267,7 +284,7 @@ pub fn draw_trajectories(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos)
                     let color = if after_burn {
                         PLANNED_COLOR
                     } else {
-                        ORBIT_COLOR
+                        orbit_color
                     };
                     gizmos.linestrip(
                         (0..=256).map(|i| {

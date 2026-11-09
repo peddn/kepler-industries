@@ -1,8 +1,9 @@
 //! Seitenleiste rechts: alles, was man bedienen kann, je nach Lage als Karte.
 //! Die Anzeige links bleibt reine Information.
 //!
-//! Erste Karte: "Start" für ein gelandetes Schiff. Später kommen hier z. B.
-//! der Node-Manager, "scharf schalten" und "+1 Umlauf" dazu.
+//! Karten: "Start" für ein gelandetes Schiff, "Ziel" für jedes Schiff (kein
+//! Wrack). Später kommen hier z. B. der Node-Manager, "scharf schalten" und
+//! "+1 Umlauf" dazu.
 //!
 //! Klicks auf die Leiste gehen nicht an die Karte dahinter (`over_panel`).
 //! Schaltflächen prüfen Treffer selbst (`ComputedNode::contains_point`), ohne
@@ -11,6 +12,7 @@
 use crate::Sim;
 use crate::hud::{UiFont, format_span, km};
 use crate::node_ui::{Selection, UiMessage};
+use crate::rendezvous::{Rendezvous, TARGET_COLOR, TargetInfo, distance_text};
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use bevy::ui::{ComputedNode, UiGlobalTransform};
@@ -45,6 +47,20 @@ pub struct Panel;
 /// Karte "Start" mit Titel, Zeilen und Ergebnis.
 #[derive(Component)]
 pub struct LaunchCard;
+
+/// Karte "Ziel": Name mit ◄ ► zum Blättern und die Werte zum Ziel.
+#[derive(Component)]
+pub struct TargetCard;
+
+#[derive(Component)]
+pub struct TargetName;
+
+#[derive(Component)]
+pub struct TargetResult;
+
+/// ◄ (−1) oder ► (+1) auf der Karte "Ziel".
+#[derive(Component)]
+pub struct TargetButton(i32);
 
 #[derive(Component)]
 pub struct LaunchTitle;
@@ -243,7 +259,129 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>) {
                     .with_child((PlanButtonText, text(font, "Start planen", 14.0)));
                     card.spawn((LaunchResult, text(font, "", 14.0)));
                 });
+            panel
+                .spawn((
+                    TargetCard,
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        padding: UiRect::all(px(10)),
+                        row_gap: px(8),
+                        border: UiRect::all(px(1)),
+                        ..default()
+                    },
+                    BackgroundColor(CARD_COLOR),
+                    BorderColor::all(BORDER_COLOR),
+                ))
+                .with_children(|card| {
+                    card.spawn(text(font, "Ziel", 16.0));
+                    card.spawn(Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: px(6),
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        let arrow = |row: &mut ChildSpawnerCommands, sign: i32, label: &str| {
+                            row.spawn((
+                                PanelButton,
+                                TargetButton(sign),
+                                button_node(px(32)),
+                                BackgroundColor(BUTTON_COLOR),
+                                BorderColor::all(BORDER_COLOR),
+                            ))
+                            .with_child(text(font, label, 14.0));
+                        };
+                        arrow(row, -1, "◄");
+                        row.spawn((
+                            TargetName,
+                            text(font, "", 14.0),
+                            TextLayout::justify(Justify::Center),
+                            Node {
+                                flex_grow: 1.0,
+                                ..default()
+                            },
+                        ));
+                        arrow(row, 1, "►");
+                    });
+                    card.spawn((TargetResult, text(font, "", 14.0)));
+                });
         });
+}
+
+/// Das gewählte Schiff, wenn es kein Wrack ist (dann ist die Leiste zu sehen).
+fn panel_vessel(world: &World, selection: &Selection) -> Option<usize> {
+    let i = selection.0?;
+    (!matches!(
+        world.vessels[i].trajectory.current(),
+        Segment::Surface { wreck: true, .. }
+    ))
+    .then_some(i)
+}
+
+/// Nächstes Ziel beim Blättern: kein Ziel, dann die anderen Schiffe.
+fn cycle_target(world: &World, vessel: usize, step: i32) -> Option<usize> {
+    let choices: Vec<Option<usize>> = std::iter::once(None)
+        .chain((0..world.vessels.len()).filter(|&k| k != vessel).map(Some))
+        .collect();
+    let current = choices
+        .iter()
+        .position(|&c| c == world.vessels[vessel].target)
+        .unwrap_or(0);
+    choices[(current as i32 + step).rem_euclid(choices.len() as i32) as usize]
+}
+
+/// Werte zum Ziel als Textzeilen.
+fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
+    let Some(info) = info else {
+        return "Kein Ziel. Mit ◄ ► ein anderes Schiff wählen.".into();
+    };
+    let row = |label: &str, value: String| format!("{label:<14}{value}");
+    let (own, target) = (
+        world.vessel_state(info.vessel),
+        world.vessel_state(info.target),
+    );
+    let mut lines = Vec::new();
+    if own.0 == target.0 {
+        lines.push(row(
+            "Abstand",
+            distance_text(own.1.position.distance(target.1.position)),
+        ));
+    }
+    match &info.approach {
+        Some(a) => {
+            lines.push(row(
+                "Annäherung",
+                format!("in {}", format_span((a.time - world.time).max(0.0))),
+            ));
+            if a.revolutions > 0 {
+                lines.push(row(
+                    "",
+                    match a.revolutions {
+                        1 => "nach 1 Umlauf".into(),
+                        n => format!("nach {n} Umläufen"),
+                    },
+                ));
+            }
+            lines.push(row("  auf", distance_text(a.distance)));
+            lines.push(row("  relativ", format!("{:.0} m/s", a.relative_speed)));
+        }
+        None => lines.push(row("Annäherung", "–".into())),
+    }
+    if let Some(plane) = &info.plane {
+        lines.push(row(
+            "Neigung",
+            format!("{:.1}°", plane.inclination.to_degrees()),
+        ));
+        for (name, time) in [("  AN in", plane.ascending), ("  DN in", plane.descending)] {
+            if let Some(t) = time {
+                lines.push(row(name, format_span((t - world.time).max(0.0))));
+            }
+        }
+    }
+    if info.approach.is_none() && info.plane.is_none() {
+        lines.push("Erst mit einer Bahn (oder einem geplanten Start).".into());
+    }
+    lines.join("\n")
 }
 
 /// Ein gelandetes Schiff (kein Wrack) ist gewählt: dessen Nummer.
@@ -345,9 +483,21 @@ fn launch_result(world: &World, i: usize) -> String {
 pub fn sync(
     sim: Res<Sim>,
     selection: Res<Selection>,
+    rendezvous: Res<Rendezvous>,
     mut shown: ResMut<PanelShown>,
     mut panel: Single<&mut Node, With<Panel>>,
     mut rows: Single<&mut Node, (With<LaunchRows>, Without<Panel>)>,
+    mut launch_card: Single<&mut Node, (With<LaunchCard>, Without<Panel>, Without<LaunchRows>)>,
+    mut target_texts: Query<
+        (&mut Text, &mut TextColor, Has<TargetName>),
+        (
+            Or<(With<TargetName>, With<TargetResult>)>,
+            Without<LaunchTitle>,
+            Without<PlanButtonText>,
+            Without<LaunchResult>,
+            Without<ParamValue>,
+        ),
+    >,
     mut title: Single<&mut Text, With<LaunchTitle>>,
     mut plan_text: Single<&mut Text, (With<PlanButtonText>, Without<LaunchTitle>)>,
     mut result: Single<
@@ -368,9 +518,32 @@ pub fn sync(
     >,
 ) {
     let world = &sim.0;
+    let Some(vessel) = panel_vessel(world, &selection) else {
+        shown.0 = false;
+        panel.display = Display::None;
+        return;
+    };
+    shown.0 = true;
+    panel.display = Display::Flex;
+
+    let info = rendezvous.0.as_ref();
+    for (mut text, mut color, is_name) in &mut target_texts {
+        let (value, wanted) = if is_name {
+            match world.vessels[vessel].target {
+                Some(t) => (world.vessels[t].name.clone(), TARGET_COLOR),
+                None => ("kein Ziel".into(), HINT_COLOR),
+            }
+        } else {
+            (target_result(world, info), Color::WHITE)
+        };
+        if text.0 != value {
+            text.0 = value;
+        }
+        color.0 = wanted;
+    }
+
     let landed = landed_selection(world, &selection);
-    shown.0 = landed.is_some();
-    panel.display = if shown.0 {
+    launch_card.display = if landed.is_some() {
         Display::Flex
     } else {
         Display::None
@@ -442,22 +615,30 @@ pub fn buttons(
     window: Single<&Window, With<PrimaryWindow>>,
     adjusts: Query<(&Adjust, &ComputedNode, &UiGlobalTransform)>,
     plan: Single<(&ComputedNode, &UiGlobalTransform), With<PlanButton>>,
+    targets: Query<(&TargetButton, &ComputedNode, &UiGlobalTransform)>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
         return;
     }
     let world = &mut sim.0;
-    let (Some(i), Some(cursor)) = (
-        landed_selection(world, &selection),
-        physical_cursor(&window),
-    ) else {
+    let (Some(vessel), Some(cursor)) = (panel_vessel(world, &selection), physical_cursor(&window))
+    else {
+        return;
+    };
+    let hit = |node: &ComputedNode, transform: &UiGlobalTransform| {
+        node.contains_point(*transform, cursor)
+    };
+    if let Some((TargetButton(step), ..)) = targets.iter().find(|(_, n, t)| hit(n, t)) {
+        let target = cycle_target(world, vessel, *step);
+        world.set_target(vessel, target);
+        return;
+    }
+    // Die Karte "Start" gibt es nur am Boden.
+    let Some(i) = landed_selection(world, &selection) else {
         return;
     };
     let fine = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let planned = world.vessels[i].trajectory.launch().is_some();
-    let hit = |node: &ComputedNode, transform: &UiGlobalTransform| {
-        node.contains_point(*transform, cursor)
-    };
     let mut failure = None;
     if planned && let Some((a, ..)) = adjusts.iter().find(|(_, n, t)| hit(n, t)) {
         failure = adjust(world, i, a.param, a.sign * a.param.step(fine)).err();
