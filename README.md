@@ -41,6 +41,16 @@ die Knoten, an denen ein Node die Bahnebene angleicht. Am Boden gilt das für
 die Bahn nach dem geplanten Start: Startzeit und Kurs so lange verschieben,
 bis die Neigung klein ist, ergibt das Startfenster.
 
+Liegt die engste Annäherung unter 1 km, dockt man mit „Andocken bei
+Annäherung“ in der Karte „Ziel“ an. Die Kette bekommt dann einen
+automatischen Node „Angleichen“ (doppelter rosa Ring): Er hebt an der engsten
+Stelle die Relativgeschwindigkeit auf. Danach fliegt das Schiff auf gerader
+Linie langsam ans Ziel heran (höchstens 2 m/s, Kontakt mit 0,1 m/s). Die
+Karte zeigt Zeiten und Δv, der Δv-Balken die Kosten in Rosa. Beim Kontakt
+werden die Schiffe ein Verbund („Relais-1 + Fähre-3“): Massen, Tanks und
+Triebwerke addieren sich, und der Verbund kann normal Manöver fliegen. Das
+Ziel muss dafür auf einer stabilen Bahn sein und darf nichts mehr planen.
+
 Die Kamera lässt sich mit `F` auf das gewählte Objekt richten: Schiff,
 Node oder Zielgebiet (Raute in der Kreismitte anklicken). Sie folgt ihm, auch
 wenn man danach etwas anderes wählt; so kann man ein Zielgebiet im Blick
@@ -85,6 +95,17 @@ nahe (Ringe mit Linie). Nachspielen mit den Optionen unten.*
 *Nach elf Stunden Spielzeit: Die aufgeklappte Statusleiste zeigt den Hop der
 Fähre ins Übungsfeld, ein Manöver von Relais-1 und wie Sonde-2 von Umlauf zu
 Umlauf tiefer in die Luft taucht, bis sie abstürzt.*
+
+![Andocken geplant](docs/screenshots/andocken-plan.png)
+
+*Fähre-3 vor dem Andocken an Relais-1: In 10 Minuten gleicht sie an der
+engsten Stelle (641 m) mit 104 m/s an, fliegt in 6 Minuten heran (5 m/s) und
+hat danach noch 176 m/s.*
+
+![Andocken aus der Nähe](docs/screenshots/andocken.png)
+
+*Im Anflug, aus der Nähe: Fähre-3 (gelb) ist noch 271 m von Relais-1 (rosa)
+entfernt, Kontakt in zweieinhalb Minuten.*
 
 ![Nahansicht](docs/screenshots/nahansicht.png)
 
@@ -162,6 +183,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | `N` | Nahansicht an/aus (Planet unten, Zoom bis 10 m; nur mit einem Objekt im Fokus) |
 | Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
+| Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
@@ -187,6 +209,7 @@ cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,
 - `--focus SCHIFF` / `--focus-zone ZIELGEBIET`: Kamera auf ein Schiff bzw.
   Zielgebiet (0 = Startbasis, 1 = Übungsfeld, 2 = Messfeld Ost)
 - `--near`: Nahansicht (mit `--focus` oder `--focus-zone`)
+- `--dock SCHIFF`: Andocken an das Ziel einschalten (nach `--target`)
 - `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2, 2 = Fähre-3)
 - `--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM`: Start planen (Zeitpunkt des
   Abhebens in s, Kurs in Grad), z. B. `--launch 2,120,90,2,100`
@@ -204,7 +227,15 @@ cargo run -p game -- --time 11100 --launch 2,11325,120,1.5,100 --target 2,0 \
   --node 2,11638,682,0,0 --node 2,12616,99.75,0,0
 ```
 
-Dasselbe kurz vor der Annäherung in der Nahansicht (Bild „Nahansicht“):
+Mit Andocken (`--dock 2`) und dann mitten im Anflug aus der Nähe (Bild
+„Andocken aus der Nähe“):
+
+```sh
+cargo run -p game -- --time 21800 --launch 2,11325,120,1.5,100 --target 2,0 \
+  --node 2,11638,682,0,0 --node 2,12616,99.75,0,0 --dock 2 --focus 2 --near --camera 40,20,0.6
+```
+
+Dasselbe ohne Andocken kurz vor der Annäherung in der Nahansicht (Bild „Nahansicht“):
 
 ```sh
 cargo run -p game -- --time 21588 --launch 2,11325,120,1.5,100 --target 2,0 \

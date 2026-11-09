@@ -162,6 +162,8 @@ pub enum PlanError {
     NotLanded,
     /// Der Schub ist kleiner als das Gewicht.
     TooWeak,
+    /// Das Schiff fliegt gerade zum Andocken an.
+    Docking,
 }
 
 impl fmt::Display for PlanError {
@@ -181,6 +183,7 @@ impl fmt::Display for PlanError {
             PlanError::NotLanded => "Starten geht nur am Boden",
             PlanError::TooWeak => "Schub reicht nicht zum Abheben",
             PlanError::NoNode => "Kein Node geplant",
+            PlanError::Docking => "Schiff fliegt gerade zum Andocken an",
         })
     }
 }

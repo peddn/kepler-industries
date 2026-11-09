@@ -366,7 +366,8 @@ fn coast_path(world: &World, trajectory: &Trajectory, from: f64, points: usize) 
             | Segment::Surface {
                 liftoff: Some(_), ..
             } => {}
-            Segment::Surface { .. } => break,
+            // Am Boden und im Anflug zum Andocken geht kein Node.
+            Segment::Surface { .. } | Segment::Approach { .. } => break,
         }
     }
     pieces
@@ -433,6 +434,7 @@ fn editable(world: &World, i: usize) -> bool {
     let trajectory = &world.vessels[i].trajectory;
     let current = trajectory.current();
     !current.is_burn()
+        && !matches!(current, Segment::Approach { .. })
         && (trajectory.launch().is_some() || !matches!(current, Segment::Surface { .. }))
 }
 
@@ -458,8 +460,19 @@ pub fn input(
     let world = &mut sim.0;
     let mut failure: Option<PlanError> = None;
     let count = world.vessels.len();
+    // Ein gerade angedocktes Schiff steht für seinen Verbund.
+    if let Some(i) = selection.0
+        && world.vessels[i].docked_to.is_some()
+    {
+        selection.0 = Some(world.host(i));
+        selected.0 = None;
+    }
     if keys.just_pressed(KeyCode::Tab) && count > 0 {
-        selection.0 = Some(selection.0.map_or(0, |i| (i + 1) % count));
+        // Angedockte Schiffe überspringen: Gewählt wird der Verbund.
+        let start = selection.0.unwrap_or(count - 1);
+        selection.0 = (1..=count)
+            .map(|k| (start + k) % count)
+            .find(|&i| world.vessels[i].docked_to.is_none());
         selected.0 = None;
         zone.0 = None;
     }
@@ -717,6 +730,8 @@ fn click(
         .filter(|(d, _)| *d < PICK_RADIUS)
         .min_by(|a, b| a.0.total_cmp(&b.0));
     if let Some((_, i)) = vessel_hit {
+        // Ein angedocktes Schiff steht für seinen Verbund.
+        let i = world.host(i);
         if selection.0 != Some(i) {
             selected.0 = None;
         }

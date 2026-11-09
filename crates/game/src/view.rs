@@ -274,9 +274,16 @@ pub fn draw_trajectories(
 ) {
     let world = &sim.0;
     let now = world.time;
-    let target = selection.0.and_then(|i| world.vessels[i].target);
+    let target = selection
+        .0
+        .and_then(|i| world.vessels[i].target)
+        .map(|t| world.host(t));
     let points = orbit_points(rig.near);
     for (i, vessel) in world.vessels.iter().enumerate() {
+        // Angedockte Schiffe fliegen mit ihrem Hauptschiff.
+        if vessel.docked_to.is_some() {
+            continue;
+        }
         let orbit_color = if target == Some(i) {
             TARGET_COLOR
         } else {
@@ -358,6 +365,17 @@ pub fn draw_trajectories(
                     );
                 }
                 Segment::Surface { .. } => {}
+                Segment::Approach { .. } => {
+                    // Anflug zum Andocken: kurz und langsam, fein gezeichnet.
+                    let (a, b) = (from, segment.end());
+                    gizmos.linestrip(
+                        (0..=64).map(|i| {
+                            let t = a + (b - a) * i as f64 / 64.0;
+                            to_view(segment.state_at(&world.bodies, t).position, rig.focus)
+                        }),
+                        TARGET_COLOR,
+                    );
+                }
             }
         }
     }
@@ -429,7 +447,7 @@ pub fn draw_burn_points(
 ) {
     let world = &sim.0;
     let eye = camera.translation;
-    for vessel in &world.vessels {
+    for vessel in world.vessels.iter().filter(|v| v.docked_to.is_none()) {
         let burns = vessel.trajectory.burns();
         let times = burns.iter().flat_map(|b| [b.start, b.end]);
         for t in times {
@@ -466,7 +484,7 @@ pub fn draw_touchdowns(
     mut gizmos: Gizmos,
 ) {
     let world = &sim.0;
-    for i in 0..world.vessels.len() {
+    for i in (0..world.vessels.len()).filter(|&i| world.vessels[i].docked_to.is_none()) {
         let Some(t) = world.touchdown(i) else {
             continue;
         };

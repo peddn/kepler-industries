@@ -97,9 +97,7 @@ fn too_low_orbit_decays_and_crashes() {
                 }
             }
             VesselStatus::Wreck { .. } => break,
-            VesselStatus::Landed { .. } | VesselStatus::Burning { .. } => {
-                panic!("darf weder landen noch brennen")
-            }
+            status => panic!("darf weder landen noch brennen: {status:?}"),
         }
     }
     assert!(

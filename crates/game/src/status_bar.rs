@@ -115,6 +115,10 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             format!("abgestürzt {}: {}", zone(*z, point), crash_reason(reason)),
             CRASH_COLOR,
         ),
+        LogKind::Docked { host } => (
+            format!("angedockt an {}", world.vessels[*host].name),
+            LANDED_COLOR,
+        ),
     };
     Line {
         time: entry.time,

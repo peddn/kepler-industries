@@ -95,8 +95,10 @@ erzeugte ein Fix gegen das Wackeln einen wochenlang unbemerkten Treibstoff-Bug.
 
 **Regel:** Jedes Schiff kennt das Ende seines aktuellen Abschnitts. Pro Bild ist
 das ein Zahlenvergleich. Gerechnet wird nur, wenn ein Abschnitt endet. Wracks
-am Boden kosten nichts. Eine globale Ereignis-Warteschlange kommt erst, wenn
-Schiffe miteinander wechselwirken (Rendezvous).
+am Boden kosten nichts. Die einzige Wechselwirkung zwischen Schiffen ist das
+Andocken: `World::advance_to` hält genau am frühesten Kontakt an, verbindet
+die Schiffe und rückt dann weiter vor (eine Ereignis-Warteschlange in ihrer
+kleinsten Form).
 
 ### 10. Kleine, spielbare Schritte
 *KSP 2:* Studio 2024 geschlossen, versprochene Inhalte nie geliefert.
@@ -226,6 +228,31 @@ Vorzeichenwechsel des Abstands zur Zielebene, per Bisektion. Weniger als 1 ms
 pro Bild, deshalb ohne Zwischenspeicher. Das Ziel gehört zum Schiff und zum
 Spielstand (`Vessel::target`).
 
+**Andocken** (`docking.rs`): Der Spieler stellt mit normalen Nodes die
+engste Annäherung ein; liegt sie unter 1 km, hängt „Andocken“ an die Kette:
+1. **Angleichen:** ein automatischer Node an der engsten Annäherung (ohne
+   das Andocken gesucht), Δv = Geschwindigkeit des Ziels minus eigene. Ein
+   normales, zentriertes Brennen; es endet fast genau an der engsten Stelle.
+2. **Anflug** (`Segment::Approach`): gerade Linie im mitbewegten System des
+   Ziels (radial, entlang, normal) bis zu dessen Mitte; beschleunigen mit
+   0,05 m/s² auf höchstens 2 m/s, Kontakt mit 0,1 m/s. Der Treibstoff ist die
+   Summe des Schubs, den diese Linie gegen die Schwerkraft braucht, dazu der
+   Rest der Relativgeschwindigkeit nach dem Angleichen. Der Abschnitt
+   speichert eine Kopie der Zielbahn (Keplerzustand zu einer Epoche) und ist
+   analytisch: keine Drift, unabhängig von der Schrittgröße.
+3. **Kontakt:** Das Schiff wird Teil des Verbunds um das Ziel
+   (`Vessel::docked_to`). Das Ziel bleibt Hauptschiff mit Name und Kette;
+   seine wirksamen Werte (`World::params`) sind die Summe (gemeinsamer Tank,
+   Summenschub, Ausströmgeschwindigkeit nach Massenstrom). Lage und Masse
+   eines angedockten Schiffs sind die des Hauptschiffs; Befehle gehen an das
+   Hauptschiff.
+
+Bedingung: Das Ziel ist ab dem Angleichen auf einer stabilen Bahn und plant
+nichts mehr (sein Keplerabschnitt hat kein Ende). Nur dann hängt seine Bahn
+nicht von der Masse ab, und Vorschau = Ausführung bleibt exakt. Weil das
+Andocken von zwei Schiffen abhängt, rechnet `World` es nach jedem Befehl an
+irgendeiner Kette neu (`refresh_dockings`).
+
 **Zeitleiste eines Schiffs:** Folge von Abschnitten
 - `Kepler`: Freiflug ohne Luft, analytisch (universelle Variablen: eine Formel
   für Ellipse, Parabel, Hyperbel).
@@ -350,17 +377,14 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Manöver-Nodes. Zielbahn rosa, Annäherung als zwei Ringe mit Linie, Knoten
   als Rauten „AN“/„DN“. Das Startfenster findet man von Hand: Startzeit und
   Kurs verschieben, bis die Neigung klein ist.
-- **Andocken (nächster Schritt):** Der Spieler stellt die engste Annäherung
-  ein (unter 1 km). Dann hängt die Kette automatisch an: ein Node
-  „Angleichen“ an der Annäherung (echtes Brennen, Δv = Relativgeschwindigkeit,
-  ohne Griffe), danach ein Abschnitt „Anflug“ auf gerader Linie im
-  mitbewegten System des Ziels bis zum Kontakt (höchstens 2 m/s, beim Kontakt
-  0,1 m/s; Treibstoff aus dem nötigen Schub). Der Abschnitt speichert eine
-  Kopie der Zielbahn, hängt also nicht von einem anderen Schiff ab; das Ziel
-  plant ab dem Angleichen nichts mehr. Beim Kontakt werden die Schiffe ein
-  Verbund: ein Schiff mit addierten Werten (gemeinsamer Tank, Summenschub),
-  das normal brennen kann. Abdocken mit Regler für den mitgenommenen
-  Treibstoff.
+- **Andocken** als letzter Schritt der Kette (siehe Physikmodell): Schaltfläche
+  in der Karte „Ziel“, Ablauf und Kosten dort, in der Kettenzeile links und
+  rosa im Δv-Balken; der Angleich-Node ist ein doppelter rosa Ring ohne
+  Griffe. Das Ziel wird Hauptschiff, der Verbund kann normal brennen (so
+  lassen sich größere Schiffe im Orbit zusammensetzen). In der Liste steht er
+  als „Relais-1 + Fähre-3“, angedockte Schiffe sind nicht einzeln wählbar.
+- **Abdocken (nächster Schritt):** jetzt, mit kleinem Trennstoß und einem
+  Regler, wie viel Treibstoff das abdockende Schiff mitnimmt.
 - **Basis-Schiff:** Rohbau im Orbit, Transporter liefern „Bauteile" per
   Andocken, voll → Vorlage wechselt zum Basis-Schiff. Landet einmalig und
   gründet die Basis dort, wo es aufsetzt.
@@ -385,7 +409,42 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 - „Hop zum Ziel": Parameter automatisch suchen, falls Zielen per Hand zu fummelig ist
 - Modelle der Schiffe in der Nahansicht (Ausrichtung beim Anflug aus der
   Anfluglinie, Haltepunkt vor dem Andockstutzen)
-- **Geparkt:** Bandbreite, Modulslots, Gelände/Höhenkarte, Wiedereintrittshitze
+- **Geparkt:** Bandbreite, Modulslots, Gelände/Höhenkarte
+
+## Haushalte (später, alle nach demselben Muster)
+
+Ein Vorrat pro Schiff, den jeder Abschnitt zu Beginn speichert (wie heute die
+Masse); dazwischen ändert er sich nach einer Formel oder wird mit der Bahn
+vorausberechnet. Quellen füllen ihn, Verbraucher leeren ihn, an einer Grenze
+passiert etwas. So bleiben Vorschau = Ausführung, keine Drift und die
+Unabhängigkeit von der Schrittgröße erhalten. Die Werte kommen aus Chassis
+und Modulen.
+
+- **Wärme** (mit Chassis und Modulen, weil es erst dann Gegenmaßnahmen gibt):
+  Temperatur als Vorrat. Im Freiflug gibt das Schiff über Radiatoren Wärme ab;
+  die Temperatur fällt nach einer Formel zur Gleichgewichtstemperatur hin
+  (direkt für jeden Zeitpunkt). In der Luft nimmt es Wärme aus Luftdichte und
+  Geschwindigkeit auf; das wird mit der Bahn vorausberechnet. Über der
+  Grenztemperatur: „verglüht“, die Zeitleiste endet dort (wie beim Aufprall).
+  Werte: Wärmekapazität, Grenztemperatur, Radiatoren, Hitzeschild (Anteil der
+  Wärme, der ankommt). Damit wird Aerobraking über mehrere Umläufe eine echte
+  Abwägung. Die Vorschau zeigt die Spitzentemperatur gegen die Grenze.
+- **Strom** (mit dem ersten Verbraucher: Kommunikationsnetz oder Scans):
+  Batterieladung als Vorrat. Quellen: Solarzellen (nur im Licht),
+  Radioisotopen-Generator (immer gleich), Brennstoffzellen (verbrauchen
+  Reaktanten, erst mit Rohstoffen). Verbraucher: Grundlast, Funk, Instrumente,
+  später Ionentriebwerk oder aktive Kühlung (dann gekoppelt mit Wärme). Licht
+  und Schatten wechseln jeden Umlauf: Die Schattenzeiten einer Keplerbahn
+  lassen sich ausrechnen, die Ladung ist dazwischen stückweise linear
+  (begrenzt bei voll und leer) und wird nach wenigen Umläufen periodisch, ist
+  also für jeden Zeitpunkt direkt berechenbar, ohne neue Abschnitte. Ist sie
+  leer, fallen zuerst nur Dienste aus (Funk, Scans, Aufträge); der Flug bleibt
+  auf Schienen, Manöver laufen weiter. Ob ein Schiff ohne Strom auch nicht
+  mehr steuern kann, wird später bewusst entschieden.
+- **Sonne** in der Simulation (spätestens mit Mond und Einflusssphären):
+  Richtung und Abstand, für Schatten, Solarertrag und
+  Gleichgewichtstemperatur. Bis dahin gibt es sie nur als Licht in der
+  Darstellung.
 - **Gestrichen:** Technikalterung, Lagrange-Punkte (mit Patched Conics nicht möglich)
 
 ## UI-Ideen (nach dem Grundgerüst)
@@ -418,6 +477,7 @@ nichts verloren geht.
 5. Landung ✓ (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
 6. Rendezvous ✓ (Ziel, engste Annäherung, Neigung und Knoten, Startfenster
    von Hand), Nahansicht ✓ (Kamera auf jedes gewählte Objekt, `N`),
-   Statusleiste mit Protokoll ✓, Andocken, Abdocken
+   Statusleiste mit Protokoll ✓, Andocken ✓ (Angleichen, Anflug, Verbund),
+   Abdocken
 7. Mond, Wechsel der Einflusssphäre
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

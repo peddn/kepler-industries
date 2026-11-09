@@ -48,4 +48,6 @@ pub enum LogKind {
         zone: Option<usize>,
         reason: Crash,
     },
+    /// Angedockt: jetzt Teil des Verbunds um das Hauptschiff `host`.
+    Docked { host: usize },
 }

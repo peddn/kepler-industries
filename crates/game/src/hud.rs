@@ -3,6 +3,7 @@
 use crate::camera::CameraRig;
 use crate::focus;
 use crate::node_ui::{self, SelectedNode, SelectedZone, Selection};
+use crate::rendezvous::distance_text;
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
@@ -191,6 +192,36 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
             lines.extend(node_details(world, i, k, &plan));
         }
     }
+    if let Some(docking) = trajectory.docking() {
+        let name = &world.vessels[world.host(docking.target)].name;
+        lines.push(match &docking.plan {
+            Ok(plan) => {
+                let when = if plan.matching.burn.start > world.time {
+                    format!(
+                        "Angleichen in {}",
+                        format_span(plan.matching.burn.start - world.time)
+                    )
+                } else {
+                    "Anflug läuft".into()
+                };
+                format!(
+                    "Andocken an {name}: {when}, Δv {:.0} + {:.0} m/s, Kontakt in {}",
+                    plan.matching.node.delta_v.length(),
+                    plan.approach_delta_v,
+                    format_span(plan.contact - world.time)
+                )
+            }
+            Err(e) => {
+                // Rot, wenn es an die roten Node-Zeilen anschließt (oder allein).
+                if warning.is_empty() {
+                    warning = lines.len()..lines.len() + 1;
+                } else if warning.end == lines.len() {
+                    warning.end += 1;
+                }
+                format!("Andocken an {name}: {e}")
+            }
+        });
+    }
     lines.extend(touchdown_lines(world, i));
     (lines, warning)
 }
@@ -365,9 +396,25 @@ pub fn update(
                 Some(k) => format!("Wrack in {}", world.zones[k].name),
                 None => format!("Wrack bei {}", place(&point)),
             },
+            VesselStatus::Approaching { distance } => {
+                format!("Anflug zum Andocken, noch {}", distance_text(distance))
+            }
+            VesselStatus::Docked { host } => {
+                format!("angedockt an {}", world.vessels[host].name)
+            }
         };
         let marker = if selection.0 == Some(i) { ">" } else { " " };
-        lines.push(format!("{marker} {:<9} {status}", vessel.name));
+        // Ein Verbund trägt die Namen seiner Teile.
+        let name = std::iter::once(vessel.name.as_str())
+            .chain(
+                world
+                    .parts(i)
+                    .into_iter()
+                    .map(|k| world.vessels[k].name.as_str()),
+            )
+            .collect::<Vec<_>>()
+            .join(" + ");
+        lines.push(format!("{marker} {name:<9} {status}"));
     }
     let mut red = 0..0;
     if let Some(i) = selection.0 {
