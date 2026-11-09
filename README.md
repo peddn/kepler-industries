@@ -20,6 +20,15 @@ sobald ein gelandetes Schiff gewählt ist. Die Vorschau zeigt den ganzen
 Aufstieg (gelb) und die Bahn danach. Den Node zum Zirkularisieren an der
 Apoapsis kann man schon vor dem Abheben setzen.
 
+Gelandet wird über einen Node, der die Bahn in die Luft führt. Die Vorschau
+rechnet bis zum Boden, mit Fallschirm (unter 3 km). Ein Kreuz zeigt, wo das
+Schiff aufsetzt: grün im Zielgebiet (grüne Kreise), gelb außerhalb, rot bei
+einem Absturz. Die letzte Bremsung ist abstrahiert: Die Geschwindigkeit am
+Boden muss als Δv abgebremst werden, mit genug Treibstoff und Schub größer als
+das Gewicht. Wer daneben landet, kommt mit einem Hop ins Ziel: einem Start mit
+niedriger Ziel-Apoapsis, zum Beispiel von der Startbasis zum Übungsfeld 60 km
+östlich (Kurs 90°, Ziel-Apoapsis etwa 27 km).
+
 Unten zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
 ist der volle Tank, darin die geplanten Brennvorgänge der Kette (Start gelb,
 Nodes violett), dahinter der Rest (grün). Reicht der Treibstoff nicht, steht
@@ -37,6 +46,13 @@ und Ende jedes Brennens. Während des Brennens zeigt die blaue Linie die momenta
 sichtbar zur geplanten (violetten) hin verformt. Endet eine Bahn am Boden,
 zeigt ein rotes Kreuz den Aufschlagpunkt.
 
+![Landung](docs/screenshots/landung.png)
+
+*Hop der Fähre von der Startbasis (links) zum Übungsfeld: Aufstieg gelb,
+Flug durch die Luft orange, das grüne Kreuz liegt im Zielgebiet. Die Bahn ist
+ohne Drehung des Planeten gezeichnet, das Kreuz zeigt den genauen Punkt auf
+der Oberfläche.*
+
 ![Startprofil](docs/screenshots/startprofil.png)
 
 *Fähre-3 vor dem Start: Aufstieg nach Osten (gelb), Freiflug durch die obere
@@ -50,8 +66,9 @@ Bahn, violett die Bahn danach.*
 
 ![Aufschlag](docs/screenshots/aufschlag.png)
 
-*Relais-1 bremst ab: Die Bahn führt durch die Luft (orange) auf den Boden, das
-Kreuz markiert den Aufschlagpunkt.*
+*Relais-1 bremst ab: Die Bahn führt durch die Luft (orange) auf den Boden. Ein
+Satellit hat zu wenig Schub zum Abbremsen, das rote Kreuz markiert den
+Absturz.*
 
 ![Manöverkette](docs/screenshots/manoeverkette.png)
 

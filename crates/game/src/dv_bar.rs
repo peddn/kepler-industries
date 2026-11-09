@@ -1,7 +1,7 @@
 //! Δv-Balken unten: der Tank des gewählten Schiffs als Balken. Die volle
 //! Breite ist der volle Tank; gefüllt ist, was an Bord ist. Darin liegen die
-//! geplanten Brennvorgänge der Kette (Start gelb, Nodes violett), dahinter der
-//! Rest (grün). Verlangt die Kette mehr, als an Bord ist, steht der Fehlbetrag
+//! geplanten Brennvorgänge der Kette (Start gelb, Nodes violett, Bremsen beim
+//! Landen türkis), dahinter der Rest (grün). Verlangt die Kette mehr, als an Bord ist, steht der Fehlbetrag
 //! rot dahinter.
 //!
 //! Die Zahlen kommen aus `World::delta_v_budget`; hier wird nur gezeichnet.
@@ -33,6 +33,7 @@ const TICK_STEP: f64 = 500.0;
 const EMPTY_COLOR: Color = Color::srgba(0.05, 0.06, 0.09, 0.9);
 const LAUNCH_COLOR: Color = Color::srgb(0.95, 0.8, 0.25);
 const NODE_COLORS: [Color; 2] = [Color::srgb(0.6, 0.4, 0.95), Color::srgb(0.43, 0.28, 0.75)];
+const LANDING_COLOR: Color = Color::srgb(0.2, 0.7, 0.8);
 const REST_COLOR: Color = Color::srgb(0.22, 0.62, 0.33);
 const MISSING_COLOR: Color = Color::srgb(0.85, 0.22, 0.18);
 const SEPARATOR_COLOR: Color = Color::srgb(0.03, 0.03, 0.05);
@@ -201,6 +202,12 @@ pub fn sync(
                 color: NODE_COLORS[k % 2],
                 label: format!("{}: {delta_v:.0}", k + 1),
                 selected: chosen == Some(k),
+            },
+            BudgetItem::Landing => Piece {
+                delta_v,
+                color: LANDING_COLOR,
+                label: format!("Landen {delta_v:.0}"),
+                selected: false,
             },
         })
         .collect();

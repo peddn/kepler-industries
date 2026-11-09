@@ -172,11 +172,15 @@ wieder gültig.
 Ganzes einen Umlauf weiter (nach derselben Regel) oder verfällt.
 
 **Start vom Boden (Startprofil):** drei Werte: Kurs (90° = Osten), Wendebeginn
-(Höhe), Ziel-Apoapsis. Senkrecht bis zum Wendebeginn, dann zunehmend geneigt
-(Neigung aus der Senkrechten = 90° · √Anteil, anfangs also schneller),
-waagerecht ab der halben Ziel-Apoapsis (`FLAT_FRACTION`). Die Schubrichtung
-bleibt in einer festen Ebene durch Startplatz und Kurs (Großkreis); die
-Bahnneigung ergibt sich daraus und aus der Drehung des Planeten. Der Aufstieg
+(Höhe), Ziel-Apoapsis. Eine Schwerkraftwende wie in KSP: senkrecht bis zum
+Wendebeginn, dort 10° zur Seite (`KICK`), danach immer entlang der Bewegung
+relativ zur Luft, nie unter die Waagerechte. Die Schwerkraft biegt die Bahn
+von selbst um; früher wenden heißt flacher. Schub entlang der Bewegung hebt
+die Apoapsis stetig, deshalb wird die Zielhöhe sicher erreicht, auch bei einem
+Hop mit wenigen km. (Eine feste Neigung nach Höhe blieb bei einem Hop in der
+Luft hängen und verbrannte den ganzen Tank.) Die Schubrichtung bleibt in einer
+festen Ebene durch Startplatz und Kurs (Großkreis); die Bahnneigung ergibt
+sich daraus und aus der Drehung des Planeten. Der Aufstieg
 ist ein normales `Burn` mit Aufstiegssteuerung statt fester Richtung, deshalb
 gelten Vorschau = Ausführung, Brennpunkte und Nodes danach ohne Sonderweg.
 Brennschluss, wenn die Apoapsis die Zielhöhe erreicht: beim Planen mit
@@ -189,6 +193,21 @@ gehört zur Kette; Nodes danach liegen auf der Bahn nach dem Aufstieg und
 lassen sich schon vor dem Abheben setzen. Wird die Startzeit verschoben,
 wandert die ganze Kette mit. Ein nicht scharfer Start wartet eine
 Planetendrehung (dann liegt der Startplatz wieder gleich).
+
+**Landung:** Die Vorschau rechnet bis zum Boden. Ein Fallschirm ist nur eine
+größere Widerstandsfläche im selben Modell (`parachute_area`): offen unter
+3 km im Sinkflug; die Regel hängt nur von Höhe und Richtung ab, die Simulation
+muss sich nichts merken. Beim Bodenkontakt ist die letzte Bremsung
+abstrahiert (`landing::braking`): bis 5 m/s relativ zum Boden setzt jedes
+Schiff auf; darüber muss es diese Geschwindigkeit als Δv abbremsen, mit genug
+Treibstoff an Bord und Schub größer als das Gewicht (Satelliten können das
+nicht). Der Treibstoff wird nach der Raketengleichung abgezogen. Sonst wird es
+zum Wrack. Das gehört zur Zeitleiste (Übergang beim Bodenkontakt), Vorschau =
+Ausführung gilt also auch hier. Ob das Schiff in einem **Zielgebiet** (Kreis,
+5 km Radius) aufsetzt, entscheidet nicht über heil oder kaputt; es zählt für
+Basis, Andocken und Aufträge. Außerhalb steht das Schiff „außerhalb“ und
+kommt mit einem Hop (Start mit niedriger Ziel-Apoapsis) ins Ziel. Nach dem
+Aufsetzen ist die Kette erledigt.
 
 **Zeitleiste eines Schiffs:** Folge von Abschnitten
 - `Kepler`: Freiflug ohne Luft, analytisch (universelle Variablen: eine Formel
@@ -207,7 +226,7 @@ sich kein Node setzen.
 Übergänge: Kepler → (Eintritt) → Integrated → (Austritt) → Kepler;
 Freiflug → (Brennbeginn) → Integrated mit Schub → (Brennende) → Freiflug;
 Surface → (Abheben) → Integrated mit Aufstiegssteuerung → (Brennschluss) → Freiflug;
-→ (Bodenkontakt) → Surface/Wrack.
+→ (Bodenkontakt) → Surface (aufgesetzt oder Wrack, siehe Landung).
 
 **Aufschlagkreuz:** Es markiert die Stelle *auf dem Boden* und dreht sich mit
 dem Planeten. Die Bahnlinie ist im nicht rotierenden System gezeichnet. Bis
@@ -273,12 +292,17 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   wird dafür länger). Teilstriche alle 500 m/s. Die Teile gehen exakt auf, weil
   sich bei fester Ausströmgeschwindigkeit das Δv der Brennvorgänge zum Δv des
   Tanks addiert (`World::delta_v_budget`).
-- **Landung über den Manöver-Node:** Die Vorschau rechnet bis zum Boden,
-  Aufschlagpunkt als Kreuz, Zielgebiet als Kreisfläche auf der Oberfläche.
-  Fallschirme = größere Widerstandsfläche ab einer Auslösehöhe (dasselbe Modell).
-  Letzte Bremsung abstrahiert: Restgeschwindigkeit = nötiges Delta-v.
-- **Ziel verfehlt:** Mit Treibstoff ein „Hop" (= Startprofil mit niedriger
-  Apoapsis, keine eigene Mechanik), ohne Treibstoff oder bei Absturz ein Wrack.
+- **Landung über den Manöver-Node:** Die Vorschau rechnet bis zum Boden.
+  Aufsetzpunkt als Kreuz: grün im Zielgebiet, gelb außerhalb, rot bei
+  Absturz. Zielgebiete als Kreise auf der Oberfläche (5 km Radius, aus der
+  Ferne mindestens so groß wie ein Markierungspunkt). Fallschirme = größere
+  Widerstandsfläche ab einer Auslösehöhe (dasselbe Modell). Letzte Bremsung
+  abstrahiert: Restgeschwindigkeit = nötiges Δv, braucht Schub > Gewicht. Der
+  Δv-Balken zeigt das Bremsen als eigenen Abschnitt.
+- **Ziel verfehlt:** Mit genug Treibstoff setzt das Schiff trotzdem auf, steht
+  dann „außerhalb“ und kommt mit einem „Hop" ins Ziel (= Startprofil mit
+  niedriger Apoapsis, keine eigene Mechanik). Ohne Treibstoff oder Schub ein
+  Wrack.
 - **Satelliten** sind normale Schiffe. Zu tief ausgesetzt = Fehlschlag (Absturz).
 - **Rendezvous:** nächste Annäherung anzeigen, mit Manöver-Nodes verbessern,
   Andocken abstrahiert (kostet Relativgeschwindigkeit als Delta-v),
@@ -329,7 +353,7 @@ nichts verloren geht.
    ungültige Nodes bleiben, Anzeige „+N Umläufe“)
 4. Startprofil ✓ (Kurs, Wendebeginn, Ziel-Apoapsis; Zirkularisieren per Node
    in derselben Kette; Seitenleiste mit Karte „Start“)
-5. Landung (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
+5. Landung ✓ (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
 6. Rendezvous und Andocken
 7. Mond, Wechsel der Einflusssphäre
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

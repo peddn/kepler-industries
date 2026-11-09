@@ -4,7 +4,7 @@ use crate::node_ui::{self, SelectedNode, Selection, UiMessage};
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use sim::{Event, Plan, Segment, SurfacePoint, VesselStatus, World, kepler};
+use sim::{Crash, Event, Plan, Segment, SurfacePoint, VesselStatus, World, kepler};
 use std::ops::Range;
 
 #[derive(Component)]
@@ -189,16 +189,46 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
             lines.extend(node_details(world, i, k, &plan));
         }
     }
-    if let Some((time, _, point)) = trajectory.predicted_impact()
-        && time > world.time
-    {
-        lines.push(format!(
-            "Aufschlag in {} bei {}",
-            format_span(time - world.time),
-            place(&point)
-        ));
-    }
+    lines.extend(touchdown_lines(world, i));
     (lines, warning)
+}
+
+/// Vorausgesagter Bodenkontakt: Landung im Zielgebiet, Aufsetzen außerhalb
+/// oder Absturz, jeweils mit der Geschwindigkeit am Boden.
+pub(crate) fn touchdown_lines(world: &World, i: usize) -> Vec<String> {
+    let Some(t) = world.touchdown(i) else {
+        return Vec::new();
+    };
+    let when = format_span(t.time - world.time);
+    let near = t.nearest.map_or(String::new(), |(k, d)| {
+        format!(", {} von {}", km(d), world.zones[k].name)
+    });
+    match (t.braking, t.zone) {
+        (Ok(dv), Some(k)) => vec![
+            format!("Landung in {when} im Zielgebiet {}", world.zones[k].name),
+            format!("  Aufsetzen mit {:.0} m/s, Bremsen {dv:.0} m/s", t.speed),
+        ],
+        (Ok(dv), None) => vec![
+            format!("Aufsetzen in {when} außerhalb{near}"),
+            format!(
+                "  Aufsetzen mit {:.0} m/s, Bremsen {dv:.0} m/s, danach Hop ins Ziel",
+                t.speed
+            ),
+        ],
+        (Err(crash), _) => vec![
+            format!("Absturz in {when} bei {}", place(&t.point)),
+            match crash {
+                Crash::NoFuel { available } => format!(
+                    "  Aufprall {:.0} m/s, Δv an Bord nur {available:.0} m/s",
+                    t.speed
+                ),
+                Crash::TooWeak => format!(
+                    "  Aufprall {:.0} m/s, Schub zu schwach zum Bremsen",
+                    t.speed
+                ),
+            },
+        ],
+    }
 }
 
 /// Einzelheiten zum gewählten Node.
@@ -309,7 +339,10 @@ pub fn update(
                     km(info.periapsis - body.radius)
                 )
             }
-            VesselStatus::Landed { point } => format!("Gelandet bei {}", place(&point)),
+            VesselStatus::Landed { point } => match world.zone_at(0, &point) {
+                Some(k) => format!("Gelandet in {}", world.zones[k].name),
+                None => format!("Gelandet bei {} (außerhalb)", place(&point)),
+            },
             VesselStatus::Wreck { point } => format!("Wrack bei {}", place(&point)),
         };
         let marker = if selection.0 == Some(i) { ">" } else { " " };

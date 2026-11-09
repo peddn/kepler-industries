@@ -2,6 +2,7 @@
 
 use crate::body::{Atmosphere, Body, SurfacePoint};
 use crate::kepler::state_from_apsides;
+use crate::landing::LandingZone;
 use crate::world::{Base, VesselParams, World};
 
 /// Fiktiver Heimatplanet in Kerbin-Größe: kleine Welt, kurze Umlaufzeiten,
@@ -30,17 +31,23 @@ pub const SATELLITE: VesselParams = VesselParams {
     thrust: 2_000.0,
     exhaust_velocity: 3_000.0,
     fuel_capacity: 200.0,
+    parachute_area: 0.0,
 };
+
+/// Radius der Zielgebiete in m.
+pub const ZONE_RADIUS: f64 = 5_000.0;
 
 /// Fähre, die selbst vom Boden startet: 1,5 t leer, Schub reicht für das
 /// 1,5-fache des Startgewichts. Mit 4 t Treibstoff rund 4,2 km/s Δv: genug
-/// für 100 km und das Zirkularisieren, mit etwas Rest.
+/// für 100 km und das Zirkularisieren, mit etwas Rest. Am Fallschirm kommt sie
+/// mit rund 10 m/s am Boden an.
 pub const FERRY: VesselParams = VesselParams {
     dry_mass: 1_500.0,
     drag_area: 2.0,
     thrust: 80_000.0,
     exhaust_velocity: 3_200.0,
     fuel_capacity: 4_000.0,
+    parachute_area: 400.0,
 };
 
 /// Ein Planet, eine Startbasis, zwei Satelliten: einer stabil oberhalb der
@@ -83,6 +90,22 @@ pub fn demo() -> World {
     world.spawn_vessel("Sonde-2", SATELLITE, 200.0, 0, too_low);
 
     world.spawn_landed("Fähre-3", FERRY, 4_000.0, 0, pad);
+
+    // Zielgebiete: an der Startbasis, eines etwa 60 km östlich zum Üben eines
+    // Hops (Kurs 90°, Ziel-Apoapsis rund 27 km) und eines weit weg im Osten,
+    // zum Anfliegen aus dem Orbit.
+    for (name, point) in [
+        ("Startbasis", pad),
+        ("Übungsfeld", SurfacePoint::from_degrees(4.94, -14.2)),
+        ("Messfeld Ost", SurfacePoint::from_degrees(2.0, 60.0)),
+    ] {
+        world.zones.push(LandingZone {
+            name: name.into(),
+            body: 0,
+            center: point,
+            radius: ZONE_RADIUS,
+        });
+    }
 
     world
 }

@@ -17,6 +17,7 @@
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::integrator::{self, Forces, Sample};
 use crate::kepler::{self, StateVector};
+use crate::landing;
 use crate::launch::{self, Launch, LaunchPlan};
 use crate::maneuver::{self, Burn, ManeuverNode, Plan, PlanError};
 use crate::world::VesselParams;
@@ -175,7 +176,7 @@ impl Segment {
                 integrated(bodies, params, body, t, state, mass, None, pending)
             }
             Event::AtmosphereExit => kepler_segment(bodies, body, t, state, mass, pending),
-            Event::GroundContact => wreck(bodies, body, t, state, mass),
+            Event::GroundContact => touchdown(bodies, params, body, t, state, mass),
             Event::BurnStart | Event::Liftoff => {
                 let burn = *pending?;
                 integrated(bodies, params, body, t, state, mass, Some(burn), None)
@@ -243,6 +244,7 @@ fn integrated(
     let forces = Forces {
         body: &bodies[body_id],
         drag_area: params.drag_area,
+        parachute_area: params.parachute_area,
         mass,
         burn: burn.as_ref(),
     };
@@ -294,14 +296,25 @@ fn next_orbit(bodies: &[Body], segment: &Segment, plan: &Plan) -> Option<Plan> {
     (later.burn.end <= natural_end).then_some(later)
 }
 
-fn wreck(bodies: &[Body], body_id: BodyId, t: f64, state: StateVector, mass: f64) -> Segment {
-    let (point, _) = bodies[body_id].inertial_to_surface(state.position, t);
+/// Bodenkontakt: aufsetzen (Treibstoff fürs Bremsen abgezogen) oder Wrack,
+/// siehe `landing`.
+fn touchdown(
+    bodies: &[Body],
+    params: &VesselParams,
+    body_id: BodyId,
+    t: f64,
+    state: StateVector,
+    mass: f64,
+) -> Segment {
+    let body = &bodies[body_id];
+    let (point, _) = body.inertial_to_surface(state.position, t);
+    let braking = landing::braking(body, params, &state, mass);
     Segment::Surface {
         body: body_id,
         start: t,
         point,
-        mass,
-        wreck: true,
+        mass: braking.map_or(mass, |dv| landing::mass_after(params, mass, dv)),
+        wreck: braking.is_err(),
         liftoff: None,
     }
 }
@@ -695,7 +708,11 @@ impl Trajectory {
                 .segments
                 .pop_front()
                 .expect("mindestens zwei Abschnitte");
-            if done.is_burn() && done.end_event() != Some(Event::Continue) {
+            if done.end_event() == Some(Event::GroundContact) {
+                // Am Boden (gelandet oder Wrack): Die Kette ist erledigt.
+                self.launch = None;
+                self.nodes.clear();
+            } else if done.is_burn() && done.end_event() != Some(Event::Continue) {
                 // Ausgeführt: zuerst der Aufstieg, dann die Nodes der Reihe nach.
                 if self.launch.is_some() {
                     self.launch = None;

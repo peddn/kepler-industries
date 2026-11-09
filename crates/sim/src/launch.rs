@@ -14,9 +14,6 @@ use glam::DVec3;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::FRAC_PI_2;
 
-/// Anteil der Ziel-Apoapsis, ab dem das Schiff waagerecht fliegt.
-pub const FLAT_FRACTION: f64 = 0.5;
-
 /// Die Werte, die der Spieler einstellt.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LaunchProfile {
@@ -32,7 +29,7 @@ impl Default for LaunchProfile {
     fn default() -> Self {
         Self {
             heading: 90.0,
-            turn_altitude: 2_000.0,
+            turn_altitude: 1_500.0,
             target_apoapsis: 100_000.0,
         }
     }
@@ -54,30 +51,38 @@ pub struct LaunchPlan {
     pub burn: Burn,
 }
 
-/// Aufstiegssteuerung: senkrecht bis zum Wendebeginn, dann zunehmend geneigt
-/// (Wurzelform: anfangs schneller), waagerecht ab `flat_radius`. Die
-/// Schubrichtung bleibt in einer festen Ebene durch den Startplatz (Großkreis
-/// in Richtung des Kurses).
+/// Aufstiegssteuerung, eine Schwerkraftwende wie in KSP: senkrecht bis zum
+/// Wendebeginn, dort um `KICK` zur Seite geneigt, danach immer entlang der
+/// Bewegung relativ zur Luft (nie unter die Waagerechte). Die Schwerkraft
+/// biegt die Bahn von selbst um. Schub entlang der Bewegung hebt die Apoapsis
+/// stetig, deshalb wird die Zielhöhe sicher erreicht, auch bei einem Hop.
+/// Die Schubrichtung bleibt in einer festen Ebene durch den Startplatz
+/// (Großkreis in Richtung des Kurses).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Ascent {
     /// Normale der Aufstiegsebene im nicht rotierenden System.
     pub plane_normal: DVec3,
     /// Radius in m, ab dem gewendet wird.
     pub turn_radius: f64,
-    /// Radius in m, ab dem waagerecht geflogen wird.
-    pub flat_radius: f64,
+    /// Drehung des Körpers (für die Bewegung relativ zur Luft).
+    pub spin: DVec3,
 }
 
+/// Anfängliche Neigung aus der Senkrechten beim Wendebeginn (10°).
+pub const KICK: f64 = 10.0 * std::f64::consts::PI / 180.0;
+
 impl Ascent {
-    /// Schubrichtung (Einheitsvektor) an der Position `position`.
-    pub fn direction(&self, position: DVec3) -> DVec3 {
-        let r = position.length();
-        let up = position / r;
-        let progress =
-            ((r - self.turn_radius) / (self.flat_radius - self.turn_radius)).clamp(0.0, 1.0);
-        // Neigung aus der Senkrechten.
-        let pitch = FRAC_PI_2 * progress.sqrt();
+    /// Schubrichtung (Einheitsvektor) im Zustand `state`.
+    pub fn direction(&self, state: &StateVector) -> DVec3 {
+        let r = state.position.length();
+        let up = state.position / r;
+        if r < self.turn_radius {
+            return up;
+        }
         let forward = self.plane_normal.cross(up).normalize();
+        let air = state.velocity - self.spin.cross(state.position);
+        // Neigung der Bewegung aus der Senkrechten, in der Aufstiegsebene.
+        let pitch = air.dot(forward).atan2(air.dot(up)).clamp(KICK, FRAC_PI_2);
         up * pitch.cos() + forward * pitch.sin()
     }
 }
@@ -126,8 +131,6 @@ pub fn plan(
     let heading = launch.profile.heading.to_radians();
     let forward = north * heading.cos() + east * heading.sin();
     let turn_radius = body.radius + launch.profile.turn_altitude.max(0.0);
-    let flat_radius =
-        (body.radius + FLAT_FRACTION * launch.profile.target_apoapsis).max(turn_radius + 1_000.0);
     let mass_flow = params.thrust / params.exhaust_velocity;
     let burnout = t0 + (mass - params.dry_mass).max(0.0) / mass_flow;
     let mut burn = Burn {
@@ -140,7 +143,7 @@ pub fn plan(
         ascent: Some(Ascent {
             plane_normal: up.cross(forward).normalize(),
             turn_radius,
-            flat_radius,
+            spin: body.spin(),
         }),
     };
 
@@ -149,6 +152,7 @@ pub fn plan(
     let forces = Forces {
         body,
         drag_area: params.drag_area,
+        parachute_area: params.parachute_area,
         mass,
         burn: Some(&burn),
     };
