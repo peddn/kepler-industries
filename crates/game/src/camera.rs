@@ -1,5 +1,10 @@
 //! Kamera, die um einen Fokuspunkt kreist.
 //!
+//! Der Fokus ist ein Objekt (Planet, Schiff, Node, Zielgebiet), auf das die
+//! Kamera mit `F` gerichtet wird; sie folgt ihm (siehe `focus.rs`). In der
+//! Karte ist "oben" Norden, in der Nahansicht (`N`) zeigt "oben" vom Planeten
+//! weg, der Planet liegt also unten.
+//!
 //! Gegen Ungenauigkeit bei großen Entfernungen (KSPs "Deep Space Kraken"):
 //! Der Fokuspunkt liegt in Bevy immer im Ursprung. Alles wird relativ zum
 //! Fokus gezeichnet; die Umrechnung von f64 nach f32 passiert erst nach dem
@@ -12,28 +17,120 @@ use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseSc
 use bevy::math::DVec3;
 use bevy::prelude::*;
 
+/// Worauf die Kamera gerichtet ist.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum Focus {
+    #[default]
+    Planet,
+    Vessel(usize),
+    /// Node eines Schiffs, erkannt an seinem gesetzten Zeitpunkt.
+    Node {
+        vessel: usize,
+        time: f64,
+    },
+    Zone(usize),
+}
+
+/// In der Karte kommt die Kamera einem Objekt höchstens so nahe (m).
+pub const MAP_MIN_DISTANCE: f64 = 20_000.0;
+/// In der Nahansicht (m).
+pub const NEAR_MIN_DISTANCE: f64 = 10.0;
+/// Abstand beim Wechsel auf ein Objekt in der Karte (m).
+pub const MAP_OBJECT_DISTANCE: f64 = 50_000.0;
+/// Abstand beim Einschalten der Nahansicht (höchstens, m).
+pub const NEAR_DISTANCE: f64 = 2_000.0;
+
 #[derive(Resource)]
 pub struct CameraRig {
-    /// Fokuspunkt im Simulationssystem (m). In PR 1 immer der Planetenmittelpunkt.
+    /// Worauf die Kamera gerichtet ist.
+    pub target: Focus,
+    /// Fokuspunkt im Simulationssystem (m), jedes Bild aus `target` berechnet.
     pub focus: DVec3,
+    /// Nahansicht: näher heran, Planet unten.
+    pub near: bool,
     /// Abstand der Kamera vom Fokus in m.
     pub distance: f64,
     pub yaw: f32,
     pub pitch: f32,
-    min_distance: f64,
-    max_distance: f64,
+    /// Abstand für den Planeten, wenn die Kamera zu ihm zurückkehrt.
+    pub planet_distance: f64,
+    planet_radius: f64,
 }
 
 impl CameraRig {
     pub fn new(planet_radius: f64) -> Self {
         Self {
+            target: Focus::Planet,
             focus: DVec3::ZERO,
+            near: false,
             distance: planet_radius * 4.0,
             yaw: 0.6,
             pitch: 0.45,
-            min_distance: planet_radius * 1.01,
-            max_distance: planet_radius * 80.0,
+            planet_distance: planet_radius * 4.0,
+            planet_radius,
         }
+    }
+
+    /// Erlaubter Abstand zum Fokus.
+    pub fn limits(&self) -> (f64, f64) {
+        let min = match (self.target, self.near) {
+            (Focus::Planet, _) => self.planet_radius * 1.01,
+            (_, false) => MAP_MIN_DISTANCE,
+            (_, true) => NEAR_MIN_DISTANCE,
+        };
+        (min, self.planet_radius * 80.0)
+    }
+
+    pub fn clamp_distance(&mut self) {
+        let (min, max) = self.limits();
+        self.distance = self.distance.clamp(min, max);
+    }
+
+    /// Richtet die Kamera auf ein anderes Ziel und wählt einen passenden
+    /// Abstand: zurück zum Planeten der alte, auf ein Objekt in der Karte
+    /// `MAP_OBJECT_DISTANCE`, in der Nahansicht bleibt er.
+    pub fn set_target(&mut self, target: Focus) {
+        if target == self.target {
+            return;
+        }
+        if self.target == Focus::Planet {
+            self.planet_distance = self.distance;
+        }
+        self.target = target;
+        if target == Focus::Planet {
+            self.near = false;
+            self.distance = self.planet_distance;
+        } else if !self.near {
+            self.distance = MAP_OBJECT_DISTANCE;
+        }
+        self.clamp_distance();
+    }
+
+    /// Nahansicht an oder aus (nur mit einem Objekt im Fokus).
+    pub fn set_near(&mut self, near: bool) {
+        if self.target == Focus::Planet {
+            return;
+        }
+        self.near = near;
+        if near {
+            self.distance = self.distance.min(NEAR_DISTANCE);
+        }
+        self.clamp_distance();
+    }
+
+    /// Achsen der Kamera in Bevy-Koordinaten: oben, vorn (Gierwinkel 0) und
+    /// seitlich, gleich orientiert wie in der Karte (seitlich = oben × vorn),
+    /// damit die Maus in beiden Ansichten gleich dreht. In der Nahansicht
+    /// zeigt "oben" vom Planeten (im Ursprung) weg, "vorn" nach Norden.
+    fn frame(&self) -> (Vec3, Vec3, Vec3) {
+        let up = match self.focus.try_normalize() {
+            Some(up) if self.near => dir_to_view(up),
+            _ => return (Vec3::Y, Vec3::Z, Vec3::X),
+        };
+        let forward = (Vec3::Y - up * up.dot(Vec3::Y))
+            .try_normalize()
+            .unwrap_or(Vec3::Z);
+        (up, forward, up.cross(forward))
     }
 }
 
@@ -105,19 +202,17 @@ pub fn input(
     };
     if notches != 0.0 {
         // Multiplikativ zoomen: gleiches Gefühl von der Oberfläche bis zur Fernsicht.
-        rig.distance =
-            (rig.distance * 0.85f64.powf(notches)).clamp(rig.min_distance, rig.max_distance);
+        rig.distance *= 0.85f64.powf(notches);
+        rig.clamp_distance();
     }
 }
 
 pub fn apply(rig: Res<CameraRig>, mut cameras: Query<&mut Transform, With<Camera3d>>) {
-    let direction = Vec3::new(
-        rig.pitch.cos() * rig.yaw.sin(),
-        rig.pitch.sin(),
-        rig.pitch.cos() * rig.yaw.cos(),
-    );
-    let transform = Transform::from_translation(direction * rig.distance as f32)
-        .looking_at(Vec3::ZERO, Vec3::Y);
+    let (up, forward, side) = rig.frame();
+    let direction =
+        up * rig.pitch.sin() + (forward * rig.yaw.cos() + side * rig.yaw.sin()) * rig.pitch.cos();
+    let transform =
+        Transform::from_translation(direction * rig.distance as f32).looking_at(Vec3::ZERO, up);
     for mut camera in &mut cameras {
         *camera = transform;
     }

@@ -1,6 +1,8 @@
 //! Textanzeige: Spielzeit, Zeitraffer, Zustand der Schiffe, Bedienhilfe.
 
-use crate::node_ui::{self, SelectedNode, Selection, UiMessage};
+use crate::camera::CameraRig;
+use crate::focus;
+use crate::node_ui::{self, SelectedNode, SelectedZone, Selection, UiMessage};
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
@@ -309,6 +311,8 @@ pub fn update(
     warp: Res<TimeWarp>,
     selection: Res<Selection>,
     selected: Res<SelectedNode>,
+    zone: Res<SelectedZone>,
+    rig: Res<CameraRig>,
     message: Res<UiMessage>,
     real_time: Res<Time<Real>>,
     mut text: Single<&mut Text, With<Hud>>,
@@ -317,10 +321,12 @@ pub fn update(
 ) {
     let world = &sim.0;
     let mut lines = vec![format!(
-        "{}    Zeitraffer {}×{}",
+        "{}    Zeitraffer {}×{}    Kamera: {}{}",
         format_time(world.time),
         warp.factor(),
-        if warp.paused { "  (Pause)" } else { "" }
+        if warp.paused { "  (Pause)" } else { "" },
+        focus::name(world, rig.target),
+        if rig.near { " (Nahansicht)" } else { "" }
     )];
     if real_time.elapsed_secs_f64() < message.until {
         lines.push(format!("» {}", message.text));
@@ -376,15 +382,36 @@ pub fn update(
         red = lines.len() + warning.start..lines.len() + warning.end;
         lines.extend(details);
     }
+    if let Some(k) = zone.0 {
+        let z = &world.zones[k];
+        lines.push(String::new());
+        lines.push(format!(
+            "Zielgebiet {}: {}, Radius {}",
+            z.name,
+            place(&z.center),
+            km(z.radius)
+        ));
+        let landed: Vec<&str> = (0..world.vessels.len())
+            .filter(|&i| match world.vessel_status(i) {
+                VesselStatus::Landed { point } => world.zone_at(z.body, &point) == Some(k),
+                _ => false,
+            })
+            .map(|i| world.vessels[i].name.as_str())
+            .collect();
+        if !landed.is_empty() {
+            lines.push(format!("Gelandet: {}", landed.join(", ")));
+        }
+    }
     lines.push(String::new());
     // Kurze Zeilen, damit rechts Platz für die Seitenleiste bleibt.
     lines.extend(
         [
-            "Linksklick: Schiff wählen / Node setzen / Node wählen",
+            "Linksklick: Schiff / Zielgebiet / Node wählen, Node setzen",
             "Griffe ziehen: Δv (Umschalt: fein)   Node ziehen: verschieben",
             "↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff",
             "H: Zeitraffer-Stopp   , / .: Zeitraffer   Leertaste: Pause",
             "Rechte Maustaste ziehen: drehen   Mausrad: zoomen",
+            "F: Kamera auf Auswahl / Planet   N: Nahansicht",
         ]
         .map(String::from),
     );
