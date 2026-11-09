@@ -2,7 +2,7 @@
 
 use crate::Sim;
 use crate::camera::{self, CameraRig, MainCamera, to_view};
-use crate::node_ui::Selection;
+use crate::node_ui::{SelectedZone, Selection};
 use crate::rendezvous::TARGET_COLOR;
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -22,10 +22,35 @@ const IMPACT_COLOR: Color = Color::srgb(1.0, 0.25, 0.25);
 const ZONE_COLOR: Color = Color::srgb(0.3, 1.0, 0.45);
 /// Aufsetzen außerhalb eines Zielgebiets.
 const OUTSIDE_COLOR: Color = Color::srgb(1.0, 0.9, 0.2);
+/// Markierung des gewählten Zielgebiets (wie ein gewähltes Schiff).
+const SELECTED_ZONE_COLOR: Color = Color::srgb(1.0, 0.85, 0.2);
 const GRID_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.12);
 /// Größe der Markierungen relativ zum Abstand zur Kamera (bleibt auf dem
 /// Bildschirm gleich groß, egal wie weit man herauszoomt).
 const MARKER_SCALE: f32 = 0.007;
+/// Höhe (m) von Zielgebieten und Aufsetzkreuz über der Oberfläche: knapp
+/// darüber, damit sie aus der Nähe auf dem Boden liegen.
+pub const SURFACE_LIFT: f64 = 2.0;
+/// Höhe (m) des Gitters über der Oberfläche; die Sehnen zwischen den
+/// Stützpunkten hängen bis etwa 1,5 m durch.
+const GRID_LIFT: f64 = 10.0;
+/// Auflösung der Planetenkugel: Die Dreiecke liegen höchstens etwa 6 m unter
+/// der echten Oberfläche (aus der Nähe wichtig, aus der Ferne unsichtbar).
+const PLANET_SEGMENTS: (u32, u32) = (720, 360);
+/// Stützpunkte pro Umlauf einer Bahnlinie: in der Karte 256 (bis 50 m neben
+/// der echten Bahn, aus der Ferne unsichtbar), in der Nahansicht 4096 (unter
+/// 0,2 m).
+const ORBIT_POINTS: usize = 256;
+const NEAR_ORBIT_POINTS: usize = 4096;
+
+/// Stützpunkte pro Umlauf für Bahnlinien (und das Anklicken der Bahn).
+pub fn orbit_points(near: bool) -> usize {
+    if near {
+        NEAR_ORBIT_POINTS
+    } else {
+        ORBIT_POINTS
+    }
+}
 
 #[derive(Component)]
 pub struct PlanetMarker;
@@ -68,6 +93,11 @@ pub fn setup(
     });
 
     let sphere = meshes.add(Sphere::new(1.0).mesh().uv(96, 48));
+    let planet_sphere = meshes.add(
+        Sphere::new(1.0)
+            .mesh()
+            .uv(PLANET_SEGMENTS.0, PLANET_SEGMENTS.1),
+    );
     let unlit = |color: Color| StandardMaterial {
         base_color: color,
         unlit: true,
@@ -77,7 +107,7 @@ pub fn setup(
     for body in &sim.0.bodies {
         commands.spawn((
             PlanetMarker,
-            Mesh3d(sphere.clone()),
+            Mesh3d(planet_sphere.clone()),
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: Color::srgb(0.18, 0.42, 0.32),
                 perceptual_roughness: 0.9,
@@ -197,7 +227,7 @@ pub fn sync_markers(
 pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) {
     let world = &sim.0;
     for body in &world.bodies {
-        let radius = body.radius * 1.002;
+        let radius = body.radius + GRID_LIFT;
         let point = |lat: f64, lon: f64| {
             let p = SurfacePoint::from_degrees(lat, lon);
             to_view(
@@ -205,12 +235,13 @@ pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) 
                 rig.focus,
             )
         };
+        // Alle 0,25°: Die Linien liegen auch aus der Nähe auf dem Boden.
         for lat in [-60.0, -30.0, 0.0, 30.0, 60.0] {
-            gizmos.linestrip((0..=120).map(|i| point(lat, i as f64 * 3.0)), GRID_COLOR);
+            gizmos.linestrip((0..=1440).map(|i| point(lat, i as f64 * 0.25)), GRID_COLOR);
         }
         for lon in (0..12).map(|i| i as f64 * 30.0) {
             gizmos.linestrip(
-                (0..=60).map(|i| point(-90.0 + i as f64 * 3.0, lon)),
+                (0..=720).map(|i| point(-90.0 + i as f64 * 0.25, lon)),
                 GRID_COLOR,
             );
         }
@@ -244,6 +275,7 @@ pub fn draw_trajectories(
     let world = &sim.0;
     let now = world.time;
     let target = selection.0.and_then(|i| world.vessels[i].target);
+    let points = orbit_points(rig.near);
     for (i, vessel) in world.vessels.iter().enumerate() {
         let orbit_color = if target == Some(i) {
             TARGET_COLOR
@@ -286,9 +318,11 @@ pub fn draw_trajectories(
                     } else {
                         orbit_color
                     };
+                    // Pro Umlauf `points` Stützpunkte, für Teilstücke anteilig.
+                    let n = ((points as f64 * (to - from) / span).ceil() as usize).max(16);
                     gizmos.linestrip(
-                        (0..=256).map(|i| {
-                            let t = from + (to - from) * i as f64 / 256.0;
+                        (0..=n).map(|i| {
+                            let t = from + (to - from) * i as f64 / n as f64;
                             to_view(segment.state_at(&world.bodies, t).position, rig.focus)
                         }),
                         color,
@@ -298,13 +332,30 @@ pub fn draw_trajectories(
                     let color = if burn.is_some() {
                         after_burn = true;
                         if segment.start() <= now && now < segment.end() {
-                            draw_momentary_orbit(&mut gizmos, world, segment, now, rig.focus);
+                            draw_momentary_orbit(
+                                &mut gizmos,
+                                world,
+                                segment,
+                                now,
+                                rig.focus,
+                                points,
+                            );
                         }
                         BURN_COLOR
                     } else {
                         ATMOSPHERE_PATH_COLOR
                     };
-                    draw_samples(&mut gizmos, world, segment, samples, from, rig.focus, color);
+                    let every = if rig.near { 1 } else { samples.len() / 400 };
+                    draw_samples(
+                        &mut gizmos,
+                        world,
+                        segment,
+                        samples,
+                        from,
+                        rig.focus,
+                        color,
+                        every,
+                    );
                 }
                 Segment::Surface { .. } => {}
             }
@@ -322,6 +373,7 @@ fn draw_momentary_orbit(
     segment: &Segment,
     now: f64,
     focus: DVec3,
+    points: usize,
 ) {
     let body = &world.bodies[segment.body()];
     let state = segment.state_at(&world.bodies, now);
@@ -332,15 +384,18 @@ fn draw_momentary_orbit(
     let span = kepler::period(body.gm, &state).unwrap_or(3.0 * 3600.0);
     let to =
         kepler::time_to_radius_inbound(body.gm, &state, boundary).map_or(span, |dt| dt.min(span));
+    let n = ((points as f64 * to / span).ceil() as usize).max(16);
     gizmos.linestrip(
-        (0..=256).map(|i| {
-            let dt = to * i as f64 / 256.0;
+        (0..=n).map(|i| {
+            let dt = to * i as f64 / n as f64;
             to_view(kepler::propagate(body.gm, state, dt).position, focus)
         }),
         ORBIT_COLOR,
     );
 }
 
+/// Stützpunkte eines vorausberechneten Abschnitts, jeder `every`-te.
+#[allow(clippy::too_many_arguments)]
 fn draw_samples(
     gizmos: &mut Gizmos,
     world: &World,
@@ -349,10 +404,11 @@ fn draw_samples(
     from: f64,
     focus: DVec3,
     color: Color,
+    every: usize,
 ) {
     let start = segment.state_at(&world.bodies, from).position;
     let rest = samples.iter().filter(|s| s.time > from);
-    let step = (samples.len() / 400).max(1);
+    let step = every.max(1);
     gizmos.linestrip(
         std::iter::once(start)
             .chain(rest.step_by(step).map(|s| s.state.position))
@@ -423,7 +479,7 @@ pub fn draw_touchdowns(
         let up = body.body_fixed_to_inertial(t.point.body_fixed_direction(), world.time);
         let east = DVec3::Z.cross(up).try_normalize().unwrap_or(DVec3::X);
         let north = up.cross(east);
-        let center = to_view(up * body.radius * 1.002, rig.focus);
+        let center = to_view(up * (body.radius + SURFACE_LIFT), rig.focus);
         let arm = center.distance(camera.translation) * 0.015;
         for d in [east + north, east - north] {
             let d = camera::dir_to_view(d.normalize()) * arm;
@@ -434,21 +490,35 @@ pub fn draw_touchdowns(
 
 /// Zielgebiete als Kreise auf der Oberfläche, mit dem Planeten drehend. Aus
 /// der Ferne mindestens so groß wie ein Markierungspunkt, damit man sie findet.
+/// In der Mitte eine kleine Raute zum Anklicken (gewählt: gelb).
 pub fn draw_zones(
     sim: Res<Sim>,
     rig: Res<CameraRig>,
+    zone_selection: Res<SelectedZone>,
     camera: Single<&Transform, With<MainCamera>>,
     mut gizmos: Gizmos,
 ) {
     let world = &sim.0;
-    for zone in &world.zones {
+    let eye = camera.translation;
+    for (k, zone) in world.zones.iter().enumerate() {
         let body = &world.bodies[zone.body];
         let up = body.body_fixed_to_inertial(zone.center.body_fixed_direction(), world.time);
-        let center = to_view(up * body.radius * 1.002, rig.focus);
+        let center = to_view(up * (body.radius + SURFACE_LIFT), rig.focus);
         let rotation = Quat::from_rotation_arc(Vec3::Z, camera::dir_to_view(up));
-        let radius = (zone.radius as f32).max(center.distance(camera.translation) * 0.012);
+        let distance = center.distance(eye);
+        let radius = (zone.radius as f32).max(distance * 0.012);
         gizmos
             .circle(Isometry3d::new(center, rotation), radius, ZONE_COLOR)
-            .resolution(48);
+            .resolution(96);
+        let color = if zone_selection.0 == Some(k) {
+            SELECTED_ZONE_COLOR
+        } else {
+            ZONE_COLOR
+        };
+        // Flach auf dem Boden wie der Kreis (zur Kamera gedreht steckte die
+        // untere Hälfte im Boden).
+        gizmos
+            .circle(Isometry3d::new(center, rotation), distance * 0.01, color)
+            .resolution(4);
     }
 }

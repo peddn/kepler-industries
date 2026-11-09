@@ -41,6 +41,13 @@ die Knoten, an denen ein Node die Bahnebene angleicht. Am Boden gilt das für
 die Bahn nach dem geplanten Start: Startzeit und Kurs so lange verschieben,
 bis die Neigung klein ist, ergibt das Startfenster.
 
+Die Kamera lässt sich mit `F` auf das gewählte Objekt richten: Schiff,
+Node oder Zielgebiet (Raute in der Kreismitte anklicken). Sie folgt ihm, auch
+wenn man danach etwas anderes wählt; so kann man ein Zielgebiet im Blick
+behalten und dabei den Brems-Node des Schiffs einstellen. Mit `N` geht es in
+die Nahansicht: Der Planet liegt unten, man kommt bis auf 10 m heran, zum
+Beispiel an zwei Schiffe beim Rendezvous.
+
 Unten zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
 ist der volle Tank, darin die geplanten Brennvorgänge der Kette (Start gelb,
 Nodes violett), dahinter der Rest (grün). Reicht der Treibstoff nicht, steht
@@ -64,6 +71,16 @@ zeigt ein rotes Kreuz den Aufschlagpunkt.
 Ziel 0,3°), Node 1 macht die Bahn auf 100 km rund, Node 2 hebt sie leicht
 an, damit die Fähre aufholt. Nach drei Umläufen kommt sie Relais-1 auf 641 m
 nahe (Ringe mit Linie). Nachspielen mit den Optionen unten.*
+
+![Nahansicht](docs/screenshots/nahansicht.png)
+
+*Nahansicht beim Rendezvous aus dem Bild darüber: Kamera auf Fähre-3 (gelb),
+Relais-1 (rosa) ist 903 m entfernt, die engste Annäherung kommt in 6 s.*
+
+![Zielgebiet aus der Nähe](docs/screenshots/zielgebiet-nah.png)
+
+*Kamera auf das Übungsfeld in der Nahansicht, aus 12 km: Das Kreuz zeigt,
+wo der geplante Hop der Fähre aufsetzt.*
 
 ![Landung](docs/screenshots/landung.png)
 
@@ -125,6 +142,9 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Rechte Maustaste ziehen | Kamera drehen |
 | Mausrad | Zoomen |
 | Linksklick auf ein Schiff / `Tab` | Schiff wählen / nächstes Schiff |
+| Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
+| `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet; ohne Auswahl Planet); nochmal `F` zurück zum Planeten |
+| `N` | Nahansicht an/aus (Planet unten, Zoom bis 10 m; nur mit einem Objekt im Fokus) |
 | Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
@@ -146,8 +166,12 @@ nach außen/innen.
 cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,4200
 ```
 
-- `--time SEKUNDEN`: vor dem Start bis zu dieser Spielzeit vorrechnen
-- `--camera GIER,NEIGUNG,KM`: Blickwinkel in Grad, Abstand vom Planetenmittelpunkt in km
+- `--time SEKUNDEN`: bis zu dieser Spielzeit vorrechnen; Start, Nodes und Ziel
+  gelten ab Spielbeginn und werden dabei ausgeführt
+- `--camera GIER,NEIGUNG,KM`: Blickwinkel in Grad, Abstand vom Fokus in km
+- `--focus SCHIFF` / `--focus-zone ZIELGEBIET`: Kamera auf ein Schiff bzw.
+  Zielgebiet (0 = Startbasis, 1 = Übungsfeld, 2 = Messfeld Ost)
+- `--near`: Nahansicht (mit `--focus` oder `--focus-zone`)
 - `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2, 2 = Fähre-3)
 - `--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM`: Start planen (Zeitpunkt des
   Abhebens in s, Kurs in Grad), z. B. `--launch 2,120,90,2,100`
@@ -163,6 +187,13 @@ Zirkularisieren, Aufholen):
 ```sh
 cargo run -p game -- --time 11100 --launch 2,11325,120,1.5,100 --target 2,0 \
   --node 2,11638,682,0,0 --node 2,12616,99.75,0,0
+```
+
+Dasselbe kurz vor der Annäherung in der Nahansicht (Bild „Nahansicht“):
+
+```sh
+cargo run -p game -- --time 21588 --launch 2,11325,120,1.5,100 --target 2,0 \
+  --node 2,11638,682,0,0 --node 2,12616,99.75,0,0 --focus 2 --near --camera 50,25,6
 ```
 
 ## Tests

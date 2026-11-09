@@ -5,6 +5,7 @@
 
 mod camera;
 mod dv_bar;
+mod focus;
 mod hud;
 mod node_ui;
 mod panel;
@@ -53,6 +54,10 @@ struct Options {
     launch: Option<(usize, sim::Launch)>,
     /// Ziel: Schiff, Zielschiff.
     targets: Vec<(usize, usize)>,
+    /// Kamera auf dieses Schiff bzw. Zielgebiet richten.
+    focus: Option<camera::Focus>,
+    /// Nahansicht einschalten.
+    near: bool,
 }
 
 fn numbers(text: &str, what: &str) -> Vec<f64> {
@@ -68,6 +73,11 @@ fn parse_options() -> Options {
     let mut options = Options::default();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
+        // Schalter ohne Wert.
+        if arg == "--near" {
+            options.near = true;
+            continue;
+        }
         let value = args.next();
         match (arg.as_str(), value) {
             ("--screenshot", Some(path)) => options.screenshot = Some(path),
@@ -101,6 +111,17 @@ fn parse_options() -> Options {
                     },
                 ));
             }
+            ("--focus", Some(v)) => {
+                options.focus = Some(camera::Focus::Vessel(
+                    v.parse().expect("--focus erwartet eine Schiffsnummer"),
+                ))
+            }
+            ("--focus-zone", Some(v)) => {
+                options.focus = Some(camera::Focus::Zone(
+                    v.parse()
+                        .expect("--focus-zone erwartet die Nummer eines Zielgebiets"),
+                ))
+            }
             ("--target", Some(t)) => {
                 let p = numbers(&t, "--target SCHIFF,ZIEL");
                 options.targets.push((p[0] as usize, p[1] as usize));
@@ -110,7 +131,8 @@ fn parse_options() -> Options {
                 eprintln!(
                     "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM\n\
                      \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]\n\
-                     \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM  --target SCHIFF,ZIEL"
+                     \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM  --target SCHIFF,ZIEL\n\
+                     \x20         --focus SCHIFF  --focus-zone ZIELGEBIET  --near"
                 );
                 std::process::exit(2);
             }
@@ -122,8 +144,8 @@ fn parse_options() -> Options {
 fn main() {
     let options = parse_options();
 
+    // Start, Nodes und Ziel gelten ab Spielbeginn; `--time` führt sie dann aus.
     let mut world = sim::scenario::demo();
-    world.advance_to(options.time);
     let mut selection = node_ui::Selection(options.select);
     // Zuerst der Start, damit Nodes danach auf seiner Bahn liegen können.
     if let Some((vessel, launch)) = options.launch {
@@ -158,12 +180,18 @@ fn main() {
     for &(vessel, target) in &options.targets {
         world.set_target(vessel, Some(target));
     }
+    world.advance_to(options.time);
 
     let mut rig = camera::CameraRig::new(world.bodies[0].radius);
+    if let Some(focus) = options.focus {
+        rig.set_target(focus);
+        rig.set_near(options.near);
+    }
     if let Some((yaw, pitch, km)) = options.camera {
         rig.yaw = yaw.to_radians();
         rig.pitch = pitch.to_radians();
         rig.distance = km * 1000.0;
+        rig.clamp_distance();
     }
 
     let warp = TimeWarp {
@@ -186,6 +214,7 @@ fn main() {
     .insert_resource(rig)
     .insert_resource(selection)
     .init_resource::<node_ui::SelectedNode>()
+    .init_resource::<node_ui::SelectedZone>()
     .init_resource::<panel::PanelShown>()
     .init_resource::<dv_bar::BarShown>()
     .init_resource::<rendezvous::Rendezvous>()
@@ -214,8 +243,7 @@ fn main() {
         (
             controls,
             advance_simulation,
-            camera::input,
-            camera::apply,
+            (focus::keys, focus::follow, camera::input, camera::apply).chain(),
             // Eingaben ändern die Simulation; danach wird nur noch gelesen.
             (panel::buttons, node_ui::input, rendezvous::update).chain(),
             view::sync_markers,

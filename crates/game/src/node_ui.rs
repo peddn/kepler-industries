@@ -10,13 +10,15 @@
 //! die Oberfläche.
 //!
 //! Treffer werden im Bildschirm geprüft (Abstand in Pixeln). Punkte hinter dem
-//! Planeten zählen nicht. Annahme bis zum Mond-PR: Der Planet liegt im Fokus.
+//! Planeten zählen nicht. Zielgebiete sind über ihre Markierung in der Mitte
+//! wählbar.
 
 use crate::Sim;
-use crate::camera::{CameraRig, MainCamera, OVERLAY_LAYER, dir_to_view, to_view};
+use crate::camera::{CameraRig, Focus, MainCamera, OVERLAY_LAYER, dir_to_view, to_view};
 use crate::dv_bar::{BarShown, over_bar};
 use crate::hud::UiFont;
 use crate::panel::{PanelShown, over_panel};
+use crate::view::orbit_points;
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -54,6 +56,11 @@ const HANDLES: [(usize, f64, Color); 6] = [
 /// Ausgewähltes Schiff.
 #[derive(Resource, Default)]
 pub struct Selection(pub Option<usize>);
+
+/// Gewähltes Zielgebiet. Es schließt ein gewähltes Schiff aus: Es ist immer
+/// nur eins gewählt.
+#[derive(Resource, Default)]
+pub struct SelectedZone(pub Option<usize>);
 
 /// Gewählter Node des gewählten Schiffs, erkannt an seinem gesetzten
 /// Zeitpunkt. So bleibt die Wahl erhalten, wenn ein früherer Node ausgeführt
@@ -234,15 +241,24 @@ pub(crate) struct Projector<'a> {
     camera: &'a Camera,
     transform: GlobalTransform,
     eye: Vec3,
+    /// Planetenmittelpunkt in Bevy-Koordinaten (relativ zum Fokus).
+    planet_center: Vec3,
     planet_radius: f32,
 }
 
 impl<'a> Projector<'a> {
-    pub(crate) fn new(camera: &'a Camera, transform: &Transform, planet_radius: f64) -> Self {
+    /// Für den Planeten im Ursprung der Simulation (`focus`: Fokuspunkt).
+    pub(crate) fn new(
+        camera: &'a Camera,
+        transform: &Transform,
+        focus: DVec3,
+        planet_radius: f64,
+    ) -> Self {
         Self {
             camera,
             transform: GlobalTransform::from(*transform),
             eye: transform.translation,
+            planet_center: to_view(DVec3::ZERO, focus),
             planet_radius: planet_radius as f32,
         }
     }
@@ -255,21 +271,27 @@ impl<'a> Projector<'a> {
         self.camera.world_to_viewport(&self.transform, p).ok()
     }
 
+    /// Strahl von der Kamera durch den Bildschirmpunkt.
+    fn ray(&self, cursor: Vec2) -> Option<Ray3d> {
+        self.camera.viewport_to_world(&self.transform, cursor).ok()
+    }
+
     /// Auf den Bildschirm, auch wenn der Planet davor liegt (für Nodes und
     /// Griffe, die immer obenauf gezeichnet werden).
     fn screen(&self, p: Vec3) -> Option<Vec2> {
         self.camera.world_to_viewport(&self.transform, p).ok()
     }
 
-    /// Liegt der Planet (im Ursprung) zwischen Kamera und Punkt?
+    /// Liegt der Planet zwischen Kamera und Punkt?
     fn occluded(&self, p: Vec3) -> bool {
         let d = p - self.eye;
         let len = d.length();
         let dir = d / len;
-        let b = self.eye.dot(dir);
+        let eye = self.eye - self.planet_center;
+        let b = eye.dot(dir);
         // Etwas kleiner, damit Punkte auf der Oberfläche sich nicht selbst verdecken.
         let r = self.planet_radius * 0.999;
-        let disc = b * b - (self.eye.length_squared() - r * r);
+        let disc = b * b - (eye.length_squared() - r * r);
         disc > 0.0 && {
             let hit = -b - disc.sqrt();
             hit > 0.0 && hit < len
@@ -287,8 +309,9 @@ fn node_geometry(plan: &Plan, focus: DVec3, eye: Vec3) -> (Vec3, [Vec3; 6]) {
 }
 
 /// Bahnstücke ab `from` (frühestens jetzt), auf die ein Node gesetzt werden
-/// kann: aller Freiflug bis zum Aufschlag, ohne die Brennvorgänge.
-fn coast_path(world: &World, trajectory: &Trajectory, from: f64) -> Path {
+/// kann: aller Freiflug bis zum Aufschlag, ohne die Brennvorgänge. `points`
+/// Stützpunkte pro Umlauf, so fein wie die gezeichnete Linie.
+fn coast_path(world: &World, trajectory: &Trajectory, from: f64, points: usize) -> Path {
     let from = from.max(world.time);
     let mut pieces = Vec::new();
     for segment in trajectory.segments() {
@@ -301,10 +324,11 @@ fn coast_path(world: &World, trajectory: &Trajectory, from: f64) -> Path {
                 let a = segment.start().max(from);
                 let span = kepler::period(gm, state).unwrap_or(3.0 * 3600.0);
                 let b = segment.end().min(a + span);
+                let n = ((points as f64 * (b - a) / span).ceil() as usize).max(16);
                 pieces.push(
-                    (0..=256)
+                    (0..=n)
                         .map(|k| {
-                            let t = a + (b - a) * k as f64 / 256.0;
+                            let t = a + (b - a) * k as f64 / n as f64;
                             (t, segment.state_at(&world.bodies, t).position)
                         })
                         .collect(),
@@ -342,33 +366,49 @@ fn nearest_on_path(
     now: f64,
     cursor: Vec2,
 ) -> Option<(f32, f64)> {
+    // Gesucht wird in 3D: der Punkt jedes Bahnstücks, der dem Strahl unter der
+    // Maus am nächsten liegt. So zählen auch Stücke, deren Enden außerhalb des
+    // Bildes oder hinter der Kamera liegen (Nahansicht).
+    let ray = projector.ray(cursor)?;
     let mut best: Option<(f32, f64)> = None;
     for piece in path {
-        let projected: Vec<Option<(f64, Vec2)>> = piece
-            .iter()
-            .map(|(t, p)| {
-                (*t > now)
-                    .then(|| projector.project(to_view(*p, focus)).map(|s| (*t, s)))
-                    .flatten()
-            })
-            .collect();
-        for pair in projected.windows(2) {
-            let [Some((t0, a)), Some((t1, b))] = pair else {
+        for pair in piece.windows(2) {
+            let [(t0, p0), (t1, p1)] = [pair[0], pair[1]];
+            if t1 <= now {
+                continue;
+            }
+            let (a, b) = (to_view(p0, focus), to_view(p1, focus));
+            let u = closest_on_segment(&ray, a, b);
+            let t = t0 + (t1 - t0) * u as f64;
+            if t <= now {
+                continue;
+            }
+            let Some(screen) = projector.project(a + (b - a) * u) else {
                 continue;
             };
-            let ab = *b - *a;
-            let u = if ab.length_squared() > 0.0 {
-                ((cursor - *a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
-            } else {
-                0.0
-            };
-            let distance = (*a + ab * u).distance(cursor);
+            let distance = screen.distance(cursor);
             if best.is_none_or(|(d, _)| distance < d) {
-                best = Some((distance, t0 + (t1 - t0) * u as f64));
+                best = Some((distance, t));
             }
         }
     }
     best
+}
+
+/// Stelle (0 bis 1) auf der Strecke von `a` nach `b`, die dem Strahl am
+/// nächsten liegt.
+fn closest_on_segment(ray: &Ray3d, a: Vec3, b: Vec3) -> f32 {
+    let d1 = *ray.direction;
+    let d2 = b - a;
+    let r = ray.origin - a;
+    let (a12, a22) = (d1.dot(d2), d2.dot(d2));
+    let (b1, b2) = (d1.dot(r), d2.dot(r));
+    // |d1| = 1; Nenner 0 bei parallelen Geraden oder leerer Strecke.
+    let denominator = a22 - a12 * a12;
+    if denominator <= f32::EPSILON * a22.max(1.0) {
+        return 0.0;
+    }
+    ((b2 - a12 * b1) / denominator).clamp(0.0, 1.0)
 }
 
 /// Lässt sich die Kette des Schiffs gerade ändern? Nicht während des
@@ -386,12 +426,13 @@ pub fn input(
     mut sim: ResMut<Sim>,
     mut selection: ResMut<Selection>,
     mut selected: ResMut<SelectedNode>,
+    mut zone: ResMut<SelectedZone>,
     mut drag: ResMut<Drag>,
     mut message: ResMut<UiMessage>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     real_time: Res<Time<Real>>,
-    rig: Res<CameraRig>,
+    mut rig: ResMut<CameraRig>,
     shown: Res<PanelShown>,
     bar: Res<BarShown>,
     window: Single<&Window, With<PrimaryWindow>>,
@@ -403,10 +444,12 @@ pub fn input(
     if keys.just_pressed(KeyCode::Tab) && count > 0 {
         selection.0 = Some(selection.0.map_or(0, |i| (i + 1) % count));
         selected.0 = None;
+        zone.0 = None;
     }
     if keys.just_pressed(KeyCode::Escape) {
         selection.0 = None;
         selected.0 = None;
+        zone.0 = None;
     }
     if (keys.just_pressed(KeyCode::Delete) || keys.just_pressed(KeyCode::Backspace))
         && let Some((i, k)) = selected_node(world, &selection, &selected)
@@ -446,7 +489,7 @@ pub fn input(
         return;
     };
     let (camera, transform) = *camera;
-    let projector = Projector::new(camera, transform, world.bodies[0].radius);
+    let projector = Projector::new(camera, transform, rig.focus, world.bodies[0].radius);
 
     // Klicks auf Seitenleiste und Δv-Balken gehören diesen.
     let over_ui = over_panel(&shown, &window, cursor) || over_bar(&bar, &shown, &window, cursor);
@@ -494,7 +537,7 @@ pub fn input(
                 let leg = world.trajectory_with_first_nodes(i, index);
                 *drag = Drag::Node {
                     index,
-                    path: coast_path(world, &leg, from),
+                    path: coast_path(world, &leg, from, orbit_points(rig.near)),
                     press: cursor,
                     moved: false,
                 };
@@ -574,7 +617,17 @@ pub fn input(
                         ..chain_node.node
                     };
                     match world.set_node(i, index, node) {
-                        Ok(()) => selected.0 = Some(time),
+                        Ok(()) => {
+                            selected.0 = Some(time);
+                            // Liegt die Kamera auf diesem Node, wandert sie mit.
+                            let old = Focus::Node {
+                                vessel: i,
+                                time: chain_node.node.time,
+                            };
+                            if rig.target == old {
+                                rig.target = Focus::Node { vessel: i, time };
+                            }
+                        }
                         Err(e) => {
                             failure = Some(e);
                             *drag = Drag::None;
@@ -597,8 +650,10 @@ pub fn input(
                 world,
                 &mut selection,
                 &mut selected,
+                &mut zone,
                 &projector,
                 rig.focus,
+                orbit_points(rig.near),
                 cursor,
             )
             .err();
@@ -610,15 +665,28 @@ pub fn input(
     }
 }
 
-/// Klick: zuerst Schiffe, dann die Bahn des gewählten Schiffs. Ein Klick auf
-/// die Bahn fügt einen Node in die Kette ein, auch auf Bahnstücke nach einem
-/// geplanten Manöver.
+/// Mitte eines Zielgebiets (knapp über dem Boden), im Simulationssystem.
+pub fn zone_center(world: &World, k: usize) -> DVec3 {
+    let zone = &world.zones[k];
+    let body = &world.bodies[zone.body];
+    body.body_fixed_to_inertial(
+        zone.center.body_fixed_direction() * (body.radius + crate::view::SURFACE_LIFT),
+        world.time,
+    )
+}
+
+/// Klick: zuerst Schiffe, dann Zielgebiete, dann die Bahn des gewählten
+/// Schiffs. Ein Klick auf die Bahn fügt einen Node in die Kette ein, auch auf
+/// Bahnstücke nach einem geplanten Manöver.
+#[allow(clippy::too_many_arguments)]
 fn click(
     world: &mut World,
     selection: &mut Selection,
     selected: &mut SelectedNode,
+    zone: &mut SelectedZone,
     projector: &Projector,
     focus: DVec3,
+    points: usize,
     cursor: Vec2,
 ) -> Result<(), PlanError> {
     let vessel_hit = (0..world.vessels.len())
@@ -633,11 +701,26 @@ fn click(
             selected.0 = None;
         }
         selection.0 = Some(i);
+        zone.0 = None;
+        return Ok(());
+    }
+
+    let zone_hit = (0..world.zones.len())
+        .filter_map(|k| {
+            let center = to_view(zone_center(world, k), focus);
+            projector.project(center).map(|s| (s.distance(cursor), k))
+        })
+        .filter(|(d, _)| *d < PICK_RADIUS)
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    if let Some((_, k)) = zone_hit {
+        selection.0 = None;
+        selected.0 = None;
+        zone.0 = Some(k);
         return Ok(());
     }
 
     if let Some(i) = selection.0 {
-        let path = coast_path(world, &world.vessels[i].trajectory, world.time);
+        let path = coast_path(world, &world.vessels[i].trajectory, world.time, points);
         if let Some((distance, time)) = nearest_on_path(projector, &path, focus, world.time, cursor)
             && distance < PICK_RADIUS
         {

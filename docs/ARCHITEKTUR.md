@@ -27,7 +27,9 @@ der „Deep Space Kraken", aufwendige Gegenmaßnahmen (Floating Origin, Krakensb
 **Regel:** Die Simulation rechnet nur in `f64`. Bevy bekommt jedes Bild nur
 Positionen *relativ zum Kamerafokus* als `f32` (`camera::to_view`). Der Fokus
 liegt in Bevy im Ursprung, die Kamera ist nie weiter entfernt als der
-Zoomabstand. Es gibt keine `f32`-Weltkoordinaten.
+Zoomabstand. Es gibt keine `f32`-Weltkoordinaten. Deshalb geht die
+Nahansicht bis 10 m an ein Schiff 700 km über dem Planetenmittelpunkt heran,
+ohne dass etwas zittert.
 
 ### 2. Ein einziges Bezugssystem
 *KSP:* Schaltet unterhalb von ~100 km auf ein mitrotierendes System um.
@@ -292,6 +294,22 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   das Schiff kommt mit nicht mehr vollen Tanks oben an. Zirkularisieren per
   Manöver-Node, auch schon vor dem Abheben geplant. Feste Startzeit mit
   Countdown (Vorgabe 2 min); verschieben verschiebt die ganze Kette.
+- **Kamera:** `F` richtet sie auf das gewählte Objekt (gewählter Node, sonst
+  Schiff, sonst Zielgebiet, ohne Auswahl den Planeten), ein zweites `F` auf
+  dasselbe zurück zum Planeten. Der Fokus ist unabhängig von der Auswahl: Die
+  Kamera bleibt auf ihrem Objekt und folgt ihm, auch wenn man danach etwas
+  anderes wählt (z. B. Zielgebiet im Blick, Brems-Node des Schiffs
+  einstellen). Zielgebiete sind über eine Raute in der Mitte wählbar. Gibt es
+  das Objekt nicht mehr, geht der Fokus auf sein Schiff, sonst den Planeten.
+  Kollisionen der Kamera mit dem Planeten werden bewusst vernachlässigt.
+- **Nahansicht** (`N`, wie die Flugansicht in KSP): nur mit einem Objekt im
+  Fokus; Zoom bis 10 m (in der Karte bis 20 km), "oben" zeigt vom Planeten
+  weg. Bahnen werden dann mit 4096 statt 256 Punkten pro Umlauf gezeichnet
+  und angeklickt (sonst liegt ein Schiff bis 50 m neben seiner Linie). Treffer
+  auf Bahnen werden in 3D mit dem Strahl unter der Maus gesucht, damit auch
+  Stücke zählen, deren Enden außerhalb des Bildes liegen. Die Planetenkugel
+  ist auf etwa 6 m genau, Zielgebiete und Aufsetzkreuz liegen 2 m, das
+  Gitter 10 m über dem Boden. Später kommen hier die Modelle der Schiffe hin.
 - **Seitenleiste rechts** für alles, was man bedient, als Karten je nach Lage
   („Start“ bei einem gelandeten Schiff, „Ziel“ bei jedem Schiff außer
   Wracks). Die Anzeige links bleibt reine Information. Klicks auf die Leiste gehen nicht an die Karte dahinter.
@@ -321,11 +339,17 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Manöver-Nodes. Zielbahn rosa, Annäherung als zwei Ringe mit Linie, Knoten
   als Rauten „AN“/„DN“. Das Startfenster findet man von Hand: Startzeit und
   Kurs verschieben, bis die Neigung klein ist.
-- **Andocken (nächster Schritt):** abstrahiert, kostet die
-  Relativgeschwindigkeit als Δv. Die Schiffe werden zu einem Verbund, die
-  Massen addieren sich. Im angedockten Zustand zündet kein Triebwerk; so hängt
-  keine Bahn von Masse oder Manövern des anderen Schiffs ab. Details im Plan
-  zu PR 12.
+- **Andocken (nächster Schritt):** Der Spieler stellt die engste Annäherung
+  ein (unter 1 km). Dann hängt die Kette automatisch an: ein Node
+  „Angleichen“ an der Annäherung (echtes Brennen, Δv = Relativgeschwindigkeit,
+  ohne Griffe), danach ein Abschnitt „Anflug“ auf gerader Linie im
+  mitbewegten System des Ziels bis zum Kontakt (höchstens 2 m/s, beim Kontakt
+  0,1 m/s; Treibstoff aus dem nötigen Schub). Der Abschnitt speichert eine
+  Kopie der Zielbahn, hängt also nicht von einem anderen Schiff ab; das Ziel
+  plant ab dem Angleichen nichts mehr. Beim Kontakt werden die Schiffe ein
+  Verbund: ein Schiff mit addierten Werten (gemeinsamer Tank, Summenschub),
+  das normal brennen kann. Abdocken mit Regler für den mitgenommenen
+  Treibstoff.
 - **Basis-Schiff:** Rohbau im Orbit, Transporter liefern „Bauteile" per
   Andocken, voll → Vorlage wechselt zum Basis-Schiff. Landet einmalig und
   gründet die Basis dort, wo es aufsetzt.
@@ -348,6 +372,8 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 - Scans, automatisierte Routen, Ressourcen, Basen, Wirtschaft
 - Bergung von Wracks (über Geld/Punkte)
 - „Hop zum Ziel": Parameter automatisch suchen, falls Zielen per Hand zu fummelig ist
+- Modelle der Schiffe in der Nahansicht (Ausrichtung beim Anflug aus der
+  Anfluglinie, Haltepunkt vor dem Andockstutzen)
 - **Geparkt:** Bandbreite, Modulslots, Gelände/Höhenkarte, Wiedereintrittshitze
 - **Gestrichen:** Technikalterung, Lagrange-Punkte (mit Patched Conics nicht möglich)
 
@@ -380,6 +406,7 @@ nichts verloren geht.
    in derselben Kette; Seitenleiste mit Karte „Start“)
 5. Landung ✓ (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
 6. Rendezvous ✓ (Ziel, engste Annäherung, Neigung und Knoten, Startfenster
-   von Hand) und Andocken
+   von Hand), Nahansicht ✓ (Kamera auf jedes gewählte Objekt, `N`), Andocken,
+   Abdocken
 7. Mond, Wechsel der Einflusssphäre
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft
