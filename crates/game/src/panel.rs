@@ -321,17 +321,21 @@ fn launch_result(world: &World, i: usize) -> String {
             format!("{:.1}°", (h.z / h.length()).acos().to_degrees()),
         ));
     }
-    // Kommt die Fähre wieder herunter (Hop), wo?
+    // Kommt die Fähre wieder herunter (Hop), wo und heil?
     if let Some(t) = world.touchdown(i) {
-        lines.push(match (t.braking, t.zone, t.nearest) {
-            (Ok(_), Some(k), _) => row("Aufsetzen", format!("in {}", world.zones[k].name)),
-            (Ok(_), None, Some((k, d))) => row(
-                "Aufsetzen",
-                format!("{} von {}", km(d), world.zones[k].name),
-            ),
-            (Ok(_), None, None) => row("Aufsetzen", "außerhalb".into()),
-            (Err(_), ..) => row("Absturz!", String::new()),
-        });
+        let label = if t.braking.is_ok() {
+            "Aufsetzen"
+        } else {
+            "Absturz!"
+        };
+        lines.push(row(
+            label,
+            match (t.zone, t.nearest) {
+                (Some(k), _) => format!("in {}", world.zones[k].name),
+                (None, Some((k, d))) => format!("{} von {}", km(d), world.zones[k].name),
+                (None, None) => "außerhalb".into(),
+            },
+        ));
     }
     lines.join("\n")
 }

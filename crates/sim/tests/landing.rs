@@ -93,7 +93,14 @@ fn satellite_is_too_weak_to_land() {
     let mut world = in_orbit(SATELLITE, 200.0);
     deorbit(&mut world, 150.0);
     let touchdown = world.touchdown(0).unwrap();
-    assert_eq!(touchdown.braking, Err(Crash::TooWeak));
+    let Err(Crash::TooWeak { thrust_to_weight }) = touchdown.braking else {
+        panic!("Absturz erwartet, nicht {:?}", touchdown.braking);
+    };
+    // 2000 N gegen 600 kg Gewicht (abzüglich verbrauchtem Treibstoff).
+    assert!(
+        thrust_to_weight > 0.3 && thrust_to_weight < 0.5,
+        "{thrust_to_weight}"
+    );
     world.advance_to(touchdown.time + 10.0);
     assert!(matches!(world.vessel_status(0), VesselStatus::Wreck { .. }));
 }

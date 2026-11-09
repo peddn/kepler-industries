@@ -27,7 +27,9 @@ einem Absturz. Die letzte Bremsung ist abstrahiert: Die Geschwindigkeit am
 Boden muss als Δv abgebremst werden, mit genug Treibstoff und Schub größer als
 das Gewicht. Wer daneben landet, kommt mit einem Hop ins Ziel: einem Start mit
 niedriger Ziel-Apoapsis, zum Beispiel von der Startbasis zum Übungsfeld 60 km
-östlich (Kurs 90°, Ziel-Apoapsis etwa 27 km).
+östlich (Kurs 90°, Ziel-Apoapsis etwa 27 km). Relais-1 und Sonde-2 sind
+Satelliten ohne Fallschirm und mit weniger Schub als Gewicht: Sie stürzen beim
+Landen immer ab. Die Anzeige nennt dann Ort (auch das Zielgebiet) und Grund.
 
 Unten zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
 ist der volle Tank, darin die geplanten Brennvorgänge der Kette (Start gelb,

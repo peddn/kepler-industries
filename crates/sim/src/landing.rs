@@ -51,8 +51,8 @@ impl LandingZone {
 pub enum Crash {
     /// Zu wenig Δv an Bord, um die Geschwindigkeit abzubremsen.
     NoFuel { available: f64 },
-    /// Schub nicht größer als das Gewicht.
-    TooWeak,
+    /// Schub nicht größer als das Gewicht (Verhältnis Schub zu Gewicht).
+    TooWeak { thrust_to_weight: f64 },
 }
 
 /// Geschwindigkeit relativ zum Boden (m/s).
@@ -73,8 +73,9 @@ pub fn braking(
         return Ok(0.0);
     }
     let gravity = body.gm / (body.radius * body.radius);
-    if params.thrust <= mass * gravity || params.exhaust_velocity <= 0.0 {
-        return Err(Crash::TooWeak);
+    let thrust_to_weight = params.thrust / (mass * gravity);
+    if thrust_to_weight <= 1.0 || params.exhaust_velocity <= 0.0 {
+        return Err(Crash::TooWeak { thrust_to_weight });
     }
     let available = params.exhaust_velocity * (mass / params.dry_mass).ln();
     if available < speed {

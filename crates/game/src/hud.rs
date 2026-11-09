@@ -4,7 +4,7 @@ use crate::node_ui::{self, SelectedNode, Selection, UiMessage};
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use sim::{Crash, Event, Plan, Segment, SurfacePoint, VesselStatus, World, kepler};
+use sim::{Crash, Event, Plan, Segment, SurfacePoint, Touchdown, VesselStatus, World, kepler};
 use std::ops::Range;
 
 #[derive(Component)]
@@ -193,41 +193,58 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
     (lines, warning)
 }
 
+/// Wo ein Bodenkontakt liegt: im Zielgebiet, sonst Abstand zum nächsten
+/// (ohne Zielgebiet auf dem Körper die Koordinaten).
+fn touchdown_place(world: &World, t: &Touchdown) -> String {
+    match (t.zone, t.nearest) {
+        (Some(k), _) => format!("im Zielgebiet {}", world.zones[k].name),
+        (None, Some((k, d))) => format!("außerhalb, {} von {}", km(d), world.zones[k].name),
+        (None, None) => format!("bei {}", place(&t.point)),
+    }
+}
+
 /// Vorausgesagter Bodenkontakt: Landung im Zielgebiet, Aufsetzen außerhalb
-/// oder Absturz, jeweils mit der Geschwindigkeit am Boden.
+/// oder Absturz, jeweils mit Ort und Geschwindigkeit am Boden. Beim Absturz
+/// steht der Grund gleich in der ersten Zeile.
 pub(crate) fn touchdown_lines(world: &World, i: usize) -> Vec<String> {
     let Some(t) = world.touchdown(i) else {
         return Vec::new();
     };
     let when = format_span(t.time - world.time);
-    let near = t.nearest.map_or(String::new(), |(k, d)| {
-        format!(", {} von {}", km(d), world.zones[k].name)
-    });
-    match (t.braking, t.zone) {
-        (Ok(dv), Some(k)) => vec![
-            format!("Landung in {when} im Zielgebiet {}", world.zones[k].name),
-            format!("  Aufsetzen mit {:.0} m/s, Bremsen {dv:.0} m/s", t.speed),
-        ],
-        (Ok(dv), None) => vec![
-            format!("Aufsetzen in {when} außerhalb{near}"),
+    let place = touchdown_place(world, &t);
+    match t.braking {
+        Ok(dv) => vec![
+            if t.zone.is_some() {
+                format!("Landung in {when} {place}")
+            } else {
+                format!("Aufsetzen in {when} {place}")
+            },
             format!(
-                "  Aufsetzen mit {:.0} m/s, Bremsen {dv:.0} m/s, danach Hop ins Ziel",
-                t.speed
+                "  Aufsetzen mit {:.0} m/s, Bremsen {dv:.0} m/s{}",
+                t.speed,
+                if t.zone.is_some() {
+                    ""
+                } else {
+                    ", danach Hop ins Ziel"
+                }
             ),
         ],
-        (Err(crash), _) => vec![
-            format!("Absturz in {when} bei {}", place(&t.point)),
-            match crash {
-                Crash::NoFuel { available } => format!(
-                    "  Aufprall {:.0} m/s, Δv an Bord nur {available:.0} m/s",
-                    t.speed
+        Err(crash) => {
+            let (reason, detail) = match crash {
+                Crash::NoFuel { available } => (
+                    format!("Δv an Bord nur {available:.0} m/s"),
+                    format!("zum Bremsen fehlen {:.0} m/s", t.speed - available),
                 ),
-                Crash::TooWeak => format!(
-                    "  Aufprall {:.0} m/s, Schub zu schwach zum Bremsen",
-                    t.speed
+                Crash::TooWeak { thrust_to_weight } => (
+                    "Schub zu schwach zum Bremsen".into(),
+                    format!("Schub/Gewicht {thrust_to_weight:.2}, nötig über 1"),
                 ),
-            },
-        ],
+            };
+            vec![
+                format!("Absturz in {when} {place}: {reason}"),
+                format!("  Aufprall {:.0} m/s, {detail}", t.speed),
+            ]
+        }
     }
 }
 
@@ -343,7 +360,10 @@ pub fn update(
                 Some(k) => format!("Gelandet in {}", world.zones[k].name),
                 None => format!("Gelandet bei {} (außerhalb)", place(&point)),
             },
-            VesselStatus::Wreck { point } => format!("Wrack bei {}", place(&point)),
+            VesselStatus::Wreck { point } => match world.zone_at(0, &point) {
+                Some(k) => format!("Wrack in {}", world.zones[k].name),
+                None => format!("Wrack bei {}", place(&point)),
+            },
         };
         let marker = if selection.0 == Some(i) { ">" } else { " " };
         lines.push(format!("{marker} {:<9} {status}", vessel.name));

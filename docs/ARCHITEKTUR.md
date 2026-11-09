@@ -316,7 +316,11 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   als Animation.
 - **Vessel-Klassen und Gebäude** sind Vorlagen mit Werten; Upgrades ändern Werte.
   Fähigkeiten (Fracht, Antenne, Scanner) sind optionale Felder, keine eigene
-  Logik pro Klasse.
+  Logik pro Klasse. Später stellt der Spieler Schiffe, Satelliten und Sonden
+  selbst zusammen: ein Chassis pro Klasse, darin Module (Triebwerk, Tank,
+  Fallschirm, …). Die Summe der Module ergibt die `VesselParams`; die
+  Simulation bleibt dabei unverändert. Bis dahin sind die Demo-Satelliten
+  bewusst nicht landefähig (Schub kleiner als das Gewicht, kein Fallschirm).
 - **Ein Auftragssystem** für Geld und Forschungspunkte.
 
 ## Merkliste (nicht vergessen)
