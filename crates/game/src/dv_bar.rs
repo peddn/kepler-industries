@@ -11,6 +11,7 @@ use crate::Sim;
 use crate::hud::UiFont;
 use crate::node_ui::{SelectedNode, Selection, selected_node};
 use crate::panel::{PANEL_WIDTH, PanelShown};
+use crate::status_bar::STATUS_HEIGHT;
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use bevy::window::PrimaryWindow;
@@ -49,7 +50,8 @@ pub struct BarShown(pub bool);
 pub fn over_bar(shown: &BarShown, panel: &PanelShown, window: &Window, cursor: Vec2) -> bool {
     let right = window.width() - MARGIN - if panel.0 { PANEL_WIDTH } else { 0.0 };
     shown.0
-        && cursor.y >= window.height() - MARGIN - BAR_HEIGHT - CAPTION_HEIGHT
+        && cursor.y >= window.height() - STATUS_HEIGHT - MARGIN - BAR_HEIGHT - CAPTION_HEIGHT
+        && cursor.y < window.height() - STATUS_HEIGHT
         && cursor.x >= MARGIN
         && cursor.x <= right
 }
@@ -82,7 +84,7 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>) {
                 position_type: PositionType::Absolute,
                 left: px(MARGIN),
                 right: px(MARGIN),
-                bottom: px(MARGIN),
+                bottom: px(STATUS_HEIGHT + MARGIN),
                 flex_direction: FlexDirection::Column,
                 row_gap: px(4),
                 display: Display::None,

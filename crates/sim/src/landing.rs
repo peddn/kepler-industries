@@ -47,7 +47,7 @@ impl LandingZone {
 }
 
 /// Warum ein Bodenkontakt zum Absturz wird.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Crash {
     /// Zu wenig Δv an Bord, um die Geschwindigkeit abzubremsen.
     NoFuel { available: f64 },

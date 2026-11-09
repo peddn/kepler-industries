@@ -10,6 +10,7 @@ mod hud;
 mod node_ui;
 mod panel;
 mod rendezvous;
+mod status_bar;
 mod view;
 
 use bevy::prelude::*;
@@ -218,6 +219,7 @@ fn main() {
     .init_resource::<panel::PanelShown>()
     .init_resource::<dv_bar::BarShown>()
     .init_resource::<rendezvous::Rendezvous>()
+    .init_resource::<status_bar::StatusBar>()
     .init_resource::<node_ui::Drag>()
     .init_resource::<node_ui::UiMessage>()
     .init_gizmo_group::<node_ui::NodeGizmos>()
@@ -234,6 +236,7 @@ fn main() {
                 panel::setup,
                 dv_bar::setup,
                 hud::setup,
+                status_bar::setup,
             ),
         )
             .chain(),
@@ -243,7 +246,15 @@ fn main() {
         (
             controls,
             advance_simulation,
-            (focus::keys, focus::follow, camera::input, camera::apply).chain(),
+            (
+                focus::keys,
+                focus::follow,
+                // Vor der Kamera: über dem Protokoll scrollt das Mausrad dieses.
+                status_bar::input,
+                camera::input,
+                camera::apply,
+            )
+                .chain(),
             // Eingaben ändern die Simulation; danach wird nur noch gelesen.
             (panel::buttons, node_ui::input, rendezvous::update).chain(),
             view::sync_markers,
@@ -259,7 +270,7 @@ fn main() {
             view::draw_zones,
             view::draw_touchdowns,
             rendezvous::draw,
-            hud::update,
+            (hud::update, status_bar::sync),
         )
             .chain(),
     );

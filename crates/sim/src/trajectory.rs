@@ -19,6 +19,7 @@ use crate::integrator::{self, Forces, Sample};
 use crate::kepler::{self, StateVector};
 use crate::landing;
 use crate::launch::{self, Launch, LaunchPlan};
+use crate::log::LogKind;
 use crate::maneuver::{self, Burn, ManeuverNode, Plan, PlanError};
 use crate::world::VesselParams;
 use serde::{Deserialize, Serialize};
@@ -298,6 +299,56 @@ fn next_orbit(bodies: &[Body], segment: &Segment, plan: &Plan) -> Option<Plan> {
 
 /// Bodenkontakt: aufsetzen (Treibstoff fürs Bremsen abgezogen) oder Wrack,
 /// siehe `landing`.
+/// Protokolleintrag für das Ende des Abschnitts `done` (auf ihn folgt `next`).
+/// Zielgebiete kennt die Zeitleiste nicht, die trägt `World` nach.
+fn log_entry(
+    bodies: &[Body],
+    params: &VesselParams,
+    done: &Segment,
+    next: &Segment,
+) -> Option<LogKind> {
+    let at = done.end();
+    let body = &bodies[done.body()];
+    let altitude = |r: f64| r - body.radius;
+    Some(match done.end_event()? {
+        Event::Liftoff => LogKind::Liftoff,
+        Event::BurnStart => LogKind::BurnStart,
+        Event::BurnEnd => {
+            let info = kepler::orbit_info(body.gm, &done.state_at(bodies, at));
+            LogKind::BurnEnd {
+                apoapsis: info.apoapsis.map(altitude),
+                periapsis: altitude(info.periapsis),
+            }
+        }
+        Event::AtmosphereEntry => {
+            let info = kepler::orbit_info(body.gm, &done.state_at(bodies, at));
+            LogKind::AtmosphereEntry {
+                periapsis: altitude(info.periapsis),
+            }
+        }
+        Event::GroundContact => {
+            let Segment::Surface { point, wreck, .. } = next else {
+                return None;
+            };
+            if *wreck {
+                let state = done.state_at(bodies, at);
+                let reason = landing::braking(body, params, &state, done.mass_at(at)).err()?;
+                LogKind::Crashed {
+                    point: *point,
+                    zone: None,
+                    reason,
+                }
+            } else {
+                LogKind::Landed {
+                    point: *point,
+                    zone: None,
+                }
+            }
+        }
+        Event::AtmosphereExit | Event::Continue => return None,
+    })
+}
+
 fn touchdown(
     bodies: &[Body],
     params: &VesselParams,
@@ -665,7 +716,13 @@ impl Trajectory {
     /// verschwindet. Eine nicht scharfe Kette rückt beim ersten Brennbeginn
     /// als Ganzes einen Umlauf weiter oder verfällt, wenn es keinen nächsten
     /// Umlauf gibt; beim Abheben rückt sie um eine Planetendrehung weiter.
-    pub fn advance_to(&mut self, bodies: &[Body], t: f64, params: &VesselParams) {
+    pub fn advance_to(
+        &mut self,
+        bodies: &[Body],
+        t: f64,
+        params: &VesselParams,
+    ) -> Vec<(f64, LogKind)> {
+        let mut log = Vec::new();
         loop {
             self.extend(bodies, params);
             if self.segments.len() < 2 || self.segments[0].end() > t {
@@ -708,6 +765,9 @@ impl Trajectory {
                 .segments
                 .pop_front()
                 .expect("mindestens zwei Abschnitte");
+            if let Some(kind) = log_entry(bodies, params, &done, &self.segments[0]) {
+                log.push((at, kind));
+            }
             if done.end_event() == Some(Event::GroundContact) {
                 // Am Boden (gelandet oder Wrack): Die Kette ist erledigt.
                 self.launch = None;
@@ -726,6 +786,7 @@ impl Trajectory {
             self.launch = None;
             self.nodes.clear();
         }
+        log
     }
 
     /// Lässt sich die Kette gerade ändern? Am Boden nur mit geplantem Start.

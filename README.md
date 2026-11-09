@@ -48,7 +48,15 @@ behalten und dabei den Brems-Node des Schiffs einstellen. Mit `N` geht es in
 die Nahansicht: Der Planet liegt unten, man kommt bis auf 10 m heran, zum
 Beispiel an zwei Schiffe beim Rendezvous.
 
-Unten zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
+Ganz unten steht in der Statusleiste die letzte Meldung: Start, Brennbeginn
+und Brennschluss (mit der Bahn danach), Eintritt in die Atmosphäre (mit der
+Periapsis), Landung (grün) und Absturz (rot, mit Grund). Gelb dazwischen
+Hinweise der Bedienung, z. B. warum ein Node nicht geht. Ein Klick auf ▲
+rechts klappt die letzten Meldungen auf, mit Mausrad und Scrollleiste. So
+sieht man auch nach langem Zeitraffer, was passiert ist. Das Protokoll gehört
+zum Spielstand.
+
+Darüber zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
 ist der volle Tank, darin die geplanten Brennvorgänge der Kette (Start gelb,
 Nodes violett), dahinter der Rest (grün). Reicht der Treibstoff nicht, steht
 rot dahinter, wie viel fehlt.
@@ -71,6 +79,12 @@ zeigt ein rotes Kreuz den Aufschlagpunkt.
 Ziel 0,3°), Node 1 macht die Bahn auf 100 km rund, Node 2 hebt sie leicht
 an, damit die Fähre aufholt. Nach drei Umläufen kommt sie Relais-1 auf 641 m
 nahe (Ringe mit Linie). Nachspielen mit den Optionen unten.*
+
+![Protokoll](docs/screenshots/protokoll.png)
+
+*Nach elf Stunden Spielzeit: Die aufgeklappte Statusleiste zeigt den Hop der
+Fähre ins Übungsfeld, ein Manöver von Relais-1 und wie Sonde-2 von Umlauf zu
+Umlauf tiefer in die Luft taucht, bis sie abstürzt.*
 
 ![Nahansicht](docs/screenshots/nahansicht.png)
 
@@ -140,7 +154,8 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Eingabe | Wirkung |
 |---|---|
 | Rechte Maustaste ziehen | Kamera drehen |
-| Mausrad | Zoomen |
+| Mausrad | Zoomen (über dem aufgeklappten Protokoll: scrollen) |
+| ▲ / ▼ rechts in der Statusleiste | Protokoll auf- und zuklappen (Scrollleiste ziehbar) |
 | Linksklick auf ein Schiff / `Tab` | Schiff wählen / nächstes Schiff |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
 | `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet; ohne Auswahl Planet); nochmal `F` zurück zum Planeten |

@@ -13,6 +13,7 @@ use crate::Sim;
 use crate::hud::{UiFont, format_span, km};
 use crate::node_ui::{Selection, UiMessage};
 use crate::rendezvous::{Rendezvous, TARGET_COLOR, TargetInfo, distance_text};
+use crate::status_bar::{STATUS_HEIGHT, StatusBar, over_status};
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use bevy::ui::{ComputedNode, UiGlobalTransform};
@@ -171,7 +172,7 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>) {
                 position_type: PositionType::Absolute,
                 right: px(0),
                 top: px(0),
-                bottom: px(0),
+                bottom: px(STATUS_HEIGHT),
                 width: px(PANEL_WIDTH),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(px(12)),
@@ -616,8 +617,16 @@ pub fn buttons(
     adjusts: Query<(&Adjust, &ComputedNode, &UiGlobalTransform)>,
     plan: Single<(&ComputedNode, &UiGlobalTransform), With<PlanButton>>,
     targets: Query<(&TargetButton, &ComputedNode, &UiGlobalTransform)>,
+    status: Res<StatusBar>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    // Der aufgeklappte Bereich der Statusleiste liegt über der Seitenleiste.
+    if window
+        .cursor_position()
+        .is_some_and(|c| over_status(&status, &window, c))
+    {
         return;
     }
     let world = &mut sim.0;
@@ -658,7 +667,7 @@ pub fn buttons(
         };
     }
     if let Some(e) = failure {
-        message.show(e, real_time.elapsed_secs_f64());
+        message.show(e, world.time, real_time.elapsed_secs_f64());
     }
 }
 
