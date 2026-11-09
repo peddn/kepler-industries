@@ -108,7 +108,10 @@ abgesichert, die ohne Bevy laufen.
 Der Test `save_and_load_round_trip` hat gezeigt: `serde_json` liest Zahlen
 ohne die Option `float_roundtrip` nicht bitgenau zurück. Jedes künftige
 Speicherformat muss Zahlen exakt erhalten. Der Spielstand trägt eine
-Versionsnummer (`SAVE_VERSION`).
+Versionsnummer (`SAVE_VERSION`). Auch das Protokoll gehört dazu (`World::log`):
+Die Einträge entstehen, wenn ein Abschnitt der Zeitleiste endet, mit dessen
+genauem Zeitpunkt, und sind deshalb wie alles andere unabhängig von der
+Schrittgröße (*Test:* `log_is_independent_of_step_size`).
 
 ### 12. Die Vorschau ist die Ausführung
 Ein Manöver-Node ist der Plan selbst: `add_node`/`set_node` berechnen die
@@ -314,6 +317,14 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   („Start“ bei einem gelandeten Schiff, „Ziel“ bei jedem Schiff außer
   Wracks). Die Anzeige links bleibt reine Information. Klicks auf die Leiste gehen nicht an die Karte dahinter.
   Schaltflächen prüfen Treffer selbst, ohne Bevys Picking.
+- **Statusleiste mit Protokoll** ganz unten: letzte Meldung mit Spielzeit,
+  ▲ klappt die letzten Meldungen auf (12 Zeilen, Mausrad, ziehbare
+  Scrollleiste; wer hochgescrollt hat, bleibt an seiner Stelle). Protokolliert
+  werden Start, Brennbeginn, Brennschluss (Ap/Pe danach), Eintritt in die
+  Atmosphäre (Pe), Landung (Zielgebiet) und Absturz (Grund). Gespeichert sind
+  Daten, kein Text (`LogKind`); die Anzeige formuliert selbst. Höchstens 1000
+  Einträge. Hinweise der Bedienung (gelb) stehen dazwischen, gehören aber
+  nicht zum Spielstand.
 - **Δv-Balken unten** für das gewählte Schiff: volle Breite = voller Tank
   (`VesselParams::fuel_capacity`), gefüllt = Δv an Bord. Darin die geplanten
   Brennvorgänge der Kette in Reihenfolge (Start gelb, Nodes abwechselnd
@@ -406,7 +417,7 @@ nichts verloren geht.
    in derselben Kette; Seitenleiste mit Karte „Start“)
 5. Landung ✓ (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
 6. Rendezvous ✓ (Ziel, engste Annäherung, Neigung und Knoten, Startfenster
-   von Hand), Nahansicht ✓ (Kamera auf jedes gewählte Objekt, `N`), Andocken,
-   Abdocken
+   von Hand), Nahansicht ✓ (Kamera auf jedes gewählte Objekt, `N`),
+   Statusleiste mit Protokoll ✓, Andocken, Abdocken
 7. Mond, Wechsel der Einflusssphäre
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

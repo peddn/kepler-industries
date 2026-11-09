@@ -5,6 +5,7 @@ use crate::body::{Body, BodyId, SurfacePoint};
 use crate::kepler::{self, StateVector};
 use crate::landing::{self, Crash, LandingZone};
 use crate::launch::Launch;
+use crate::log::{LOG_LIMIT, LogEntry, LogKind};
 use crate::maneuver::{ManeuverNode, PlanError};
 use crate::rendezvous::{self, Approach, PlaneCrossing};
 use crate::trajectory::{Segment, Trajectory};
@@ -140,6 +141,10 @@ pub struct World {
     pub bases: Vec<Base>,
     /// Zielgebiete zum Landen.
     pub zones: Vec<LandingZone>,
+    /// Was passiert ist, nach Zeit geordnet (höchstens `LOG_LIMIT`
+    /// Einträge). Fehlt in älteren Spielständen: leer.
+    #[serde(default)]
+    pub log: Vec<LogEntry>,
 }
 
 impl World {
@@ -151,6 +156,7 @@ impl World {
             vessels: Vec::new(),
             bases: Vec::new(),
             zones: Vec::new(),
+            log: Vec::new(),
         }
     }
 
@@ -274,12 +280,35 @@ impl World {
 
     /// Lässt die Zeit bis `t` voranschreiten. Das Ergebnis hängt nur von `t`
     /// ab, nicht davon, in wie vielen Schritten man dorthin kommt.
+    ///
+    /// Was dabei passiert, kommt ins Protokoll (`log`), geordnet nach Zeit und
+    /// bei gleicher Zeit nach Schiff.
     pub fn advance_to(&mut self, t: f64) {
         self.time = t;
-        for vessel in &mut self.vessels {
-            vessel
+        let mut entries = Vec::new();
+        for (i, vessel) in self.vessels.iter_mut().enumerate() {
+            let happened = vessel
                 .trajectory
                 .advance_to(&self.bodies, t, &vessel.params);
+            entries.extend(happened.into_iter().map(|(time, kind)| LogEntry {
+                time,
+                vessel: i,
+                kind,
+            }));
+        }
+        entries.sort_by(|a, b| a.time.total_cmp(&b.time).then(a.vessel.cmp(&b.vessel)));
+        for entry in &mut entries {
+            // Zielgebiete trägt erst die Welt ein (die Zeitleiste kennt sie nicht).
+            if let LogKind::Landed { point, zone } | LogKind::Crashed { point, zone, .. } =
+                &mut entry.kind
+            {
+                let body = self.vessels[entry.vessel].trajectory.current().body();
+                *zone = self.zone_at(body, point);
+            }
+        }
+        self.log.extend(entries);
+        if self.log.len() > LOG_LIMIT {
+            self.log.drain(..self.log.len() - LOG_LIMIT);
         }
     }
 

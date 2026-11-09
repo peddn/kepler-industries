@@ -107,6 +107,7 @@ pub fn keys(
         if rig.target == Focus::Planet {
             message.say(
                 "Nahansicht: erst mit F ein Objekt in den Fokus nehmen".into(),
+                sim.0.time,
                 real_time.elapsed_secs_f64(),
             );
         } else {

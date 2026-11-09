@@ -2,7 +2,7 @@
 
 use crate::camera::CameraRig;
 use crate::focus;
-use crate::node_ui::{self, SelectedNode, SelectedZone, Selection, UiMessage};
+use crate::node_ui::{self, SelectedNode, SelectedZone, Selection};
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
@@ -64,7 +64,7 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>) {
         });
 }
 
-fn format_time(seconds: f64) -> String {
+pub(crate) fn format_time(seconds: f64) -> String {
     let total = seconds.max(0.0) as u64;
     let (days, rest) = (total / 86_400, total % 86_400);
     format!(
@@ -313,8 +313,6 @@ pub fn update(
     selected: Res<SelectedNode>,
     zone: Res<SelectedZone>,
     rig: Res<CameraRig>,
-    message: Res<UiMessage>,
-    real_time: Res<Time<Real>>,
     mut text: Single<&mut Text, With<Hud>>,
     mut warning: Single<&mut TextSpan, (With<HudWarning>, Without<HudRest>)>,
     mut rest: Single<&mut TextSpan, (With<HudRest>, Without<HudWarning>)>,
@@ -328,9 +326,6 @@ pub fn update(
         focus::name(world, rig.target),
         if rig.near { " (Nahansicht)" } else { "" }
     )];
-    if real_time.elapsed_secs_f64() < message.until {
-        lines.push(format!("» {}", message.text));
-    }
     lines.push(String::new());
     for (i, vessel) in world.vessels.iter().enumerate() {
         let status = match world.vessel_status(i) {

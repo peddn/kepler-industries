@@ -18,6 +18,7 @@ use crate::camera::{CameraRig, Focus, MainCamera, OVERLAY_LAYER, dir_to_view, to
 use crate::dv_bar::{BarShown, over_bar};
 use crate::hud::UiFont;
 use crate::panel::{PanelShown, over_panel};
+use crate::status_bar::{StatusBar, over_status};
 use crate::view::orbit_points;
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
@@ -87,22 +88,37 @@ pub fn selected_node(
     Some((i, k))
 }
 
-/// Kurze Meldung in der Anzeige, z. B. warum ein Node nicht geht.
+/// Hinweise der Bedienung, z. B. warum ein Node nicht geht. Sie erscheinen in
+/// der Statusleiste zwischen den Einträgen des Protokolls, gehören aber nicht
+/// zum Spielstand.
 #[derive(Resource, Default)]
 pub struct UiMessage {
-    pub text: String,
-    /// Echtzeit (s), bis zu der die Meldung sichtbar bleibt.
-    pub until: f64,
+    /// Spielzeit und Text, älteste zuerst.
+    pub notes: Vec<(f64, String)>,
+    /// Echtzeit (s) des letzten Hinweises.
+    last: f64,
 }
 
+/// So viele Hinweise bleiben erhalten.
+const NOTE_LIMIT: usize = 200;
+
 impl UiMessage {
-    pub fn say(&mut self, text: String, now: f64) {
-        self.text = text;
-        self.until = now + 3.0;
+    /// Hinweis zur Spielzeit `time`. Derselbe Text innerhalb von 2 s
+    /// (`real`: Echtzeit) zählt nur einmal, z. B. beim Ziehen eines Griffs am
+    /// Anschlag.
+    pub fn say(&mut self, text: String, time: f64, real: f64) {
+        let repeated = self.notes.last().is_some_and(|(_, last)| *last == text);
+        if !(repeated && real - self.last < 2.0) {
+            self.notes.push((time, text));
+            if self.notes.len() > NOTE_LIMIT {
+                self.notes.remove(0);
+            }
+        }
+        self.last = real;
     }
 
-    pub fn show(&mut self, error: PlanError, now: f64) {
-        self.say(error.to_string(), now);
+    pub fn show(&mut self, error: PlanError, time: f64, real: f64) {
+        self.say(error.to_string(), time, real);
     }
 }
 
@@ -435,6 +451,7 @@ pub fn input(
     mut rig: ResMut<CameraRig>,
     shown: Res<PanelShown>,
     bar: Res<BarShown>,
+    status: Res<StatusBar>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<MainCamera>>,
 ) {
@@ -484,15 +501,17 @@ pub fn input(
 
     let Some(cursor) = window.cursor_position() else {
         if let Some(e) = failure {
-            message.show(e, real_time.elapsed_secs_f64());
+            message.show(e, world.time, real_time.elapsed_secs_f64());
         }
         return;
     };
     let (camera, transform) = *camera;
     let projector = Projector::new(camera, transform, rig.focus, world.bodies[0].radius);
 
-    // Klicks auf Seitenleiste und Δv-Balken gehören diesen.
-    let over_ui = over_panel(&shown, &window, cursor) || over_bar(&bar, &shown, &window, cursor);
+    // Klicks auf Seitenleiste, Δv-Balken und Statusleiste gehören diesen.
+    let over_ui = over_panel(&shown, &window, cursor)
+        || over_bar(&bar, &shown, &window, cursor)
+        || over_status(&status, &window, cursor);
     if buttons.just_pressed(MouseButton::Left) && !over_ui {
         *drag = Drag::Pending(cursor);
         if let Some(i) = selection.0
@@ -585,6 +604,7 @@ pub fn input(
                         if hit {
                             message.say(
                                 format!("Tank leer: höchstens {available:.0} m/s"),
+                                world.time,
                                 real_time.elapsed_secs_f64(),
                             );
                         }
@@ -661,7 +681,7 @@ pub fn input(
         *drag = Drag::None;
     }
     if let Some(e) = failure {
-        message.show(e, real_time.elapsed_secs_f64());
+        message.show(e, world.time, real_time.elapsed_secs_f64());
     }
 }
 
