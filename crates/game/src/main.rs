@@ -11,6 +11,7 @@ mod node_ui;
 mod panel;
 mod rendezvous;
 mod status_bar;
+mod verbund;
 mod view;
 
 use bevy::prelude::*;
@@ -231,6 +232,7 @@ fn main() {
     .init_resource::<dv_bar::BarShown>()
     .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<status_bar::StatusBar>()
+    .init_resource::<verbund::UndockChoice>()
     .init_resource::<node_ui::Drag>()
     .init_resource::<node_ui::UiMessage>()
     .init_gizmo_group::<node_ui::NodeGizmos>()
@@ -244,7 +246,8 @@ fn main() {
                 node_ui::configure_gizmos,
                 node_ui::setup_label,
                 rendezvous::setup_labels,
-                panel::setup,
+                // Die Karte "Verbund" hängt sich in die Seitenleiste.
+                (panel::setup, verbund::setup).chain(),
                 dv_bar::setup,
                 hud::setup,
                 status_bar::setup,
@@ -267,12 +270,18 @@ fn main() {
             )
                 .chain(),
             // Eingaben ändern die Simulation; danach wird nur noch gelesen.
-            (panel::buttons, node_ui::input, rendezvous::update).chain(),
+            (
+                panel::buttons,
+                verbund::buttons,
+                node_ui::input,
+                rendezvous::update,
+            )
+                .chain(),
             view::sync_markers,
             node_ui::draw,
             node_ui::sync_label,
             rendezvous::sync_labels,
-            panel::sync,
+            (panel::sync, verbund::sync),
             panel::hover,
             dv_bar::sync,
             view::draw_planet_grid,

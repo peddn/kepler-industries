@@ -2,7 +2,9 @@
 //! serialisierbar, und es gibt keinen Zustand außerhalb.
 
 use crate::body::{Body, BodyId, SurfacePoint};
-use crate::docking::{self, DOCKING_RANGE, DockError, DockRequest};
+use crate::docking::{
+    self, DOCKING_RANGE, DockError, DockRequest, SEPARATION_SPEED, UndockError, UndockFuel,
+};
 use crate::kepler::{self, StateVector};
 use crate::landing::{self, Crash, LandingZone};
 use crate::launch::Launch;
@@ -525,6 +527,104 @@ impl World {
             target_epoch: *start,
             target_state: *state,
         })
+    }
+
+    /// Wie viel Treibstoff ein angedocktes Schiff beim Abdocken mitnehmen kann.
+    pub fn undock_fuel(&self, part: usize) -> Result<UndockFuel, UndockError> {
+        let host = self.vessels[part].docked_to.ok_or(UndockError::NotDocked)?;
+        let total = self.params(host);
+        let pool = (self.vessel_mass(host) - total.dry_mass).max(0.0);
+        let capacity = self.vessels[part].params.fuel_capacity;
+        let rest = total.fuel_capacity - capacity;
+        let min = (pool - rest).max(0.0);
+        let max = capacity.min(pool);
+        let share = if total.fuel_capacity > 0.0 {
+            pool * capacity / total.fuel_capacity
+        } else {
+            0.0
+        };
+        Ok(UndockFuel {
+            min,
+            max,
+            suggested: share.clamp(min, max),
+            pool,
+        })
+    }
+
+    /// Δv (m/s) des abdockenden Schiffs und des verbleibenden Verbunds, wenn
+    /// das Schiff `fuel` kg mitnimmt.
+    pub fn undock_delta_v(&self, part: usize, fuel: f64) -> (f64, f64) {
+        let host = self.host(part);
+        let own = self.vessels[part].params;
+        let rest = combine(
+            self.vessels[host].params,
+            self.parts(host)
+                .into_iter()
+                .filter(|&k| k != part)
+                .map(|k| self.vessels[k].params),
+        );
+        let pool = self.vessel_mass(host) - self.params(host).dry_mass;
+        let delta_v = |p: &VesselParams, fuel: f64| {
+            p.exhaust_velocity * ((p.dry_mass + fuel.max(0.0)) / p.dry_mass).ln()
+        };
+        (delta_v(&own, fuel), delta_v(&rest, pool - fuel))
+    }
+
+    /// Abdocken jetzt: `part` verlässt seinen Verbund mit `fuel` kg Treibstoff
+    /// und einem Stoß von `SEPARATION_SPEED` gegen die Flugrichtung. Es fängt
+    /// ohne Kette an, mit dem Hauptschiff als Ziel (zum Wiederandocken). Das
+    /// Hauptschiff fliegt mit dem Rest weiter; seine Kette wird mit den neuen
+    /// Werten neu berechnet.
+    pub fn undock(&mut self, part: usize, fuel: f64) -> Result<(), UndockError> {
+        let range = self.undock_fuel(part)?;
+        let host = self.host(part);
+        let trajectory = &self.vessels[host].trajectory;
+        match trajectory.current() {
+            Segment::Surface { .. } => return Err(UndockError::OnGround),
+            segment if segment.is_burn() || trajectory.docking_underway() => {
+                return Err(UndockError::Busy);
+            }
+            _ => {}
+        }
+        if !(range.min - 1e-9..=range.max + 1e-9).contains(&fuel) {
+            return Err(UndockError::FuelOutOfRange {
+                min: range.min,
+                max: range.max,
+            });
+        }
+        let fuel = fuel.clamp(range.min, range.max);
+        let time = self.time;
+        let (body, state) = self.vessel_state(host);
+        let host_mass = self.vessel_mass(host);
+        let own = self.vessels[part].params;
+        let part_mass = own.dry_mass + fuel;
+
+        self.vessels[part].docked_to = None;
+        let [prograde, ..] = maneuver::node_frame(&state);
+        let pushed = StateVector {
+            position: state.position,
+            velocity: state.velocity - prograde * SEPARATION_SPEED,
+        };
+        let v = &mut self.vessels[part];
+        v.trajectory = Trajectory::new_flying(&self.bodies, &own, body, time, pushed, part_mass);
+        v.target = Some(host);
+
+        let params = self.params(host);
+        self.vessels[host].trajectory.restart_flying(
+            &self.bodies,
+            &params,
+            body,
+            time,
+            state,
+            host_mass - part_mass,
+        );
+        self.push_log([LogEntry {
+            time,
+            vessel: part,
+            kind: LogKind::Undocked { host, fuel },
+        }]);
+        self.refresh_dockings();
+        Ok(())
     }
 
     /// Kontakt: `vessel` wird Teil des Verbunds um das Hauptschiff seines

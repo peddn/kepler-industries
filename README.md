@@ -51,6 +51,14 @@ werden die Schiffe ein Verbund („Relais-1 + Fähre-3“): Massen, Tanks und
 Triebwerke addieren sich, und der Verbund kann normal Manöver fliegen. Das
 Ziel muss dafür auf einer stabilen Bahn sein und darf nichts mehr planen.
 
+Abgedockt wird in der Karte „Verbund“: Teil wählen (◄ ►), mit − / + einstellen,
+wie viel Treibstoff es mitnimmt (vorgeschlagen ist eine Aufteilung nach
+Tankgröße, `Umschalt`: feine Schritte), darunter steht, was beide danach haben.
+„Abdocken“ trennt sofort; das abgedockte Schiff bekommt 1 m/s gegen die
+Flugrichtung und entfernt sich stetig (in 100 km Höhe etwa 6 km pro Umlauf).
+Es hat danach das Hauptschiff als Ziel, zum Wiederandocken. So lässt sich zum
+Beispiel ein Satellit betanken.
+
 Die Kamera lässt sich mit `F` auf das gewählte Objekt richten: Schiff,
 Node oder Zielgebiet (Raute in der Kreismitte anklicken). Sie folgt ihm, auch
 wenn man danach etwas anderes wählt; so kann man ein Zielgebiet im Blick
@@ -106,6 +114,12 @@ hat danach noch 176 m/s.*
 
 *Im Anflug, aus der Nähe: Fähre-3 (gelb) ist noch 271 m von Relais-1 (rosa)
 entfernt, Kontakt in zweieinhalb Minuten.*
+
+![Verbund](docs/screenshots/verbund.png)
+
+*Nach dem Kontakt: Relais-1 und Fähre-3 sind ein Verbund mit gemeinsamem Tank.
+Die Karte „Verbund“ schlägt vor, wie viel Treibstoff Fähre-3 beim Abdocken
+mitnimmt, und zeigt, was beide danach haben.*
 
 ![Nahansicht](docs/screenshots/nahansicht.png)
 
@@ -184,6 +198,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
+| Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |

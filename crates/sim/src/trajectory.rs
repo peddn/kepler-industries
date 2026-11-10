@@ -1173,6 +1173,26 @@ impl Trajectory {
         self.rebuild(bodies, params, now);
     }
 
+    /// Neubeginn jetzt (`t`) mit Zustand und Masse, z. B. nach dem Abdocken.
+    /// Die Kette bleibt und wird mit den (neuen) Werten neu berechnet;
+    /// ungültig gewordene Nodes bleiben erhalten.
+    pub(crate) fn restart_flying(
+        &mut self,
+        bodies: &[Body],
+        params: &VesselParams,
+        body_id: BodyId,
+        t: f64,
+        state: StateVector,
+        mass: f64,
+    ) {
+        let mut fresh = Trajectory::new_flying(bodies, params, body_id, t, state, mass);
+        fresh.nodes = std::mem::take(&mut self.nodes);
+        fresh.armed = self.armed;
+        fresh.docking = self.docking;
+        fresh.rebuild(bodies, params, t);
+        *self = fresh;
+    }
+
     /// Angedockt: Die eigene Kette ist erledigt (weiter geht es im Verbund).
     pub(crate) fn finish_docking(&mut self) {
         self.launch = None;
