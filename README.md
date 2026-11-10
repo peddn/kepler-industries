@@ -37,7 +37,9 @@ die engste Annäherung (wann, wie nah, wie schnell relativ zueinander) und die
 Neigung zur Bahnebene des Ziels. Gesucht wird bis vier Umläufe nach dem
 letzten geplanten Manöver, also auch auf den geplanten Bahnen. Auf der Karte
 markieren zwei Ringe mit einer Linie die Annäherung, Rauten mit „AN“/„DN“
-die Knoten, an denen ein Node die Bahnebene angleicht. Am Boden gilt das für
+die Knoten, an denen ein Node die Bahnebene angleicht. Liegen beide Bahnen in
+derselben Ebene (wie nach dem Abdocken), steht dort „gleiche Ebene“, und es
+gibt keine Knoten. Am Boden gilt das für
 die Bahn nach dem geplanten Start: Startzeit und Kurs so lange verschieben,
 bis die Neigung klein ist, ergibt das Startfenster.
 

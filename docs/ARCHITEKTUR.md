@@ -224,7 +224,11 @@ Minimum mit dem Goldenen Schnitt genau gesucht. Nimmt der Abstand nur ab, ist
 das Ende des Zeitraums die engste Stelle (wichtig fürs Aufholen auf fast
 derselben Bahn). Bahnebene: Winkel zwischen den Drehimpulsen der eigenen Bahn
 nach dem letzten Brennen und der Zielbahn; die Knoten (AN/DN) sind die
-Vorzeichenwechsel des Abstands zur Zielebene, per Bisektion. Weniger als 1 ms
+Vorzeichenwechsel des Abstands zur Zielebene, per Bisektion. Schwingt das
+Schiff höchstens 1 m über und unter der Zielebene (`COPLANAR_HEIGHT`, bei
+700 km Bahnradius etwa 0,0001°), gilt das als gleiche Ebene: keine Knoten,
+sonst sprängen sie im Rundungsrauschen umher (etwa nach dem Abdocken, wo
+beide Bahnen exakt in einer Ebene liegen). Weniger als 1 ms
 pro Bild, deshalb ohne Zwischenspeicher. Das Ziel gehört zum Schiff und zum
 Spielstand (`Vessel::target`).
 

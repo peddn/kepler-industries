@@ -307,6 +307,9 @@ fn undock_splits_fuel_and_separates() {
     let push = b.velocity - a.velocity;
     assert!((push.length() - SEPARATION_SPEED).abs() < 1e-9);
     assert!(push.dot(b.velocity) > 0.0, "gegen die Flugrichtung");
+    // Beide bleiben in derselben Ebene: keine Knoten AN/DN.
+    let plane = world.plane_to_target(FERRY_ID).unwrap();
+    assert!(plane.coplanar && plane.ascending.is_none(), "{plane:?}");
     let period = kepler::period(world.bodies[0].gm, &b).unwrap();
     let now = world.time;
     world.advance_to(now + 0.5 * period);
@@ -317,6 +320,7 @@ fn undock_splits_fuel_and_separates() {
         half > 500.0 && two > 2.0 * half && two > 8_000.0,
         "{half} {two}"
     );
+    assert!(world.plane_to_target(FERRY_ID).unwrap().coplanar);
 
     // Spielstand nach dem Abdocken.
     let json = serde_json::to_string(&world).unwrap();

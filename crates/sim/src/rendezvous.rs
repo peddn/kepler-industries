@@ -17,6 +17,12 @@ pub const APPROACH_ORBITS: f64 = 4.0;
 const SAMPLES: usize = 2_000;
 /// Stützstellen pro Umlauf bei der Suche nach den Knoten.
 const NODE_SAMPLES: usize = 360;
+/// Schwingt das Schiff höchstens so weit (m) über und unter der Zielebene,
+/// liegen beide Bahnen in derselben Ebene: Dann gibt es keine Knoten. Bei
+/// 700 km Bahnradius entspricht das etwa 0,0001° Neigung, weit unter allem,
+/// was spielerisch zählt, und weit über dem Rundungsrauschen (Bruchteile
+/// eines Millimeters), in dem die Knoten sonst umherspringen.
+pub const COPLANAR_HEIGHT: f64 = 1.0;
 
 /// Engste Annäherung an das Ziel.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -43,6 +49,9 @@ pub struct PlaneCrossing {
     /// nach oben (aufsteigender Knoten) bzw. von oben nach unten kreuzt.
     pub ascending: Option<f64>,
     pub descending: Option<f64>,
+    /// Beide Bahnen liegen in derselben Ebene (siehe `COPLANAR_HEIGHT`):
+    /// keine Knoten.
+    pub coplanar: bool,
 }
 
 /// Ab wann die geplante Bahn gilt: Ende des letzten geplanten Brennens
@@ -166,7 +175,8 @@ fn golden_section(f: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
 
 /// Neigung der eigenen Bahn nach dem letzten geplanten Brennen gegen die
 /// Bahnebene des Ziels, und wann das Schiff dessen Ebene als Nächstes kreuzt.
-/// `None` ohne eigene Bahn oder wenn das Ziel am Boden steht.
+/// Liegen beide Bahnen in derselben Ebene, gibt es keine Knoten
+/// (`coplanar`). `None` ohne eigene Bahn oder wenn das Ziel am Boden steht.
 pub fn plane_crossing(
     bodies: &[Body],
     now: f64,
@@ -186,7 +196,19 @@ pub fn plane_crossing(
         .position
         .cross(target_state.velocity)
         .normalize();
-    let inclination = h.angle_between(normal);
+    // atan2 statt acos (`angle_between`): auch bei fast gleichen Ebenen genau.
+    let inclination = h.cross(normal).length().atan2(h.dot(normal));
+    // Gleiche Ebene: Die Schnittlinie fehlt, die "Höhe über der Zielebene"
+    // wäre nur noch Rundungsrauschen.
+    let coplanar = state.position.length() * inclination.sin() <= COPLANAR_HEIGHT;
+    if coplanar {
+        return Some(PlaneCrossing {
+            inclination,
+            ascending: None,
+            descending: None,
+            coplanar,
+        });
+    }
 
     // Knoten: Vorzeichenwechsel des Abstands zur Zielebene, einen Umlauf weit
     // (höchstens bis zum Ende des Abschnitts).
@@ -216,6 +238,7 @@ pub fn plane_crossing(
         inclination,
         ascending,
         descending,
+        coplanar,
     })
 }
 

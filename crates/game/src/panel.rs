@@ -426,6 +426,9 @@ fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
             "Neigung",
             format!("{:.1}°", plane.inclination.to_degrees()),
         ));
+        if plane.coplanar {
+            lines.push(row("", "gleiche Ebene".into()));
+        }
         for (name, time) in [("  AN in", plane.ascending), ("  DN in", plane.descending)] {
             if let Some(t) = time {
                 lines.push(row(name, format_span((t - world.time).max(0.0))));
