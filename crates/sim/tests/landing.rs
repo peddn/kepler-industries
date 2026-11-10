@@ -1,9 +1,13 @@
-//! Tests für die Landung: Fallschirm, Aufsetzen, Wrack, Zielgebiete, Hop.
+//! Tests für die Landung: Fallschirm, Landebrennen, Aufsetzen, Wrack,
+//! Zielgebiete, Hop.
 
 use glam::DVec3;
 use sim::kepler::state_from_apsides;
-use sim::scenario::{FERRY, SATELLITE, demo, home_planet};
-use sim::{Crash, Launch, LaunchProfile, ManeuverNode, VesselParams, VesselStatus, World};
+use sim::scenario::{FERRY, SATELLITE, demo, home_planet, moon};
+use sim::{
+    Crash, Launch, LaunchProfile, LogKind, ManeuverNode, StateVector, VesselParams, VesselStatus,
+    World,
+};
 
 /// Ein Schiff auf einer Kreisbahn in 100 km Höhe.
 fn in_orbit(params: VesselParams, fuel: f64) -> World {
@@ -24,34 +28,50 @@ fn deorbit(world: &mut World, delta_v: f64) {
     world.set_armed(0, true).unwrap();
 }
 
-/// Am Fallschirm kommt die Fähre langsam an; ohne Fallschirm schnell.
+/// Das Landebrennen der Fähre aus dem Orbit (Δv und Höhe beim Zünden).
+fn landing_burn(world: &World) -> (f64, f64) {
+    let landing = world.touchdown(0).unwrap().landing.unwrap().unwrap();
+    (landing.burn.delta_v(), landing.altitude)
+}
+
+/// Am Fallschirm kommt die Fähre langsam an, das Landebrennen ist kurz und
+/// knapp über dem Boden; ohne Fallschirm braucht es viel mehr.
 #[test]
 fn parachute_slows_descent() {
-    let speed = |parachute_area| {
+    let burn = |parachute_area| {
         let params = VesselParams {
             parachute_area,
             ..FERRY
         };
         let mut world = in_orbit(params, 1_000.0);
         deorbit(&mut world, 150.0);
-        world.touchdown(0).unwrap().speed
+        landing_burn(&world)
     };
-    let with = speed(FERRY.parachute_area);
-    let without = speed(0.0);
+    let (with, altitude) = burn(FERRY.parachute_area);
+    let (without, _) = burn(0.0);
     assert!(with < 15.0, "mit Fallschirm {with} m/s");
+    assert!(altitude < 50.0, "Zünden in {altitude} m");
     assert!(without > 50.0, "ohne Fallschirm {without} m/s");
 }
 
-/// Aus dem Orbit gelandet: Vorschau und Ausführung stimmen überein, der
-/// Treibstoff fürs Bremsen ist abgezogen, die Kette ist erledigt.
+/// Aus dem Orbit gelandet: Das Landebrennen setzt die Fähre langsam auf,
+/// Vorschau und Ausführung stimmen überein (Treibstoff bitgenau wie
+/// vorausgesagt), die Kette ist erledigt.
 #[test]
 fn ferry_lands_from_orbit() {
     let mut world = in_orbit(FERRY, 1_000.0);
     deorbit(&mut world, 150.0);
     let touchdown = world.touchdown(0).unwrap();
-    let braking = touchdown.braking.unwrap();
-    assert!(braking > 5.0 && braking < 15.0, "Bremsen {braking}");
+    let landing = touchdown.landing.unwrap().unwrap();
+    let delta_v = landing.burn.delta_v();
+    assert!(delta_v > 5.0 && delta_v < 15.0, "Landebrennen {delta_v}");
+    assert!(
+        touchdown.speed < 2.5,
+        "Aufsetzen mit {} m/s",
+        touchdown.speed
+    );
     let budget = world.delta_v_budget(0);
+    assert!(matches!(budget.burns.last(), Some((sim::BudgetItem::Landing, dv)) if *dv == delta_v));
 
     world.advance_to(touchdown.time + 10.0);
     assert_eq!(
@@ -61,6 +81,7 @@ fn ferry_lands_from_orbit() {
         }
     );
     assert!(world.vessels[0].trajectory.nodes().is_empty());
+    assert_eq!(world.vessel_mass(0), landing.burn.end_mass());
     let rest = world.vessel_delta_v(0);
     assert!(
         (rest - budget.rest).abs() < 1e-6,
@@ -69,7 +90,8 @@ fn ferry_lands_from_orbit() {
     );
 }
 
-/// Ohne Fallschirm und mit wenig Treibstoff reicht das Bremsen nicht.
+/// Ohne Fallschirm und mit wenig Treibstoff reicht das Bremsen nicht: kein
+/// Landebrennen, Absturz; angegeben ist, was mindestens fehlt.
 #[test]
 fn crash_without_enough_fuel() {
     let params = VesselParams {
@@ -79,10 +101,22 @@ fn crash_without_enough_fuel() {
     let mut world = in_orbit(params, 50.0);
     deorbit(&mut world, 60.0);
     let touchdown = world.touchdown(0).unwrap();
-    let Err(Crash::NoFuel { available }) = touchdown.braking else {
-        panic!("Absturz erwartet, nicht {:?}", touchdown.braking);
+    let Err(Crash::NoFuel { available, missing }) = touchdown.landing else {
+        panic!("Absturz erwartet, nicht {:?}", touchdown.landing);
     };
     assert!(available < touchdown.speed);
+    assert!(
+        missing > 0.0 && missing < touchdown.speed,
+        "fehlen {missing}"
+    );
+    let budget = world.delta_v_budget(0);
+    assert!(
+        (budget.missing - missing).abs() < 1e-9,
+        "{}",
+        budget.missing
+    );
+    assert_eq!(budget.rest, 0.0);
+    assert!(world.vessels[0].trajectory.landing().is_none());
     world.advance_to(touchdown.time + 10.0);
     assert!(matches!(world.vessel_status(0), VesselStatus::Wreck { .. }));
 }
@@ -93,8 +127,8 @@ fn satellite_is_too_weak_to_land() {
     let mut world = in_orbit(SATELLITE, 200.0);
     deorbit(&mut world, 150.0);
     let touchdown = world.touchdown(0).unwrap();
-    let Err(Crash::TooWeak { thrust_to_weight }) = touchdown.braking else {
-        panic!("Absturz erwartet, nicht {:?}", touchdown.braking);
+    let Err(Crash::TooWeak { thrust_to_weight }) = touchdown.landing else {
+        panic!("Absturz erwartet, nicht {:?}", touchdown.landing);
     };
     // 2000 N gegen 600 kg Gewicht (abzüglich verbrauchtem Treibstoff).
     assert!(
@@ -137,7 +171,7 @@ fn hop_to_practice_field() {
         .find(|w| w.touchdown(2).is_some_and(|t| t.zone == Some(field)))
         .expect("eine Ziel-Apoapsis zwischen 20 und 35 km trifft das Übungsfeld");
     let touchdown = world.touchdown(2).unwrap();
-    assert!(touchdown.braking.is_ok());
+    assert!(touchdown.landing.is_ok());
 
     world.advance_to(touchdown.time + 10.0);
     let VesselStatus::Landed { point } = world.vessel_status(2) else {
@@ -166,7 +200,7 @@ fn outside_zone_reports_distance() {
         )
         .unwrap();
     let touchdown = world.touchdown(2).unwrap();
-    assert!(touchdown.braking.is_ok());
+    assert!(touchdown.landing.is_ok());
     assert_eq!(touchdown.zone, None);
     let (nearest, distance) = touchdown.nearest.unwrap();
     assert_eq!(world.zones[nearest].name, "Startbasis");
@@ -207,4 +241,135 @@ fn landing_is_independent_of_step_size() {
     ));
     assert_eq!(one_step.vessel_status(2), many_steps.vessel_status(2));
     assert_eq!(one_step.vessel_mass(2), many_steps.vessel_mass(2));
+}
+
+/// Zorb und Zoon, eine Fähre mit `thrust` N und 2000 kg Treibstoff auf einer
+/// Bahn um Zoon (Apoapsis 30 km, Periapsis 50 km unter dem Boden), ohne
+/// Kette. Startet in der Apoapsis.
+fn falling_to_zoon(thrust: f64) -> World {
+    let planet = home_planet();
+    let moon = moon(&planet);
+    let mut world = World::new(vec![planet, moon]);
+    let (gm, r) = (world.bodies[1].gm, world.bodies[1].radius);
+    let state = state_from_apsides(gm, r - 50_000.0, r + 30_000.0, 0.0, 0.0, 0.0, true);
+    let params = VesselParams { thrust, ..FERRY };
+    world.spawn_vessel("Lander", params, 2_000.0, 1, state);
+    world
+}
+
+/// Auf Zoon ohne Luft bremst allein das Landebrennen, aus voller Fahrt. Wie
+/// bei einem echten "Suicide Burn" kostet es mit wenig Schub mehr (die
+/// Schwerkraft zieht länger dagegen), und es beginnt höher.
+#[test]
+fn landing_burn_on_zoon() {
+    let burn = |thrust| {
+        let world = falling_to_zoon(thrust);
+        let touchdown = world.touchdown(0).unwrap();
+        assert_eq!(touchdown.body, 1);
+        assert!(
+            touchdown.speed < 2.5,
+            "Aufsetzen mit {} m/s",
+            touchdown.speed
+        );
+        let landing = touchdown.landing.unwrap().unwrap();
+        (landing.burn.delta_v(), landing.altitude)
+    };
+    // Schub/Gewicht etwa 14 und 1,5.
+    let (strong, strong_altitude) = burn(FERRY.thrust);
+    let (weak, weak_altitude) = burn(FERRY.thrust / 9.0);
+    assert!(strong > 540.0 && strong < 570.0, "{strong}");
+    assert!(weak > strong + 100.0, "{weak} gegen {strong}");
+    assert!(strong_altitude < 3_000.0, "{strong_altitude}");
+    assert!(weak_altitude > 10_000.0, "{weak_altitude}");
+}
+
+/// Das Landebrennen kommt von selbst, auch ohne Kette. Es ist ein normales
+/// Brennen (Zeitraffer-Stopp, Protokoll), gehört aber nicht zur Kette.
+/// Regel 6: 1 Schritt == 10 000 Schritte, bitgenau.
+#[test]
+fn landing_burn_without_chain() {
+    let mut world = falling_to_zoon(FERRY.thrust);
+    let trajectory = &world.vessels[0].trajectory;
+    assert!(!trajectory.armed() && trajectory.burns().is_empty());
+    let burn = *trajectory.landing().expect("Landebrennen");
+    world.vessels[0].halt_warp_at_burn = true;
+    assert_eq!(world.next_halting_burn(), Some(burn.start));
+    let touchdown = world.touchdown(0).unwrap();
+
+    let target = touchdown.time + 10.0;
+    let mut many_steps = world.clone();
+    world.advance_to(target);
+    for i in 1..=10_000 {
+        many_steps.advance_to(target * i as f64 / 10_000.0);
+    }
+    assert_eq!(
+        world.vessel_status(0),
+        VesselStatus::Landed {
+            point: touchdown.point
+        }
+    );
+    assert_eq!(world.vessel_status(0), many_steps.vessel_status(0));
+    assert_eq!(world.vessel_mass(0), burn.end_mass());
+    assert_eq!(many_steps.vessel_mass(0), burn.end_mass());
+    let kinds: Vec<LogKind> = world.log.iter().map(|e| e.kind).collect();
+    assert!(
+        matches!(
+            kinds.as_slice(),
+            [LogKind::LandingBurn, LogKind::Landed { body: 1, .. }]
+        ),
+        "{kinds:?}"
+    );
+}
+
+/// Ein Spielstand mitten im Landebrennen lädt und landet genauso.
+#[test]
+fn landing_burn_is_saved() {
+    let mut world = falling_to_zoon(FERRY.thrust);
+    let burn = *world.vessels[0].trajectory.landing().unwrap();
+    world.advance_to(0.5 * (burn.start + burn.end));
+    assert!(
+        world.vessels[0]
+            .trajectory
+            .current()
+            .landing_burn()
+            .is_some()
+    );
+    let json = serde_json::to_string(&world).unwrap();
+    let mut loaded: World = serde_json::from_str(&json).unwrap();
+    assert_eq!(loaded, world);
+    let end = burn.end + 10.0;
+    world.advance_to(end);
+    loaded.advance_to(end);
+    assert!(matches!(
+        loaded.vessel_status(0),
+        VesselStatus::Landed { .. }
+    ));
+    assert_eq!(loaded, world);
+}
+
+/// Erst 100 m über dem Boden und schon 200 m/s schnell: Zum Bremsen ist es
+/// zu spät, auch mit genug Schub und Treibstoff.
+#[test]
+fn too_late_to_brake() {
+    let planet = home_planet();
+    let moon = moon(&planet);
+    let mut world = World::new(vec![planet, moon]);
+    let r = world.bodies[1].radius;
+    let state = StateVector {
+        position: DVec3::new(r + 100.0, 0.0, 0.0),
+        velocity: DVec3::new(-200.0, 0.0, 0.0),
+    };
+    world.spawn_vessel("Lander", FERRY, 2_000.0, 1, state);
+    let touchdown = world.touchdown(0).unwrap();
+    assert_eq!(touchdown.landing, Err(Crash::TooLate));
+    assert!(touchdown.speed > 200.0);
+    world.advance_to(touchdown.time + 1.0);
+    assert!(matches!(
+        world.log.last().unwrap().kind,
+        LogKind::Crashed {
+            reason: Crash::TooLate,
+            body: 1,
+            ..
+        }
+    ));
 }

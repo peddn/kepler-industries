@@ -541,7 +541,7 @@ fn launch_result(world: &World, i: usize) -> String {
     }
     // Kommt die Fähre wieder herunter (Hop), wo und heil?
     if let Some(t) = world.touchdown(i) {
-        let label = if t.braking.is_ok() {
+        let label = if t.landing.is_ok() {
             "Aufsetzen"
         } else {
             "Absturz!"

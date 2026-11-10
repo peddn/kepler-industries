@@ -247,18 +247,30 @@ Planetendrehung (dann liegt der Startplatz wieder gleich).
 **Landung:** Die Vorschau rechnet bis zum Boden. Ein Fallschirm ist nur eine
 größere Widerstandsfläche im selben Modell (`parachute_area`): offen unter
 3 km im Sinkflug; die Regel hängt nur von Höhe und Richtung ab, die Simulation
-muss sich nichts merken. Beim Bodenkontakt ist die letzte Bremsung
-abstrahiert (`landing::braking`): bis 5 m/s relativ zum Boden setzt jedes
-Schiff auf; darüber muss es diese Geschwindigkeit als Δv abbremsen, mit genug
-Treibstoff an Bord und Schub größer als das Gewicht (Satelliten können das
-nicht). Der Treibstoff wird nach der Raketengleichung abgezogen. Sonst wird es
-zum Wrack. Das gehört zur Zeitleiste (Übergang beim Bodenkontakt), Vorschau =
-Ausführung gilt also auch hier. Derselbe Code für jeden Körper, die
+muss sich nichts merken. Bis 5 m/s relativ zum Boden setzt jedes Schiff
+auf, schneller wird es zum Wrack. Käme ein Freiflug schneller am Boden an,
+setzt die Zeitleiste davor automatisch ein **Landebrennen** (`landing`): ein
+normales Brennen (`Burn` mit Landesteuerung `Descent`, wie der Aufstieg mit
+`Ascent`) mit vollem Schub gegen die Bewegung relativ zum Boden. Es beginnt so
+spät wie möglich: Gesucht wird erst rückwärts in sich verdoppelnden
+Schritten, dann per Bisektion, bis das Schiff höchstens so hoch zum Stehen
+kommt, dass es aus dieser Höhe mit 2,5 m/s aufsetzt (auf Zorb etwa 30 cm, auf
+Zoon 2 m). Jeder Versuch rechnet das Landebrennen genau wie die Zeitleiste
+(dieselben Schritte ab demselben Zustand, auch mitten in einem Abschnitt
+durch die Luft, `integrator::state_on_arc`). Sobald das Schiff steht, endet
+das Brennen (`integrate_arc` erkennt das im Schritt); der Rest ist ein kurzer
+Fall. Treibstoff nach der Raketengleichung, Verluste durch Schwerkraft und
+Luft inbegriffen, Vorschau = Ausführung bitgenau. Geht das nicht, wird nicht
+gebremst (Absturz mit Grund, `Crash`): Schub nicht größer als das Gewicht
+(Satelliten), zu wenig Treibstoff (mit dem, was mindestens fehlt), oder keine
+Zeit mehr (der Freiflug beginnt zu knapp über dem Boden, oder ein geplantes
+Brennen führt in den Boden). Das Landebrennen gehört nicht zur Kette, es kommt
+immer (auch ohne scharfe Kette). Derselbe Code für jeden Körper, die
 Unterschiede kommen nur aus seinen Daten: Auf Zorb endet die Keplerbahn an
-der Luftgrenze und der Rest wird mit Luftwiderstand und Fallschirm gerechnet;
-auf Zoon (ohne Luft) endet sie am Boden, der Fallschirm bremst ohne Luft
-nicht, das ganze Bremsen ist der letzte Schritt (aus niedriger Bahn etwa
-600 m/s). Ob das Schiff in einem **Zielgebiet** (Kreis,
+der Luftgrenze und der Rest wird mit Luftwiderstand und Fallschirm gerechnet,
+das Landebrennen ist dann eine Sekunde knapp über dem Boden; auf Zoon (ohne
+Luft) bremst allein das Landebrennen (aus niedriger Bahn mit viel Schub etwa
+550 m/s, bei Schub/Gewicht 1,5 etwa 700 m/s). Ob das Schiff in einem **Zielgebiet** (Kreis,
 5 km Radius) aufsetzt, entscheidet nicht über heil oder kaputt; es zählt für
 Basis, Andocken und Aufträge. Außerhalb steht das Schiff „außerhalb“ und
 kommt mit einem Hop (Start mit niedriger Ziel-Apoapsis) ins Ziel. Nach dem
@@ -333,6 +345,7 @@ sich kein Node setzen.
 Übergänge: Kepler → (Eintritt) → Integrated → (Austritt) → Kepler;
 Freiflug → (Brennbeginn) → Integrated mit Schub → (Brennende) → Freiflug;
 Surface → (Abheben) → Integrated mit Aufstiegssteuerung → (Brennschluss) → Freiflug;
+Freiflug → (Landebrennen) → Integrated mit Landesteuerung → (steht) → Freiflug;
 → (Bodenkontakt) → Surface (aufgesetzt oder Wrack, siehe Landung).
 
 **Aufschlagkreuz:** Es markiert die Stelle *auf dem Boden* und dreht sich mit
@@ -367,7 +380,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   nicht scharfe rückt bei Brennbeginn als Ganzes einen Umlauf weiter, so geht
   kein Plan verloren, nur weil der Zeitraffer läuft. Die Vorschau ist scharf
   wie nicht scharf dieselbe. Der Zeitraffer-Stopp greift nur bei scharfen
-  Ketten. Eine Kette passt auch zu späteren Routen. **Vorerst schaltet das
+  Ketten (und beim Landebrennen, das immer kommt). Eine Kette passt auch zu späteren Routen. **Vorerst schaltet das
   Spiel jede neue Kette sofort scharf**; die Schaltfläche dafür kommt später
   an anderer Stelle in die Oberfläche (siehe UI-Ideen).
 - **Ungültige Nodes bleiben erhalten** (siehe Physikmodell), damit beim
@@ -381,7 +394,9 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   leer), damit später vor einem Node nachgetankt werden kann.
 - **Während des Brennens** zeigt die Karte die momentane Bahn (die Keplerbahn
   aus dem aktuellen Zustand, wie in KSP). Reine Darstellung, die Simulation
-  rechnet unverändert den ganzen Brennvorgang voraus.
+  rechnet unverändert den ganzen Brennvorgang voraus. Nicht beim
+  Landebrennen: Diese Bahn ginge nur in den Boden und verdeckte den gelben
+  Weg nach unten.
 - **Zeitraffer-Stopp pro Schiff** (`halt_warp_at_burn`, Taste `H`, anfangs aus):
   Beginnt ein markiertes Schiff zu brennen, hält der Zeitraffer genau am
   Brennbeginn an und schaltet auf 1×. Pro Schiff statt für alle, damit spätere
@@ -452,9 +467,10 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Aufsetzpunkt als Kreuz: grün im Zielgebiet, gelb außerhalb, rot bei
   Absturz. Zielgebiete als Kreise auf der Oberfläche (5 km Radius, aus der
   Ferne mindestens so groß wie ein Markierungspunkt). Fallschirme = größere
-  Widerstandsfläche ab einer Auslösehöhe (dasselbe Modell). Letzte Bremsung
-  abstrahiert: Restgeschwindigkeit = nötiges Δv, braucht Schub > Gewicht. Der
-  Δv-Balken zeigt das Bremsen als eigenen Abschnitt.
+  Widerstandsfläche ab einer Auslösehöhe (dasselbe Modell). Das letzte Stück
+  fliegt das Schiff selbst: ein automatisches Landebrennen (voller Schub,
+  so spät wie möglich, wie ein „Suicide Burn“ in KSP), braucht Schub >
+  Gewicht. Der Δv-Balken zeigt es als eigenen Abschnitt „Landen“.
 - **Ziel verfehlt:** Mit genug Treibstoff setzt das Schiff trotzdem auf, steht
   dann „außerhalb“ und kommt mit einem „Hop" ins Ziel (= Startprofil mit
   niedriger Apoapsis, keine eigene Mechanik). Ohne Treibstoff oder Schub ein
@@ -578,5 +594,5 @@ nichts verloren geht.
    Abdocken ✓
 7. Mond: auf Schienen ✓ (Kreisbahn, Einflusssphäre, wählen, Kamera), Wechsel
    der Einflusssphäre ✓ (mit Rand des Heimatsystems, Zeichnung wie KSP),
-   Landen und Starten auf Zoon ✓ (Wendewinkel, Zielgebiete)
+   Landen und Starten auf Zoon ✓ (Wendewinkel, Zielgebiete), Landebrennen ✓
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

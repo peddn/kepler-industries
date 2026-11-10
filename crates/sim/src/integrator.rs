@@ -94,11 +94,28 @@ pub(crate) fn rk4(forces: &Forces, t: f64, s: &StateVector, dt: f64) -> StateVec
     }
 }
 
+/// Landebrennen: Zeit bis zum Stillstand relativ zum Boden bei der jetzigen
+/// Verzögerung (die Drehung des Bodens ist dabei vernachlässigt, sie ändert
+/// nur den Bruchteil eines Schritts). `None` ohne Landebrennen oder wenn das
+/// Schiff nicht langsamer wird.
+fn time_to_stop(forces: &Forces, t: f64, s: &StateVector) -> Option<f64> {
+    let burn = forces.burn.filter(|b| b.is_active(t))?;
+    let velocity = burn.descent?.ground_velocity(s);
+    let speed = velocity.length();
+    if speed == 0.0 {
+        return Some(0.0);
+    }
+    let deceleration = -velocity.dot(forces.acceleration(t, s)) / speed;
+    (deceleration > 0.0).then(|| speed / deceleration)
+}
+
 /// Berechnet ein Bahnstück ab `start` bis zum ersten Ereignis.
 ///
 /// Ereignisse: Bodenkontakt; ohne Schub zusätzlich das Verlassen der Luft;
 /// die Grenzen der Einflusssphären (`watch`, auch mitten im Brennen);
 /// außerdem ein fester Zeitpunkt `stop` (Beginn oder Ende eines Brennmanövers).
+/// Ein Landebrennen endet (`BurnEnd`) außerdem in dem Schritt, in dem das
+/// Schiff relativ zum Boden zum Stehen kommt.
 /// Der letzte Stützpunkt liegt genau auf dem Ereignis.
 pub fn integrate_arc(
     forces: &Forces,
@@ -116,12 +133,17 @@ pub fn integrate_arc(
 
     loop {
         // Liegt der feste Zeitpunkt in diesem Schritt, genau bis dorthin rechnen.
-        let (h, timed) = match stop {
+        let (mut h, mut timed) = match stop {
             Some((stop_time, event)) if t + STEP >= stop_time => {
                 ((stop_time - t).max(0.0), Some(event))
             }
             _ => (STEP, None),
         };
+        if let Some(dt) = time_to_stop(forces, t, &s)
+            && dt < h
+        {
+            (h, timed) = (dt, Some(Event::BurnEnd));
+        }
         let next = rk4(forces, t, &s, h);
         let r0 = s.position.length();
         let r1 = next.position.length();
@@ -163,6 +185,27 @@ pub fn integrate_arc(
             }
             return (samples, Event::Continue);
         }
+    }
+}
+
+/// Zustand zum Zeitpunkt `t` auf einem Bahnstück ohne Ereignis davor, genau
+/// so, wie `integrate_arc` ihn mit `stop` bei `t` berechnet hätte: ab dem
+/// letzten Stützpunkt davor mit denselben Schritten. `samples` ist das Ergebnis
+/// von `integrate_arc` (der erste Stützpunkt der Anfang, dann jeder
+/// `SAMPLE_EVERY`-te Schritt, der letzte das Ereignis); `t` liegt davor.
+pub fn state_on_arc(forces: &Forces, samples: &[Sample], t: f64) -> StateVector {
+    let start = samples[0].time;
+    let grid = &samples[..samples.len().saturating_sub(1).max(1)];
+    let i = grid.partition_point(|s| s.time <= t).max(1) - 1;
+    let mut step = i * SAMPLE_EVERY;
+    let (mut time, mut s) = (grid[i].time, grid[i].state);
+    loop {
+        if time + STEP >= t {
+            return rk4(forces, time, &s, (t - time).max(0.0));
+        }
+        s = rk4(forces, time, &s, STEP);
+        step += 1;
+        time = start + step as f64 * STEP;
     }
 }
 

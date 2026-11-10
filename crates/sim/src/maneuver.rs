@@ -7,6 +7,7 @@
 
 use crate::body::BodyId;
 use crate::kepler::StateVector;
+use crate::landing::Descent;
 use crate::launch::Ascent;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
@@ -41,6 +42,10 @@ pub struct Burn {
     /// Beim Start vom Boden: Aufstiegssteuerung statt fester Richtung.
     #[serde(default)]
     pub ascent: Option<Ascent>,
+    /// Landebrennen: Schub gegen die Bewegung zum Boden statt fester
+    /// Richtung (siehe `landing`).
+    #[serde(default)]
+    pub descent: Option<Descent>,
 }
 
 impl Burn {
@@ -66,13 +71,47 @@ impl Burn {
             thrust: params.thrust,
             mass_flow,
             ascent: None,
+            descent: None,
+        }
+    }
+
+    /// Landebrennen ab `start` im Zustand `state` mit vollem Schub gegen die
+    /// Bewegung zum Boden von `body`. Das Ende ist hier der leere Tank; die
+    /// Zeitleiste beendet das Brennen früher, sobald das Schiff steht.
+    pub fn landing(
+        start: f64,
+        start_mass: f64,
+        params: &crate::world::VesselParams,
+        body: &crate::body::Body,
+        state: &StateVector,
+    ) -> Self {
+        let mass_flow = params.thrust / params.exhaust_velocity;
+        let fuel = (start_mass - params.dry_mass).max(0.0);
+        let descent = Descent::new(body);
+        Self {
+            start,
+            end: start + fuel / mass_flow,
+            start_mass,
+            direction: descent.direction(state),
+            thrust: params.thrust,
+            mass_flow,
+            ascent: None,
+            descent: Some(descent),
         }
     }
 
     /// Schubrichtung im Zustand `state`.
     pub fn direction_at(&self, state: &StateVector) -> DVec3 {
+        if let Some(descent) = self.descent {
+            return descent.direction(state);
+        }
         self.ascent
             .map_or(self.direction, |ascent| ascent.direction(state))
+    }
+
+    /// Ist das ein Landebrennen?
+    pub fn is_landing(&self) -> bool {
+        self.descent.is_some()
     }
 
     pub fn duration(&self) -> f64 {

@@ -8,7 +8,9 @@ use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use sim::body::{body_state, orbital_period, sphere_of_influence};
-use sim::{Crash, Event, Plan, Segment, SurfacePoint, Touchdown, VesselStatus, World, kepler};
+use sim::{
+    Crash, Event, LandingBurn, Plan, Segment, SurfacePoint, Touchdown, VesselStatus, World, kepler,
+};
 use std::ops::Range;
 
 #[derive(Component)]
@@ -333,8 +335,17 @@ fn touchdown_place(world: &World, t: &Touchdown) -> String {
     }
 }
 
+/// Höhe in m, ab 1 km in km.
+fn height(meters: f64) -> String {
+    if meters < 1_000.0 {
+        format!("{meters:.0} m")
+    } else {
+        km(meters)
+    }
+}
+
 /// Vorausgesagter Bodenkontakt: Landung im Zielgebiet, Aufsetzen außerhalb
-/// oder Absturz, jeweils mit Ort und Geschwindigkeit am Boden. Beim Absturz
+/// oder Absturz, jeweils mit Ort, dazu das Landebrennen davor. Beim Absturz
 /// steht der Grund gleich in der ersten Zeile.
 pub(crate) fn touchdown_lines(world: &World, i: usize) -> Vec<String> {
     let Some(t) = world.touchdown(i) else {
@@ -342,32 +353,44 @@ pub(crate) fn touchdown_lines(world: &World, i: usize) -> Vec<String> {
     };
     let when = format_span(t.time - world.time, day(world));
     let place = touchdown_place(world, &t);
-    match t.braking {
-        Ok(dv) => vec![
+    let hop = if t.zone.is_some() {
+        ""
+    } else {
+        ", danach Hop ins Ziel"
+    };
+    match t.landing {
+        Ok(landing) => vec![
             if t.zone.is_some() {
                 format!("Landung in {when} {place}")
             } else {
                 format!("Aufsetzen in {when} {place}")
             },
-            format!(
-                "  Aufsetzen mit {:.0} m/s, Bremsen {dv:.0} m/s{}",
-                t.speed,
-                if t.zone.is_some() {
-                    ""
-                } else {
-                    ", danach Hop ins Ziel"
-                }
-            ),
+            match landing {
+                Some(LandingBurn { burn, altitude }) if burn.start > world.time => format!(
+                    "  Landebrennen in {} ab {} Höhe: {:.0} m/s, {:.prec$} s{hop}",
+                    format_span(burn.start - world.time, day(world)),
+                    height(altitude),
+                    burn.delta_v(),
+                    burn.duration(),
+                    prec = usize::from(burn.duration() < 10.0),
+                ),
+                Some(_) => format!("  Landebrennen läuft{hop}"),
+                None => format!("  Aufsetzen mit {:.1} m/s ohne Bremsen{hop}", t.speed),
+            },
         ],
         Err(crash) => {
             let (reason, detail) = match crash {
-                Crash::NoFuel { available } => (
+                Crash::NoFuel { available, missing } => (
                     format!("Δv an Bord nur {available:.0} m/s"),
-                    format!("zum Bremsen fehlen {:.0} m/s", t.speed - available),
+                    format!("zum Bremsen fehlen mindestens {missing:.0} m/s"),
                 ),
                 Crash::TooWeak { thrust_to_weight } => (
                     "Schub zu schwach zum Bremsen".into(),
                     format!("Schub/Gewicht {thrust_to_weight:.2}, nötig über 1"),
+                ),
+                Crash::TooLate => (
+                    "keine Zeit zum Bremsen".into(),
+                    "das Landebrennen müsste früher beginnen".into(),
                 ),
             };
             vec![
@@ -495,15 +518,28 @@ pub fn update(
                 format!("In der Atmosphäre, Höhe {}", km(altitude))
             }
             VesselStatus::Burning { remaining } => {
-                // Momentane Bahn: ändert sich während des Brennens laufend.
                 let (body_id, state) = world.vessel_state(i);
                 let body = &world.bodies[body_id];
-                let info = kepler::orbit_info(body.gm, &state);
-                format!(
-                    "Brennt, noch {remaining:.1} s  Ap {}  Pe {}",
-                    info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
-                    km(info.periapsis - body.radius)
-                )
+                if world.vessels[i]
+                    .trajectory
+                    .current()
+                    .landing_burn()
+                    .is_some()
+                {
+                    format!(
+                        "Landebrennen, noch {remaining:.1} s  Höhe {}  {:.0} m/s zum Boden",
+                        height(state.position.length() - body.radius),
+                        sim::landing::ground_speed(body, &state)
+                    )
+                } else {
+                    // Momentane Bahn: ändert sich während des Brennens laufend.
+                    let info = kepler::orbit_info(body.gm, &state);
+                    format!(
+                        "Brennt, noch {remaining:.1} s  Ap {}  Pe {}",
+                        info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
+                        km(info.periapsis - body.radius)
+                    )
+                }
             }
             VesselStatus::Landed { point } => {
                 match world.zone_at(world.vessel_state(i).0, &point) {

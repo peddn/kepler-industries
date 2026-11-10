@@ -70,10 +70,11 @@ struct Line {
 /// Grund eines Absturzes als Text.
 fn crash_reason(reason: &Crash) -> String {
     match reason {
-        Crash::NoFuel { available } => format!("Δv an Bord nur {available:.0} m/s"),
+        Crash::NoFuel { available, .. } => format!("Δv an Bord nur {available:.0} m/s"),
         Crash::TooWeak { thrust_to_weight } => {
             format!("Schub zu schwach zum Bremsen (Schub/Gewicht {thrust_to_weight:.2})")
         }
+        Crash::TooLate => "keine Zeit zum Bremsen".into(),
     }
 }
 
@@ -92,6 +93,7 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
     let (what, color) = match &entry.kind {
         LogKind::Liftoff => ("Start".into(), TEXT_COLOR),
         LogKind::BurnStart => ("Brennbeginn".into(), TEXT_COLOR),
+        LogKind::LandingBurn => ("Landebrennen".into(), TEXT_COLOR),
         LogKind::BurnEnd {
             apoapsis,
             periapsis,
