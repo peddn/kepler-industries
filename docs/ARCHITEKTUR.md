@@ -135,17 +135,30 @@ bruchstückhaft.
 Ein Körper ohne Luft ist der Spezialfall Bodendichte 0, Freiflug der
 Spezialfall „kein Schub".
 
-**Monde auf Schienen:** Ein Mond läuft auf einer Kreisbahn in der
-Äquatorebene seines Mutterkörpers, im Drehsinn der Rotation (`BodyOrbit`),
-für jeden Zeitpunkt direkt berechnet (`body::body_state`, über den Rest der
-Umlaufzeit wie die Rotation, damit auch nach Jahren genau). Er wird nie
-integriert und spürt keine Schiffe. Der erste Körper ruht im Ursprung. Die
-Einflusssphäre folgt nach Laplace aus Bahnradius und Massen: a · (m/M)^0,4
-(`body::sphere_of_influence`); darin zählt für ein Schiff nur die Schwerkraft
-des Monds (Patched Conics, ab dem Wechsel der Einflusssphäre). Der Mond im
-Spiel, Zoon, entspricht dem Mun in KSP (200 km, g = 1,63 m/s², 12.000 km Abstand,
-Umlauf 38,6 h, Einflusssphäre 2.430 km) und ist gebunden: Rotation und Umlauf
-haben dieselbe Dauer, Länge 0° zeigt immer zum Planeten.
+**Monde auf Schienen:** Ein Mond läuft wie in KSP auf einer festen
+Keplerbahn um seinen Mutterkörper (`BodyOrbit`), beschrieben durch die sechs
+Bahnelemente zum Zeitpunkt 0: große Halbachse, Exzentrizität, Neigung, Länge
+des aufsteigenden Knotens, Argument der Periapsis, mittlere Anomalie. Seine
+Lage wird für jeden Zeitpunkt direkt berechnet (`body::body_state`): Die
+mittlere Anomalie wächst gleichmäßig (über den Rest der Umlaufzeit wie die
+Rotation, damit auch nach Jahren genau), die exzentrische folgt aus der
+Kepler-Gleichung (Newton). Mutterkörper kann jeder Körper sein, die Lage
+wird rekursiv zusammengesetzt (Monde von Monden gingen also, sind aber nicht
+getestet). Ein Mond wird nie integriert und spürt keine Schiffe. Der erste
+Körper ruht im Ursprung. Wie in KSP gibt es keine Achsneigung: Alle Körper
+drehen sich um +Z, die Neigung einer Bahn gilt gegenüber dieser gemeinsamen
+Äquatorebene. Die Einflusssphäre folgt nach Laplace aus großer Halbachse und
+Massen: a · (m/M)^0,4 (`body::sphere_of_influence`, auch bei Ellipsen gleich
+groß); darin zählt für ein Schiff nur die Schwerkraft des Monds (Patched
+Conics, ab dem Wechsel der Einflusssphäre). Zoon entspricht dem Mun in KSP
+(Kreis über dem Äquator, 200 km, g = 1,63 m/s², 12.000 km Abstand, Umlauf
+38,6 h, Einflusssphäre 2.430 km) und ist gebunden: Rotation und Umlauf haben
+dieselbe Dauer, Länge 0° zeigt immer zum Planeten (bei einer Ellipse
+schwankte der Planet dabei am Himmel, Libration). Zimm ähnelt Minmus (60 km,
+g = 0,49 m/s², große Halbachse 47.000 km, Neigung 6°, Einflusssphäre
+2.250 km), ist aber leicht elliptisch (Exzentrizität 0,1) und dreht sich
+frei. Alte Spielstände mit Kreisbahnen (`radius`, `phase`) laden als Ellipse
+ohne Exzentrizität und Neigung.
 
 **Wechsel der Einflusssphäre** (`soi.rs`): An der Grenze endet ein Abschnitt
 (`SoiEntry`, `SoiExit`), der nächste läuft um den anderen Körper weiter, ein
@@ -157,7 +170,8 @@ dass sich Schiff und Mond pro Schritt höchstens um ein Viertel des Radius
 gegeneinander bewegen; ein Vorzeichenwechsel wird per Bisektion eingegrenzt
 (auf 1 µs), ein tiefer Punkt zwischen zwei Abtastpunkten per Goldenem Schnitt
 (knappe Streifschüsse). Gesucht wird nur, wenn der Abstand der Bahn zum
-Planeten überhaupt in den Ring um die Mondbahn fällt, und jeweils einen
+Planeten überhaupt in den Bereich fällt, den der Mond samt Sphäre zwischen
+seiner Periapsis und Apoapsis überstreicht, und jeweils einen
 Umlauf weit; ohne Treffer endet der Keplerabschnitt dort mit `Continue`, und
 der nächste sucht weiter, wenn er an der Reihe ist. Bahnen in Planetennähe
 bleiben ein einziger offener Abschnitt wie bisher. Schrittweise berechnete
@@ -357,7 +371,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 ## Getroffene Spielentscheidungen
 
 - 3D, kleine Planeten (Kerbin-Größe), **keine Raketenstufen**.
-- **Namen:** Der Heimatplanet heißt Zorb, sein Mond Zoon, die Sonne Zunn,
+- **Namen:** Der Heimatplanet heißt Zorb, seine Monde Zoon und Zimm, die Sonne Zunn,
   die Bewohner Zorbels. Die Namen der Himmelskörper stehen nur im Szenario
   (`Body::name`), alle Anzeigen lesen sie von dort; alte Spielstände
   behalten ihre Namen.
@@ -592,7 +606,8 @@ nichts verloren geht.
    von Hand), Nahansicht ✓ (Kamera auf jedes gewählte Objekt, `N`),
    Statusleiste mit Protokoll ✓, Andocken ✓ (Angleichen, Anflug, Verbund),
    Abdocken ✓
-7. Mond: auf Schienen ✓ (Kreisbahn, Einflusssphäre, wählen, Kamera), Wechsel
+7. Mond: auf Schienen ✓ (Bahnelemente wie KSP, Einflusssphäre, wählen,
+   Kamera, zweiter Mond Zimm), Wechsel
    der Einflusssphäre ✓ (mit Rand des Heimatsystems, Zeichnung wie KSP),
    Landen und Starten auf Zoon ✓ (Wendewinkel, Zielgebiete), Landebrennen ✓
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

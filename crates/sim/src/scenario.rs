@@ -50,10 +50,33 @@ pub fn moon(planet: &Body) -> Body {
         radius,
         rotation_period: circular_period(planet.gm, distance),
         atmosphere: Atmosphere::NONE,
+        orbit: Some(BodyOrbit::circular(0, distance, PI)),
+        soi_radius: None,
+    }
+}
+
+/// Zimm, der zweite, äußere Mond von Zorb, ähnlich Minmus in KSP: klein
+/// (60 km Radius, g = 0,49 m/s², ohne Luft), weit draußen und schräg. Anders
+/// als Minmus leicht elliptisch: 42.300 bis 51.700 km vom Mittelpunkt des
+/// Planeten (große Halbachse 47.000 km, Exzentrizität 0,1, Umlauf wie
+/// Minmus 1.077.311 s, knapp 50 Tage des Planeten), Neigung 6°,
+/// Einflusssphäre etwa 2.250 km. Dreht sich frei (wie Minmus in 40.400 s).
+pub fn outer_moon() -> Body {
+    let radius = 60_000.0;
+    Body {
+        name: "Zimm".into(),
+        gm: 0.491 * radius * radius,
+        radius,
+        rotation_period: 40_400.0,
+        atmosphere: Atmosphere::NONE,
         orbit: Some(BodyOrbit {
             parent: 0,
-            radius: distance,
-            phase: PI,
+            semi_major_axis: 47_000_000.0,
+            eccentricity: 0.1,
+            inclination: 6f64.to_radians(),
+            ascending_node: 78f64.to_radians(),
+            argument_of_periapsis: 38f64.to_radians(),
+            mean_anomaly: 0.9,
         }),
         soi_radius: None,
     }
@@ -94,7 +117,7 @@ pub const FERRY: VesselParams = VesselParams {
 pub fn demo() -> World {
     let planet = home_planet();
     let moon = moon(&planet);
-    let mut world = World::new(vec![planet, moon]);
+    let mut world = World::new(vec![planet, moon, outer_moon()]);
     let planet = &world.bodies[0];
     let (gm, r) = (planet.gm, planet.radius);
 

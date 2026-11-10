@@ -313,8 +313,8 @@ pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) 
     }
 }
 
-/// Bahn des Monds um den Planeten und seine Einflusssphäre, beides Kreise in
-/// der Äquatorebene. Die Einflusssphäre ist eine Kugel; gezeichnet wird ihr
+/// Bahnen der Monde um den Planeten (Ellipsen in ihrer Bahnebene) und ihre
+/// Einflusssphären. Die Einflusssphäre ist eine Kugel; gezeichnet wird ihr
 /// Umriss in der Bahnebene, beim gewählten Mond in dessen Farbe.
 pub fn draw_body_orbits(
     sim: Res<Sim>,
@@ -323,18 +323,14 @@ pub fn draw_body_orbits(
     mut gizmos: Gizmos,
 ) {
     let world = &sim.0;
-    let circle = |center: DVec3, radius: f64| {
-        (0..=BODY_ORBIT_POINTS).map(move |i| {
-            let angle = std::f64::consts::TAU * i as f64 / BODY_ORBIT_POINTS as f64;
-            let (sin, cos) = angle.sin_cos();
-            center + DVec3::new(cos, sin, 0.0) * radius
-        })
+    let angles = || {
+        (0..=BODY_ORBIT_POINTS).map(|i| std::f64::consts::TAU * i as f64 / BODY_ORBIT_POINTS as f64)
     };
     for (b, body) in world.bodies.iter().enumerate() {
         let Some(orbit) = &body.orbit else { continue };
         let parent = body_state(&world.bodies, orbit.parent, world.time).position;
         gizmos.linestrip(
-            circle(parent, orbit.radius).map(|p| to_view(p, rig.focus)),
+            angles().map(|e| to_view(parent + orbit.point_at(e), rig.focus)),
             BODY_ORBIT_COLOR,
         );
         let center = body_state(&world.bodies, b, world.time).position;
@@ -343,8 +339,12 @@ pub fn draw_body_orbits(
         } else {
             SOI_COLOR
         };
+        let (plane, soi) = (orbit.orientation(), sphere_of_influence(&world.bodies, b));
         gizmos.linestrip(
-            circle(center, sphere_of_influence(&world.bodies, b)).map(|p| to_view(p, rig.focus)),
+            angles().map(|angle| {
+                let (sin, cos) = angle.sin_cos();
+                to_view(center + plane * DVec3::new(cos, sin, 0.0) * soi, rig.focus)
+            }),
             color,
         );
     }

@@ -43,6 +43,9 @@ pub const NEAR_MIN_DISTANCE: f64 = 10.0;
 pub const MAP_OBJECT_DISTANCE: f64 = 50_000.0;
 /// Abstand beim Einschalten der Nahansicht (höchstens, m).
 pub const NEAR_DISTANCE: f64 = 2_000.0;
+/// Weiter als so viele Planetenradien zoomt die Kamera nicht heraus (der
+/// äußere Mond und der Rand des Heimatsystems passen ins Bild).
+const MAX_DISTANCE_RADII: f64 = 250.0;
 
 #[derive(Resource)]
 pub struct CameraRig {
@@ -88,7 +91,7 @@ impl CameraRig {
             (_, false) => MAP_MIN_DISTANCE,
             (_, true) => NEAR_MIN_DISTANCE,
         };
-        (min, self.radii[0] * 80.0)
+        (min, self.radii[0] * MAX_DISTANCE_RADII)
     }
 
     pub fn clamp_distance(&mut self) {
