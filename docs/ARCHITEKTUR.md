@@ -387,6 +387,12 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   kleinste Abstand liegt knapp über der Oberfläche. Gibt es
   das Objekt nicht mehr, geht der Fokus auf sein Schiff, sonst den Planeten.
   Kollisionen der Kamera mit dem Planeten werden bewusst vernachlässigt.
+- **Zeit:** Es gibt eine Spielzeit für alles. Angezeigt wird sie in Tagen
+  des Heimatplaneten, die Tageslänge kommt aus seiner Rotation (`hud::day`,
+  heute 6 h); keine Ortszeit, kein Kalender pro Körper, auch am Mond gilt
+  diese Zeit (wie die Kerbin-Zeit in KSP). Kommt die Sonne, wird der Tag der
+  Sonnentag, aus Umdrehung und Umlauf um die Sonne berechnet (KSP lässt
+  Kerbin dafür in 5:59:09 drehen, damit der Sonnentag genau 6 h dauert).
 - **Bahnen um den Mond zeichnen** wie in KSP (`view::anchors`):
   Aufeinanderfolgende Abschnitte um denselben Körper bilden ein Stück; es
   liegt um die Stelle, an der der Körper zu Beginn des Stücks steht

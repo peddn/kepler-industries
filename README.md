@@ -85,6 +85,11 @@ bleibt sie bei ihm. Wer mehr als etwa 84.000 km vom Planeten wegfliegt,
 verlässt das Heimatsystem: Danach ist das Schiff im Sonnenorbit und wird
 (noch) nicht weiter simuliert.
 
+Die Uhr oben links zählt Tage des Planeten: Ein Tag ist eine Umdrehung
+(6 h, die Stunden laufen von 0 bis 5), abgeleitet aus seiner Rotation. Diese
+eine Zeit gilt überall, auch am Mond (wie die Kerbin-Zeit in KSP); Zeitspannen
+wie „2 d 03:04:05“ zählen dieselben Tage.
+
 Die Kamera lässt sich mit `F` auf das gewählte Objekt richten: Schiff,
 Node, Zielgebiet (Raute in der Kreismitte anklicken) oder Mond. Sie folgt ihm, auch
 wenn man danach etwas anderes wählt; so kann man ein Zielgebiet im Blick

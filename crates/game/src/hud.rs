@@ -66,9 +66,21 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>) {
         });
 }
 
-pub(crate) fn format_time(seconds: f64) -> String {
+/// Länge eines Tags in s: eine Umdrehung des Heimatplaneten. Überall gilt
+/// diese eine Zeit (wie die Kerbin-Zeit in KSP), auch beim Mond.
+pub(crate) fn day(world: &World) -> f64 {
+    world.bodies[0].rotation_period
+}
+
+/// Ganze Sekunden eines Tags (für die Anzeige, mindestens 1).
+fn day_seconds(day: f64) -> u64 {
+    (day.round() as u64).max(1)
+}
+
+pub(crate) fn format_time(seconds: f64, day: f64) -> String {
     let total = seconds.max(0.0) as u64;
-    let (days, rest) = (total / 86_400, total % 86_400);
+    let day = day_seconds(day);
+    let (days, rest) = (total / day, total % day);
     format!(
         "Tag {days}, {:02}:{:02}:{:02}",
         rest / 3600,
@@ -93,7 +105,7 @@ fn next_sphere_change(world: &World, trajectory: &sim::Trajectory) -> Option<Str
         if t <= world.time {
             return None;
         }
-        let when = format_span(t - world.time);
+        let when = format_span(t - world.time, day(world));
         let name = |b: usize| &world.bodies[b].name;
         Some(match segment.end_event()? {
             Event::SoiEntry(moon) => {
@@ -137,20 +149,28 @@ fn body_details(world: &World, b: usize) -> Vec<String> {
             "Bahn um {} in {}, Umlauf {}",
             parent.name,
             km(distance),
-            format_span(period)
+            format_span(period, day(world))
         ));
         lines.push(format!(
             "Einflusssphäre {}",
             km(sphere_of_influence(&world.bodies, b))
         ));
+        // Gebunden: Er dreht sich so schnell, wie er umläuft.
+        let locked = (body.rotation_period / period - 1.0).abs() < 1e-9;
+        lines.push(format!(
+            "Drehung {}{}",
+            format_span(body.rotation_period, day(world)),
+            if locked { " (gebunden)" } else { "" }
+        ));
     }
     lines
 }
 
-/// Zeitspanne, z. B. "00:12:34" oder "2 d 03:04:05".
-pub(crate) fn format_span(seconds: f64) -> String {
+/// Zeitspanne, z. B. "00:12:34" oder "2 d 03:04:05" (Tage siehe `day`).
+pub(crate) fn format_span(seconds: f64, day: f64) -> String {
     let total = seconds.max(0.0).round() as u64;
-    let (days, rest) = (total / 86_400, total % 86_400);
+    let day = day_seconds(day);
+    let (days, rest) = (total / day, total % day);
     let clock = format!(
         "{:02}:{:02}:{:02}",
         rest / 3600,
@@ -213,7 +233,7 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
     {
         lines.push(format!(
             "Start in {} (Einstellungen rechts)",
-            format_span(plan.burn.start - world.time)
+            format_span(plan.burn.start - world.time, day(world))
         ));
     }
     let nodes = trajectory.nodes();
@@ -234,7 +254,10 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
             lines.push(match node.plan {
                 Ok(plan) => {
                     let when = if plan.burn.start > world.time {
-                        format!("in {}", format_span(plan.burn.start - world.time))
+                        format!(
+                            "in {}",
+                            format_span(plan.burn.start - world.time, day(world))
+                        )
                     } else {
                         "brennt".into()
                     };
@@ -273,7 +296,7 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
                 let when = if plan.matching.burn.start > world.time {
                     format!(
                         "Angleichen in {}",
-                        format_span(plan.matching.burn.start - world.time)
+                        format_span(plan.matching.burn.start - world.time, day(world))
                     )
                 } else {
                     "Anflug läuft".into()
@@ -282,7 +305,7 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
                     "Andocken an {name}: {when}, Δv {:.0} + {:.0} m/s, Kontakt in {}",
                     plan.matching.node.delta_v.length(),
                     plan.approach_delta_v,
-                    format_span(plan.contact - world.time)
+                    format_span(plan.contact - world.time, day(world))
                 )
             }
             Err(e) => {
@@ -317,7 +340,7 @@ pub(crate) fn touchdown_lines(world: &World, i: usize) -> Vec<String> {
     let Some(t) = world.touchdown(i) else {
         return Vec::new();
     };
-    let when = format_span(t.time - world.time);
+    let when = format_span(t.time - world.time, day(world));
     let place = touchdown_place(world, &t);
     match t.braking {
         Ok(dv) => vec![
@@ -361,7 +384,10 @@ fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
     let dv = plan.node.delta_v;
     let burn = &plan.burn;
     let when = if burn.start > world.time {
-        format!("Brennbeginn in {}", format_span(burn.start - world.time))
+        format!(
+            "Brennbeginn in {}",
+            format_span(burn.start - world.time, day(world))
+        )
     } else {
         "Brennt".into()
     };
@@ -434,7 +460,7 @@ pub fn update(
     let world = &sim.0;
     let mut lines = vec![format!(
         "{}    Zeitraffer {}×{}    Kamera: {}{}",
-        format_time(world.time),
+        format_time(world.time, day(world)),
         warp.factor(),
         if warp.paused { "  (Pause)" } else { "" },
         focus::name(world, rig.target),
