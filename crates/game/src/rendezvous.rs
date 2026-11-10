@@ -10,6 +10,7 @@ use crate::Sim;
 use crate::camera::{CameraRig, MainCamera, to_view};
 use crate::hud::{UiFont, km};
 use crate::node_ui::{Projector, Selection};
+use crate::view;
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use sim::{Approach, PlaneCrossing};
@@ -61,10 +62,10 @@ pub fn update(sim: Res<Sim>, selection: Res<Selection>, mut info: ResMut<Rendezv
 /// Lage des gewählten Schiffs zum Zeitpunkt `t` (vorausberechnet).
 fn own_position(sim: &Sim, info: &TargetInfo, t: f64) -> Option<bevy::math::DVec3> {
     let world = &sim.0;
-    world.vessels[info.vessel]
-        .trajectory
+    let trajectory = &world.vessels[info.vessel].trajectory;
+    trajectory
         .predicted_state(&world.bodies, t)
-        .map(|(_, s)| s.position)
+        .map(|(_, s)| view::anchor_at(world, trajectory, t) + s.position)
 }
 
 /// Marker: bei der Annäherung beide Schiffe als Ringe mit einer Linie
@@ -84,17 +85,25 @@ pub fn draw(
             .circle(Isometry3d::new(p, rotation), p.distance(eye) * size, color)
             .resolution(resolution);
     };
-    if let Some(a) = &info.approach {
-        let own = to_view(a.position, rig.focus);
-        let target = to_view(a.target_position, rig.focus);
+    // Beide relativ zum Bahnstück des eigenen Schiffs (gleicher Körper).
+    let trajectory = &sim.0.vessels[info.vessel].trajectory;
+    let approach = info.approach.map(|a| {
+        let anchor = view::anchor_at(&sim.0, trajectory, a.time);
+        (
+            to_view(anchor + a.position, rig.focus),
+            to_view(anchor + a.target_position, rig.focus),
+        )
+    });
+    if let Some((own, target)) = approach {
         ring(own, APPROACH_RADIUS, 24, OWN_COLOR);
         ring(target, APPROACH_RADIUS, 24, TARGET_COLOR);
     }
     // Automatischer Node "Angleichen" beim Andocken: doppelter rosa Ring.
-    if let Some(plan) = sim.0.vessels[info.vessel].trajectory.dock_plan()
+    if let Some(plan) = trajectory.dock_plan()
         && plan.matching.burn.end > sim.0.time
     {
-        let p = to_view(plan.matching.node_state.position, rig.focus);
+        let anchor = view::anchor_at(&sim.0, trajectory, plan.matching.node.time);
+        let p = to_view(anchor + plan.matching.node_state.position, rig.focus);
         ring(p, APPROACH_RADIUS * 1.4, 24, TARGET_COLOR);
         ring(p, APPROACH_RADIUS * 0.8, 24, TARGET_COLOR);
     }
@@ -105,9 +114,7 @@ pub fn draw(
             }
         }
     }
-    if let Some(a) = &info.approach {
-        let own = to_view(a.position, rig.focus);
-        let target = to_view(a.target_position, rig.focus);
+    if let Some((own, target)) = approach {
         gizmos.line(own, target, TARGET_COLOR);
     }
 }
@@ -160,7 +167,9 @@ pub fn sync_labels(
             let (position, value) = match label {
                 Label::Approach => {
                     let a = info.approach.as_ref()?;
-                    (a.position, distance_text(a.distance))
+                    let trajectory = &sim.0.vessels[info.vessel].trajectory;
+                    let anchor = view::anchor_at(&sim.0, trajectory, a.time);
+                    (anchor + a.position, distance_text(a.distance))
                 }
                 Label::Ascending | Label::Descending => {
                     let plane = info.plane.as_ref()?;

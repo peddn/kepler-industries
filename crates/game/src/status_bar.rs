@@ -8,7 +8,7 @@
 //! neue Meldungen sofort; wer hochgescrollt hat, bleibt an seiner Stelle.
 
 use crate::Sim;
-use crate::hud::{UiFont, format_time, km, place};
+use crate::hud::{self, UiFont, format_time, km, place};
 use crate::node_ui::UiMessage;
 use bevy::input::mouse::{AccumulatedMouseScroll, MouseScrollUnit};
 use bevy::prelude::*;
@@ -126,6 +126,26 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             ),
             TEXT_COLOR,
         ),
+        LogKind::SoiEntry { body, periapsis } => (
+            format!(
+                "erreicht die Einflusssphäre von {} (Pe {}{})",
+                world.bodies[*body].name,
+                km(*periapsis),
+                if *periapsis < 0.0 { ", Aufschlag" } else { "" }
+            ),
+            TEXT_COLOR,
+        ),
+        LogKind::SoiExit { body } => (
+            format!(
+                "verlässt die Einflusssphäre von {}",
+                world.bodies[*body].name
+            ),
+            TEXT_COLOR,
+        ),
+        LogKind::LeavesSystem => (
+            "verlässt das Heimatsystem (Sonnenorbit, nicht simuliert)".into(),
+            ATMOSPHERE_COLOR,
+        ),
     };
     Line {
         time: entry.time,
@@ -168,8 +188,8 @@ fn lines(world: &World, notes: &UiMessage, range: std::ops::Range<usize>) -> Vec
     out
 }
 
-fn line_text(line: &Line) -> String {
-    format!("{}  {}", format_time(line.time), line.text)
+fn line_text(line: &Line, day: f64) -> String {
+    format!("{}  {}", format_time(line.time, day), line.text)
 }
 
 #[derive(Component)]
@@ -420,7 +440,7 @@ pub fn sync(
     };
 
     let (value, color) = match lines(world, &notes, total.saturating_sub(1)..total).pop() {
-        Some(line) => (line_text(&line), line.color),
+        Some(line) => (line_text(&line, hud::day(world)), line.color),
         None => ("Noch keine Meldungen.".into(), HINT_COLOR),
     };
     set(&mut last.0, value);
@@ -443,7 +463,7 @@ pub fn sync(
     for (AreaLine(n), mut text, mut color) in &mut rows {
         match n.checked_sub(empty).and_then(|k| shown.get(k)) {
             Some(line) => {
-                set(&mut text, line_text(line));
+                set(&mut text, line_text(line, hud::day(world)));
                 color.0 = line.color;
             }
             None => set(&mut text, String::new()),

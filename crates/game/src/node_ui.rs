@@ -19,14 +19,14 @@ use crate::dv_bar::{BarShown, over_bar};
 use crate::hud::UiFont;
 use crate::panel::{PanelShown, over_panel};
 use crate::status_bar::{StatusBar, over_status};
-use crate::view::orbit_points;
+use crate::view::{self, orbit_points};
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use bevy::window::PrimaryWindow;
 use sim::body::body_state;
-use sim::{BodyId, ManeuverNode, Plan, PlanError, Segment, Trajectory, World, kepler, maneuver};
+use sim::{BodyId, ManeuverNode, Plan, PlanError, Segment, Trajectory, World, maneuver};
 
 /// Trefferradius in Pixeln.
 const PICK_RADIUS: f32 = 14.0;
@@ -238,7 +238,10 @@ pub fn sync_label(
     let shown = selected_node(world, &selection, &selected).and_then(|(i, k)| {
         let plan = world.vessels[i].trajectory.nodes()[k].plan.ok()?;
         let n = world.revolutions_before_node(i, k).filter(|&n| n > 0)?;
-        let node = to_view(plan.node_state.position, rig.focus);
+        let node = to_view(
+            node_position(world, &world.vessels[i].trajectory, &plan),
+            rig.focus,
+        );
         let screen = camera
             .world_to_viewport(&GlobalTransform::from(*transform), node)
             .ok()?;
@@ -331,9 +334,16 @@ impl<'a> Projector<'a> {
     }
 }
 
-/// Lage von Node und Griffen in Bevy-Koordinaten.
-fn node_geometry(plan: &Plan, focus: DVec3, eye: Vec3) -> (Vec3, [Vec3; 6]) {
-    let node = to_view(plan.node_state.position, focus);
+/// Wo ein Node gezeichnet wird (mit dem Versatz seines Bahnstücks, siehe
+/// `view::anchors`).
+fn node_position(world: &World, trajectory: &Trajectory, plan: &Plan) -> DVec3 {
+    view::anchor_at(world, trajectory, plan.node.time) + plan.node_state.position
+}
+
+/// Lage von Node und Griffen in Bevy-Koordinaten (`position` siehe
+/// `node_position`).
+fn node_geometry(plan: &Plan, position: DVec3, focus: DVec3, eye: Vec3) -> (Vec3, [Vec3; 6]) {
+    let node = to_view(position, focus);
     let frame = maneuver::node_frame(&plan.node_state);
     let length = node.distance(eye) * HANDLE_LENGTH;
     let handles = HANDLES.map(|(axis, sign, _)| node + dir_to_view(frame[axis] * sign) * length);
@@ -346,22 +356,21 @@ fn node_geometry(plan: &Plan, focus: DVec3, eye: Vec3) -> (Vec3, [Vec3; 6]) {
 fn coast_path(world: &World, trajectory: &Trajectory, from: f64, points: usize) -> Path {
     let from = from.max(world.time);
     let mut pieces = Vec::new();
-    for segment in trajectory.segments() {
+    for (segment, anchor) in trajectory.segments().zip(view::anchors(world, trajectory)) {
         if segment.end() <= from {
             continue;
         }
         match segment {
             Segment::Kepler { state, .. } => {
-                let gm = world.bodies[segment.body()].gm;
                 let a = segment.start().max(from);
-                let span = kepler::period(gm, state).unwrap_or(3.0 * 3600.0);
+                let span = view::kepler_span(world, segment, state);
                 let b = segment.end().min(a + span);
                 let n = ((points as f64 * (b - a) / span).ceil() as usize).max(16);
                 pieces.push(
                     (0..=n)
                         .map(|k| {
                             let t = a + (b - a) * k as f64 / n as f64;
-                            (t, segment.state_at(&world.bodies, t).position)
+                            (t, anchor + segment.state_at(&world.bodies, t).position)
                         })
                         .collect(),
                 );
@@ -374,7 +383,7 @@ fn coast_path(world: &World, trajectory: &Trajectory, from: f64, points: usize) 
                 samples
                     .iter()
                     .filter(|s| s.time > from)
-                    .map(|s| (s.time, s.state.position))
+                    .map(|s| (s.time, anchor + s.state.position))
                     .collect(),
             ),
             // Brennen (auch der Aufstieg) und das Warten am Boden vor dem Start.
@@ -559,7 +568,8 @@ pub fn input(
             // Zuerst die Griffe des gewählten Nodes, dann alle Nodes.
             let handle = selected_node(world, &selection, &selected).and_then(|(_, k)| {
                 let plan = trajectory.nodes()[k].plan.ok()?;
-                let (_, handles) = node_geometry(&plan, rig.focus, projector.eye);
+                let position = node_position(world, trajectory, &plan);
+                let (_, handles) = node_geometry(&plan, position, rig.focus, projector.eye);
                 let handle = (0..6).find(|&h| near(handles[h]).is_some())?;
                 Some((k, handle))
             });
@@ -567,7 +577,7 @@ pub fn input(
                 .plans()
                 .enumerate()
                 .filter_map(|(k, plan)| {
-                    near(to_view(plan.node_state.position, rig.focus)).map(|d| (d, k))
+                    near(to_view(node_position(world, trajectory, plan), rig.focus)).map(|d| (d, k))
                 })
                 .min_by(|a, b| a.0.total_cmp(&b.0));
             if let Some((index, handle)) = handle {
@@ -611,7 +621,8 @@ pub fn input(
                 if let Some(chain_node) = chain_node
                     && let Ok(plan) = chain_node.plan
                 {
-                    let (node, handles) = node_geometry(&plan, rig.focus, projector.eye);
+                    let position = node_position(world, &world.vessels[i].trajectory, &plan);
+                    let (node, handles) = node_geometry(&plan, position, rig.focus, projector.eye);
                     if let (Some(a), Some(b)) =
                         (projector.screen(node), projector.screen(handles[*handle]))
                     {
@@ -745,7 +756,7 @@ fn click(
 ) -> Result<(), PlanError> {
     let vessel_hit = (0..world.vessels.len())
         .filter_map(|i| {
-            let position = to_view(world.vessel_state(i).1.position, focus);
+            let position = to_view(view::vessel_position(world, i), focus);
             projector.project(position).map(|s| (s.distance(cursor), i))
         })
         .filter(|(d, _)| *d < PICK_RADIUS)
@@ -849,7 +860,8 @@ pub fn draw(
     let (camera, transform) = *camera;
     let eye = transform.translation;
     for (k, plan) in trajectory.plans().enumerate() {
-        let (node, mut handles) = node_geometry(plan, rig.focus, eye);
+        let position = node_position(world, trajectory, plan);
+        let (node, mut handles) = node_geometry(plan, position, rig.focus, eye);
         let distance = node.distance(eye);
         if chosen != Some(k) {
             ring(

@@ -7,9 +7,9 @@
 //! Zielgebiet im Blick behalten und dabei das Schiff wählen und dessen
 //! Brems-Node einstellen.
 
-use crate::Sim;
 use crate::camera::{CameraRig, Focus, PLANET};
 use crate::node_ui::{Drag, SelectedBody, SelectedNode, SelectedZone, Selection, UiMessage};
+use crate::{Sim, view};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use sim::World;
@@ -40,17 +40,25 @@ pub fn focus_of_selection(
     }
 }
 
-/// Lage des Fokus im Simulationssystem; `None`, wenn es das Objekt nicht
-/// (mehr) gibt.
-pub fn position(world: &World, focus: Focus) -> Option<DVec3> {
+/// Lage des Fokus im Simulationssystem und der Mittelpunkt des Körpers, bei
+/// dem er ist (für "oben" in der Nahansicht); `None`, wenn es das Objekt
+/// nicht (mehr) gibt. Schiffe und Nodes wie gezeichnet (`view::anchors`).
+pub fn position(world: &World, focus: Focus) -> Option<(DVec3, DVec3)> {
+    let center = |b| body_state(&world.bodies, b, world.time).position;
+    let at_vessel = |i: usize| {
+        (
+            view::vessel_position(world, i),
+            center(world.vessel_state(i).0),
+        )
+    };
     Some(match focus {
         Focus::Body(b) => {
             world.bodies.get(b)?;
-            body_state(&world.bodies, b, world.time).position
+            (center(b), center(b))
         }
         Focus::Vessel(i) => {
             world.vessels.get(i)?;
-            world.vessel_state(i).1.position
+            at_vessel(i)
         }
         Focus::Node { vessel, time } => {
             let node = world
@@ -62,17 +70,22 @@ pub fn position(world: &World, focus: Focus) -> Option<DVec3> {
                 .find(|n| n.node.time == time)?;
             // Ein ungültiger Node hat keinen Ort: solange beim Schiff.
             match node.plan {
-                Ok(plan) => plan.node_state.position,
-                Err(_) => world.vessel_state(vessel).1.position,
+                Ok(plan) => {
+                    let trajectory = &world.vessels[vessel].trajectory;
+                    let anchor = view::anchor_at(world, trajectory, plan.node.time);
+                    (anchor + plan.node_state.position, anchor)
+                }
+                Err(_) => at_vessel(vessel),
             }
         }
         Focus::Zone(k) => {
             let zone = world.zones.get(k)?;
             let body = &world.bodies[zone.body];
-            body.body_fixed_to_inertial(
+            let surface = body.body_fixed_to_inertial(
                 zone.center.body_fixed_direction() * body.radius,
                 world.time,
-            )
+            );
+            (center(zone.body) + surface, center(zone.body))
         }
     })
 }
@@ -133,8 +146,9 @@ pub fn follow(sim: Res<Sim>, drag: Res<Drag>, mut rig: ResMut<CameraRig>) {
     if matches!(rig.target, Focus::Node { .. }) && matches!(*drag, Drag::Node { moved: true, .. }) {
         return;
     }
-    if let Some(p) = position(world, rig.target) {
+    if let Some((p, center)) = position(world, rig.target) {
         rig.focus = p;
+        rig.center = center;
         return;
     }
     match rig.target {
@@ -144,5 +158,5 @@ pub fn follow(sim: Res<Sim>, drag: Res<Drag>, mut rig: ResMut<CameraRig>) {
         }
         _ => rig.set_target(PLANET),
     }
-    rig.focus = position(world, rig.target).unwrap_or(DVec3::ZERO);
+    (rig.focus, rig.center) = position(world, rig.target).unwrap_or((DVec3::ZERO, DVec3::ZERO));
 }

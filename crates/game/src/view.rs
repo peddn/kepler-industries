@@ -1,14 +1,22 @@
 //! Darstellung: Planet, Mond, Atmosphäre, Basen, Schiffe und ihre Bahnen.
+//!
+//! Bahnen um den Mond werden wie in KSP gezeichnet (`anchors`): Ein Stück
+//! der Bahn um einen Körper liegt um die Stelle, an der er zu Beginn des
+//! Stücks steht (läuft das Stück schon: wo er jetzt steht). Es ist so eine
+//! echte Kegelschnittbahn um den Mond; dort steht ein blasser "Geistermond".
+//! Beim Austritt klafft deshalb eine Lücke: Der Mond ist inzwischen
+//! weitergezogen. Schiffe, Nodes und Klicks rechnen mit demselben Versatz.
 
 use crate::Sim;
-use crate::camera::{self, CameraRig, MainCamera, to_view};
+use crate::camera::{self, CameraRig, MainCamera, dir_to_view, to_view};
 use crate::node_ui::{SelectedBody, SelectedZone, Selection};
 use crate::rendezvous::TARGET_COLOR;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use sim::body::{body_state, sphere_of_influence};
 use sim::integrator::Sample;
-use sim::{BodyId, Event, Segment, SurfacePoint, VesselStatus, World, kepler};
+use sim::soi;
+use sim::{BodyId, Event, Segment, SurfacePoint, Trajectory, VesselStatus, World, kepler};
 
 /// Aktuelle Bahn.
 const ORBIT_COLOR: Color = Color::srgb(0.35, 0.75, 1.0);
@@ -30,6 +38,9 @@ const GRID_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.12);
 /// Zielgebiet).
 const BODY_ORBIT_COLOR: Color = Color::srgba(0.8, 0.8, 0.85, 0.35);
 const SOI_COLOR: Color = Color::srgba(0.8, 0.8, 0.85, 0.2);
+/// Wechsel der Einflusssphäre auf der Bahn, und der Mond, wo er dann steht.
+const SOI_CHANGE_COLOR: Color = Color::srgb(0.85, 0.85, 0.9);
+const GHOST_COLOR: Color = Color::srgba(0.8, 0.8, 0.85, 0.3);
 /// Stützpunkte für Mondbahn und Einflusssphäre.
 const BODY_ORBIT_POINTS: usize = 720;
 /// Größe der Markierungen relativ zum Abstand zur Kamera (bleibt auf dem
@@ -49,6 +60,39 @@ const PLANET_SEGMENTS: (u32, u32) = (720, 360);
 /// 0,2 m).
 const ORBIT_POINTS: usize = 256;
 const NEAR_ORBIT_POINTS: usize = 4096;
+
+/// Wo ein Schiff jetzt wirklich ist (relativ zum Planeten).
+pub fn vessel_position(world: &World, i: usize) -> DVec3 {
+    let (body, state) = world.vessel_state(i);
+    body_state(&world.bodies, body, world.time).position + state.position
+}
+
+/// Zeichen-Versatz für jeden Abschnitt der Zeitleiste: wo sein Körper beim
+/// Zeichnen steht. Aufeinanderfolgende Abschnitte um denselben Körper bilden
+/// ein Stück; es liegt um den Körper zu Beginn des Stücks, frühestens jetzt.
+/// Beim Planeten ist das der Ursprung.
+pub fn anchors(world: &World, trajectory: &Trajectory) -> Vec<DVec3> {
+    let mut patch: Option<(BodyId, f64)> = None;
+    trajectory
+        .segments()
+        .map(|segment| {
+            if patch.is_none_or(|(body, _)| body != segment.body()) {
+                patch = Some((segment.body(), segment.start()));
+            }
+            let (body, start) = patch.expect("gesetzt");
+            body_state(&world.bodies, body, start.max(world.time)).position
+        })
+        .collect()
+}
+
+/// Versatz des Abschnitts, in dem der Zeitpunkt `t` liegt (siehe `anchors`).
+pub fn anchor_at(world: &World, trajectory: &Trajectory, t: f64) -> DVec3 {
+    trajectory
+        .segments()
+        .zip(anchors(world, trajectory))
+        .find(|(s, _)| s.start() <= t && t <= s.end())
+        .map_or(DVec3::ZERO, |(_, anchor)| anchor)
+}
 
 /// Stützpunkte pro Umlauf für Bahnlinien (und das Anklicken der Bahn).
 pub fn orbit_points(near: bool) -> usize {
@@ -212,7 +256,8 @@ pub fn sync_markers(
         let base = &world.bases[*i];
         let body = &world.bodies[base.body];
         let p = to_view(
-            body.surface_to_inertial(base.location, 0.0, world.time),
+            body_state(&world.bodies, base.body, world.time).position
+                + body.surface_to_inertial(base.location, 0.0, world.time),
             rig.focus,
         );
         transform.translation = p;
@@ -220,11 +265,16 @@ pub fn sync_markers(
     }
 
     for (VesselMarker(i), mut transform, mut material) in &mut vessels {
-        let (_, state) = world.vessel_state(*i);
-        let p = to_view(state.position, rig.focus);
+        let status = world.vessel_status(*i);
+        let p = to_view(vessel_position(world, *i), rig.focus);
         transform.translation = p;
-        transform.scale = marker_scale(p, camera_position);
-        let wanted = match world.vessel_status(*i) {
+        // Aus dem Heimatsystem hinaus: nicht mehr zu sehen.
+        transform.scale = if status == VesselStatus::Escaped {
+            Vec3::ZERO
+        } else {
+            marker_scale(p, camera_position)
+        };
+        let wanted = match status {
             VesselStatus::Wreck { .. } => &materials.wreck,
             _ if selection.0 == Some(*i) => &materials.selected,
             _ if target == Some(*i) => &materials.target,
@@ -300,14 +350,26 @@ pub fn draw_body_orbits(
     }
 }
 
-/// Umlaufzeit eines Keplerabschnitts, bei offenen Bahnen drei Stunden.
+/// Umlaufzeit eines Keplerabschnitts; bei offenen Bahnen bis zum Wechsel der
+/// Einflusssphäre, ohne einen drei Stunden.
 fn span(world: &World, segment: Option<&Segment>) -> f64 {
     match segment {
-        Some(Segment::Kepler { state, .. }) => {
-            kepler::period(world.bodies[segment.unwrap().body()].gm, state).unwrap_or(3.0 * 3600.0)
-        }
+        Some(s @ Segment::Kepler { state, .. }) => kepler_span(world, s, state),
         _ => 3.0 * 3600.0,
     }
+}
+
+/// Wie weit ein Keplerabschnitt gezeichnet wird: ein Umlauf, offen bis zu
+/// seinem Ende, ohne Ende drei Stunden.
+pub fn kepler_span(world: &World, segment: &Segment, state: &sim::StateVector) -> f64 {
+    kepler::period(world.bodies[segment.body()].gm, state).unwrap_or_else(|| {
+        let length = segment.end() - segment.start();
+        if length.is_finite() {
+            length
+        } else {
+            3.0 * 3600.0
+        }
+    })
 }
 
 /// Zeichnet für jedes Schiff die vorausberechnete Bahn ab jetzt.
@@ -332,8 +394,9 @@ pub fn draw_trajectories(
         .map(|t| world.host(t));
     let points = orbit_points(rig.near);
     for (i, vessel) in world.vessels.iter().enumerate() {
-        // Angedockte Schiffe fliegen mit ihrem Hauptschiff.
-        if vessel.docked_to.is_some() {
+        // Angedockte Schiffe fliegen mit ihrem Hauptschiff; aus dem
+        // Heimatsystem hinaus wird nichts mehr gezeichnet.
+        if vessel.docked_to.is_some() || world.vessel_status(i) == VesselStatus::Escaped {
             continue;
         }
         let orbit_color = if target == Some(i) {
@@ -352,22 +415,44 @@ pub fn draw_trajectories(
         }
 
         let mut after_burn = false;
-        for segment in trajectory.segments() {
+        let mut switched = false;
+        for (segment, anchor) in trajectory.segments().zip(anchors(world, trajectory)) {
+            // Nach einem Wechsel der Einflusssphäre das neue Stück noch ganz.
+            if switched {
+                horizon = horizon.max(segment.start() + span(world, Some(segment)));
+            }
+            switched = matches!(
+                segment.end_event(),
+                Some(Event::SoiEntry(_) | Event::SoiExit)
+            );
             if segment.start() >= horizon {
                 break;
             }
             let from = segment.start().max(now);
+            let place = |p: DVec3| to_view(anchor + p, rig.focus);
             match segment {
                 Segment::Kepler {
                     start, state, end, ..
                 } => {
                     let body = &world.bodies[segment.body()];
-                    // Eine geschlossene Bahn einmal ganz, eine offene drei Stunden weit.
-                    let span = kepler::period(body.gm, state).unwrap_or(3.0 * 3600.0);
+                    // Eine geschlossene Bahn einmal ganz, eine offene bis zum
+                    // Wechsel der Einflusssphäre (ohne: drei Stunden weit).
+                    let span = kepler_span(world, segment, state);
+                    // Vor einem geplanten Brennen die alte Bahn trotzdem
+                    // ganz (nicht, wenn sie den Mond erreichen kann: Die
+                    // Begegnung stünde nicht in diesem Abschnitt).
                     let end = match end {
-                        Some((_, Event::BurnStart)) => {
-                            kepler::time_to_radius_inbound(body.gm, state, body.boundary_radius())
-                                .map_or(f64::INFINITY, |dt| start + dt)
+                        Some((_, Event::BurnStart))
+                            if !soi::reaches_moon(&world.bodies, segment.body(), state) =>
+                        {
+                            let inbound = kepler::time_to_radius_inbound(
+                                body.gm,
+                                state,
+                                body.boundary_radius(),
+                            )
+                            .map_or(f64::INFINITY, |dt| start + dt);
+                            soi::exit_time(&world.bodies, segment.body(), *start, state)
+                                .map_or(inbound, |exit| exit.min(inbound))
                         }
                         _ => segment.end(),
                     };
@@ -382,7 +467,7 @@ pub fn draw_trajectories(
                     gizmos.linestrip(
                         (0..=n).map(|i| {
                             let t = from + (to - from) * i as f64 / n as f64;
-                            to_view(segment.state_at(&world.bodies, t).position, rig.focus)
+                            place(segment.state_at(&world.bodies, t).position)
                         }),
                         color,
                     );
@@ -396,7 +481,7 @@ pub fn draw_trajectories(
                                 world,
                                 segment,
                                 now,
-                                rig.focus,
+                                anchor - rig.focus,
                                 points,
                             );
                         }
@@ -411,7 +496,7 @@ pub fn draw_trajectories(
                         segment,
                         samples,
                         from,
-                        rig.focus,
+                        anchor - rig.focus,
                         color,
                         every,
                     );
@@ -423,7 +508,7 @@ pub fn draw_trajectories(
                     gizmos.linestrip(
                         (0..=64).map(|i| {
                             let t = a + (b - a) * i as f64 / 64.0;
-                            to_view(segment.state_at(&world.bodies, t).position, rig.focus)
+                            place(segment.state_at(&world.bodies, t).position)
                         }),
                         TARGET_COLOR,
                     );
@@ -442,7 +527,7 @@ fn draw_momentary_orbit(
     world: &World,
     segment: &Segment,
     now: f64,
-    focus: DVec3,
+    offset: DVec3,
     points: usize,
 ) {
     let body = &world.bodies[segment.body()];
@@ -458,7 +543,7 @@ fn draw_momentary_orbit(
     gizmos.linestrip(
         (0..=n).map(|i| {
             let dt = to * i as f64 / n as f64;
-            to_view(kepler::propagate(body.gm, state, dt).position, focus)
+            dir_to_view(kepler::propagate(body.gm, state, dt).position + offset)
         }),
         ORBIT_COLOR,
     );
@@ -472,7 +557,7 @@ fn draw_samples(
     segment: &Segment,
     samples: &[Sample],
     from: f64,
-    focus: DVec3,
+    offset: DVec3,
     color: Color,
     every: usize,
 ) {
@@ -483,7 +568,7 @@ fn draw_samples(
         std::iter::once(start)
             .chain(rest.step_by(step).map(|s| s.state.position))
             .chain(std::iter::once(samples[samples.len() - 1].state.position))
-            .map(|p| to_view(p, focus)),
+            .map(|p| dir_to_view(p + offset)),
         color,
     );
 }
@@ -502,18 +587,23 @@ pub fn draw_burn_points(
     for vessel in world.vessels.iter().filter(|v| v.docked_to.is_none()) {
         let burns = vessel.trajectory.burns();
         let times = burns.iter().flat_map(|b| [b.start, b.end]);
+        let anchors = anchors(world, &vessel.trajectory);
         for t in times {
             if t <= world.time {
                 continue;
             }
-            let Some(segment) = vessel
+            let Some((segment, anchor)) = vessel
                 .trajectory
                 .segments()
-                .find(|s| s.start() <= t && t <= s.end())
+                .zip(&anchors)
+                .find(|(s, _)| s.start() <= t && t <= s.end())
             else {
                 continue;
             };
-            let p = to_view(segment.state_at(&world.bodies, t).position, rig.focus);
+            let p = to_view(
+                *anchor + segment.state_at(&world.bodies, t).position,
+                rig.focus,
+            );
             let rotation = Quat::from_rotation_arc(Vec3::Z, (eye - p).normalize());
             gizmos
                 .circle(
@@ -522,6 +612,59 @@ pub fn draw_burn_points(
                     BURN_COLOR,
                 )
                 .resolution(16);
+        }
+    }
+}
+
+/// Wechsel der Einflusssphäre: kleine Ringe auf der Bahn (beim Austritt
+/// zwei, auf beiden Seiten der Lücke), und wo ein künftiges Stück um den Mond
+/// beginnt, der Mond selbst blass ("Geistermond"), wie in KSP.
+pub fn draw_soi_changes(
+    sim: Res<Sim>,
+    rig: Res<CameraRig>,
+    camera: Single<&Transform, With<MainCamera>>,
+    mut gizmos: Gizmos,
+) {
+    let world = &sim.0;
+    let eye = camera.translation;
+    for (i, vessel) in world.vessels.iter().enumerate() {
+        if vessel.docked_to.is_some() || world.vessel_status(i) == VesselStatus::Escaped {
+            continue;
+        }
+        let anchors = anchors(world, &vessel.trajectory);
+        let segments: Vec<&Segment> = vessel.trajectory.segments().collect();
+        for k in 1..segments.len() {
+            let (done, next) = (segments[k - 1], segments[k]);
+            let t = done.end();
+            if t <= world.time
+                || !matches!(done.end_event(), Some(Event::SoiEntry(_) | Event::SoiExit))
+            {
+                continue;
+            }
+            for p in [
+                anchors[k - 1] + done.state_at(&world.bodies, t).position,
+                anchors[k] + next.state_at(&world.bodies, t).position,
+            ] {
+                let p = to_view(p, rig.focus);
+                let rotation = Quat::from_rotation_arc(Vec3::Z, (eye - p).normalize());
+                gizmos
+                    .circle(
+                        Isometry3d::new(p, rotation),
+                        p.distance(eye) * 0.008,
+                        SOI_CHANGE_COLOR,
+                    )
+                    .resolution(20);
+            }
+            if let Some(Event::SoiEntry(moon)) = done.end_event() {
+                let center = to_view(anchors[k], rig.focus);
+                gizmos
+                    .sphere(
+                        Isometry3d::from_translation(center),
+                        world.bodies[moon].radius as f32,
+                        GHOST_COLOR,
+                    )
+                    .resolution(48);
+            }
         }
     }
 }
@@ -549,7 +692,12 @@ pub fn draw_touchdowns(
         let up = body.body_fixed_to_inertial(t.point.body_fixed_direction(), world.time);
         let east = DVec3::Z.cross(up).try_normalize().unwrap_or(DVec3::X);
         let north = up.cross(east);
-        let center = to_view(up * (body.radius + SURFACE_LIFT), rig.focus);
+        // Auf dem echten Körper (ein Punkt seiner Oberfläche).
+        let center = to_view(
+            body_state(&world.bodies, t.body, world.time).position
+                + up * (body.radius + SURFACE_LIFT),
+            rig.focus,
+        );
         let arm = center.distance(camera.translation) * 0.015;
         for d in [east + north, east - north] {
             let d = camera::dir_to_view(d.normalize()) * arm;
@@ -573,7 +721,11 @@ pub fn draw_zones(
     for (k, zone) in world.zones.iter().enumerate() {
         let body = &world.bodies[zone.body];
         let up = body.body_fixed_to_inertial(zone.center.body_fixed_direction(), world.time);
-        let center = to_view(up * (body.radius + SURFACE_LIFT), rig.focus);
+        let center = to_view(
+            body_state(&world.bodies, zone.body, world.time).position
+                + up * (body.radius + SURFACE_LIFT),
+            rig.focus,
+        );
         let rotation = Quat::from_rotation_arc(Vec3::Z, camera::dir_to_view(up));
         let distance = center.distance(eye);
         let radius = (zone.radius as f32).max(distance * 0.012);

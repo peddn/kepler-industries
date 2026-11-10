@@ -11,7 +11,7 @@ use crate::launch::Launch;
 use crate::log::{LOG_LIMIT, LogEntry, LogKind};
 use crate::maneuver::{self, ManeuverNode, PlanError};
 use crate::rendezvous::{self, Approach, PlaneCrossing};
-use crate::trajectory::{Segment, Trajectory};
+use crate::trajectory::{Event, Segment, Trajectory};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
@@ -148,6 +148,8 @@ pub enum VesselStatus {
     Docked {
         host: usize,
     },
+    /// Hat das Heimatsystem verlassen: im Sonnenorbit, nicht simuliert.
+    Escaped,
 }
 
 /// Wirksame Werte eines Verbunds: Hauptschiff `host` und angedockte Teile.
@@ -227,9 +229,10 @@ impl World {
     /// ob das Schiff aufsetzt, und das Zielgebiet.
     pub fn touchdown(&self, vessel: usize) -> Option<Touchdown> {
         let v = &self.vessels[self.host(vessel)];
-        let segment = v.trajectory.segments().find(|s| {
-            s.end_event() == Some(crate::trajectory::Event::GroundContact) && s.end() > self.time
-        })?;
+        let segment = v
+            .trajectory
+            .segments()
+            .find(|s| s.end_event() == Some(Event::GroundContact) && s.end() > self.time)?;
         let (body_id, time) = (segment.body(), segment.end());
         let body = &self.bodies[body_id];
         let state = segment.state_at(&self.bodies, time);
@@ -373,6 +376,7 @@ impl World {
 
     /// Alle freien Schiffe bis `t` vorrücken (ohne Andocken).
     fn advance_all(&mut self, t: f64) {
+        let before = self.time;
         self.time = t;
         let params: Vec<VesselParams> = (0..self.vessels.len()).map(|i| self.params(i)).collect();
         let mut entries = Vec::new();
@@ -386,6 +390,18 @@ impl World {
                 vessel: i,
                 kind,
             }));
+            // Die Zeitleiste endet dort, kein Abschnitt folgt: hier eintragen.
+            let last = vessel.trajectory.current();
+            if last.end_event() == Some(Event::LeavesSystem)
+                && before < last.end()
+                && last.end() <= t
+            {
+                entries.push(LogEntry {
+                    time: last.end(),
+                    vessel: i,
+                    kind: LogKind::LeavesSystem,
+                });
+            }
         }
         entries.sort_by(|a, b| a.time.total_cmp(&b.time).then(a.vessel.cmp(&b.vessel)));
         for entry in &mut entries {
@@ -929,12 +945,16 @@ impl World {
                     altitude: state.position.length() - body.radius,
                 }
             }
+            Segment::Kepler {
+                end: Some((t_end, Event::LeavesSystem)),
+                ..
+            } if *t_end <= self.time => VesselStatus::Escaped,
             Segment::Kepler { state, end, .. } => {
                 let info = kepler::orbit_info(body.gm, state);
                 VesselStatus::Orbit {
                     periapsis_altitude: info.periapsis - body.radius,
                     apoapsis_altitude: info.apoapsis.map(|r| r - body.radius),
-                    descending: end.is_some_and(|(_, e)| e != crate::trajectory::Event::BurnStart),
+                    descending: end.is_some_and(|(_, e)| e.is_descent()),
                 }
             }
         }

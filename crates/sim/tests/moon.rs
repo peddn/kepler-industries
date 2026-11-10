@@ -44,7 +44,8 @@ fn moon_follows_its_orbit() {
 }
 
 /// Werte wie beim Mun in KSP: Umlauf 138.984 s (38,6 h), Einflusssphäre
-/// 2.429,6 km. Der Planet reicht vorerst unendlich weit.
+/// 2.429,6 km. Der Planet reicht wie Kerbin 84.159 km weit (Rand des
+/// Heimatsystems).
 #[test]
 fn moon_matches_the_mun() {
     let world = demo();
@@ -52,7 +53,8 @@ fn moon_matches_the_mun() {
     assert!((period / 138_984.0 - 1.0).abs() < 1e-4, "{period}");
     let soi = sphere_of_influence(&world.bodies, MOON);
     assert!((soi / 2_429_559.0 - 1.0).abs() < 1e-3, "{soi}");
-    assert_eq!(sphere_of_influence(&world.bodies, 0), f64::INFINITY);
+    let home = sphere_of_influence(&world.bodies, 0);
+    assert!((home / 84_159_286.0 - 1.0).abs() < 1e-6, "{home}");
     assert_eq!(orbital_period(&world.bodies, 0), None);
 }
 

@@ -8,11 +8,14 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 
 ## Stand
 
-Ein Planet mit Atmosphäre und ein Mond, eine Startbasis, zwei Satelliten mit
-Triebwerk und eine Fähre am Boden. „Relais-1" kreist stabil oberhalb der Atmosphäre.
+Der Planet Zorb, Heimat der Zorbels, mit Atmosphäre, sein Mond Zoon (die
+Sonne Zunn ist bisher nur Licht), eine Startbasis, zwei Satelliten mit
+Triebwerk, eine Fähre am Boden und eine im Orbit. „Relais-1" kreist stabil oberhalb der Atmosphäre.
 „Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang durch die Luft
 abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
 mit einem Manöver. „Fähre-3" steht an der Startbasis und kann starten.
+„Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator, bereit für
+den Flug zum Mond.
 
 Gestartet wird mit einem Startprofil aus drei Werten: Kurs, Wendebeginn und
 Ziel-Apoapsis. Eingestellt wird es in der Karte „Start“ der Seitenleiste
@@ -61,13 +64,32 @@ Flugrichtung und entfernt sich stetig (in 100 km Höhe etwa 6 km pro Umlauf).
 Es hat danach das Hauptschiff als Ziel, zum Wiederandocken. So lässt sich zum
 Beispiel ein Satellit betanken.
 
-Der Mond ist wie der Mun in KSP: 200 km Radius, Schwerkraft 1,63 m/s², keine
+Der Mond Zoon ist wie der Mun in KSP: 200 km Radius, Schwerkraft 1,63 m/s², keine
 Luft. Er kreist in 12.000 km Abstand über dem Äquator (Umlauf etwa 38,6 h) und
 zeigt dem Planeten immer dieselbe Seite. Um ihn liegt seine Einflusssphäre
-(etwa 2.430 km, dünner Kreis), in der später nur seine Schwerkraft zählt. Noch
-zieht die Schiffe nur der Planet an; der Wechsel der Einflusssphäre kommt im
-nächsten Schritt. Ein Klick auf den Mond wählt ihn (Angaben links,
-Einflusssphäre gelb), `F` richtet die Kamera auf ihn.
+(etwa 2.430 km, dünner Kreis): Darin zählt nur seine Schwerkraft, außerhalb
+nur die des Planeten (Patched Conics wie in KSP). Ein Klick auf den Mond wählt
+ihn (Angaben links, Einflusssphäre gelb), `F` richtet die Kamera auf ihn.
+
+Führt eine Bahn in die Einflusssphäre des Monds, wechselt sie dort auf eine
+Bahn um ihn, beim Verlassen zurück zum Planeten, auch mitten in einem
+Brennen. Gezeichnet wird wie in KSP: Das Stück um den Mond liegt um die
+Stelle, an der er beim Eintritt stehen wird (dort ein blasser „Geistermond“),
+kleine Ringe markieren Ein- und Austritt. Weil der Mond während des
+Vorbeiflugs weiterzieht, klafft beim Austritt eine Lücke. Links steht die
+nächste Begegnung („Begegnung: Zoon in 05:07:05, Periapsis 194 km“), im Flug
+„Orbit um Zoon“; Nodes um den Mond gelten relativ zu ihm, und in der
+Nahansicht liegt der Mond unten. Zum Ausprobieren: Mondfähre-4 mit 836 m/s
+prograd nach 10 Minuten (`--node 3,600,836,0,0`) fliegt in etwa 200 km Höhe
+am Mond vorbei; mit einem Brennen gegen die Flugrichtung an der Periapsis
+bleibt sie bei ihm. Wer mehr als etwa 84.000 km vom Planeten wegfliegt,
+verlässt das Heimatsystem: Danach ist das Schiff im Sonnenorbit und wird
+(noch) nicht weiter simuliert.
+
+Die Uhr oben links zählt Tage des Planeten: Ein Tag ist eine Umdrehung
+(6 h, die Stunden laufen von 0 bis 5), abgeleitet aus seiner Rotation. Diese
+eine Zeit gilt überall, auch am Mond (wie die Kerbin-Zeit in KSP); Zeitspannen
+wie „2 d 03:04:05“ zählen dieselben Tage.
 
 Die Kamera lässt sich mit `F` auf das gewählte Objekt richten: Schiff,
 Node, Zielgebiet (Raute in der Kreismitte anklicken) oder Mond. Sie folgt ihm, auch
@@ -124,6 +146,17 @@ hat danach noch 176 m/s.*
 
 *Im Anflug, aus der Nähe: Fähre-3 (gelb) ist noch 271 m von Relais-1 (rosa)
 entfernt, Kontakt in zweieinhalb Minuten.*
+
+![Mondflug geplant](docs/screenshots/mondflug-plan.png)
+
+*Mondfähre-4 mit geplantem Transfer (`--node 3,600,836,0,0 --select 3
+--camera 20,60,26000`): violett die Bahn zum Mond, unten links das Stück um
+den Geistermond mit Ein- und Austritt, danach die neue Bahn um den Planeten.*
+
+![Vorbeiflug](docs/screenshots/mondflug.png)
+
+*Im Vorbeiflug (`--node 3,600,836,0,0 --time 20000 --select 3 --focus 3
+--camera 120,70,7000`): Bahn um den Mond, Periapsis 194 km.*
 
 ![Mond](docs/screenshots/mond.png)
 

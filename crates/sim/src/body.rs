@@ -114,6 +114,11 @@ pub struct Body {
     /// Bahn um den Mutterkörper; `None` beim Körper im Ursprung.
     #[serde(default)]
     pub orbit: Option<BodyOrbit>,
+    /// Nur beim Körper im Ursprung: Radius seiner Einflusssphäre, also der
+    /// Rand des Heimatsystems (aus Masse und Abstand der noch nicht
+    /// simulierten Sonne). `None`: unbegrenzt.
+    #[serde(default)]
+    pub soi_radius: Option<f64>,
 }
 
 /// Umlaufzeit einer Kreisbahn mit Radius `radius` um einen Körper mit `gm`.
@@ -150,13 +155,16 @@ pub fn body_state(bodies: &[Body], body: BodyId, t: f64) -> StateVector {
 }
 
 /// Radius der Einflusssphäre nach Laplace: Bahnradius · (m/M)^0,4. Darin
-/// zählt für ein Schiff nur die Schwerkraft dieses Körpers. Der Körper im
-/// Ursprung reicht vorerst unendlich weit (später bis zur Sonne).
+/// zählt für ein Schiff nur die Schwerkraft dieses Körpers. Beim Körper im
+/// Ursprung ist er fest vorgegeben (`soi_radius`), sonst unendlich.
 pub fn sphere_of_influence(bodies: &[Body], body: BodyId) -> f64 {
-    match &bodies[body].orbit {
-        Some(orbit) => orbit.radius * (bodies[body].gm / bodies[orbit.parent].gm).powf(0.4),
-        None => f64::INFINITY,
-    }
+    laplace_radius(bodies, body).unwrap_or_else(|| bodies[body].soi_radius.unwrap_or(f64::INFINITY))
+}
+
+/// Laplace-Radius für einen Körper auf einer Bahn: a · (m/M)^0,4.
+fn laplace_radius(bodies: &[Body], body: BodyId) -> Option<f64> {
+    let orbit = bodies[body].orbit.as_ref()?;
+    Some(orbit.radius * (bodies[body].gm / bodies[orbit.parent].gm).powf(0.4))
 }
 
 impl Body {

@@ -10,6 +10,7 @@ use crate::body::Body;
 use crate::kepler::StateVector;
 use crate::landing;
 use crate::maneuver::Burn;
+use crate::soi::Watch;
 use crate::trajectory::Event;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
@@ -96,12 +97,14 @@ pub(crate) fn rk4(forces: &Forces, t: f64, s: &StateVector, dt: f64) -> StateVec
 /// Berechnet ein Bahnstück ab `start` bis zum ersten Ereignis.
 ///
 /// Ereignisse: Bodenkontakt; ohne Schub zusätzlich das Verlassen der Luft;
+/// die Grenzen der Einflusssphären (`watch`, auch mitten im Brennen);
 /// außerdem ein fester Zeitpunkt `stop` (Beginn oder Ende eines Brennmanövers).
 /// Der letzte Stützpunkt liegt genau auf dem Ereignis.
 pub fn integrate_arc(
     forces: &Forces,
     start: Sample,
     stop: Option<(f64, Event)>,
+    watch: &Watch,
 ) -> (Vec<Sample>, Event) {
     let body = forces.body;
     let boundary = body.boundary_radius();
@@ -124,15 +127,15 @@ pub fn integrate_arc(
         let r1 = next.position.length();
 
         let spatial = if r1 <= body.radius {
-            Some((body.radius, Event::GroundContact))
+            Some(((body.radius - r0) / (r1 - r0), Event::GroundContact))
         } else if watch_exit && r0 < boundary && r1 >= boundary {
-            Some((boundary, Event::AtmosphereExit))
+            Some(((boundary - r0) / (r1 - r0), Event::AtmosphereExit))
         } else {
-            None
+            watch.crossing(t, &s, t + h, &next)
         };
-        if let Some((radius, event)) = spatial {
+        if let Some((fraction, event)) = spatial {
             // Genauen Zeitpunkt im Schritt bestimmen und den Teilschritt rechnen.
-            let fraction = ((radius - r0) / (r1 - r0)).clamp(0.0, 1.0);
+            let fraction = fraction.clamp(0.0, 1.0);
             let exact = rk4(forces, t, &s, h * fraction);
             samples.push(Sample {
                 time: t + h * fraction,

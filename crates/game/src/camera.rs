@@ -50,6 +50,9 @@ pub struct CameraRig {
     pub target: Focus,
     /// Fokuspunkt im Simulationssystem (m), jedes Bild aus `target` berechnet.
     pub focus: DVec3,
+    /// Mittelpunkt des Körpers, bei dem der Fokus ist: In der Nahansicht
+    /// zeigt "oben" von ihm weg.
+    pub center: DVec3,
     /// Nahansicht: näher heran, Planet unten.
     pub near: bool,
     /// Abstand der Kamera vom Fokus in m.
@@ -68,6 +71,7 @@ impl CameraRig {
         Self {
             target: PLANET,
             focus: DVec3::ZERO,
+            center: DVec3::ZERO,
             near: false,
             distance: planet,
             yaw: 0.6,
@@ -135,7 +139,7 @@ impl CameraRig {
     /// damit die Maus in beiden Ansichten gleich dreht. In der Nahansicht
     /// zeigt "oben" vom Planeten (im Ursprung) weg, "vorn" nach Norden.
     fn frame(&self) -> (Vec3, Vec3, Vec3) {
-        let up = match self.focus.try_normalize() {
+        let up = match (self.focus - self.center).try_normalize() {
             Some(up) if self.near => dir_to_view(up),
             _ => return (Vec3::Y, Vec3::Z, Vec3::X),
         };

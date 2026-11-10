@@ -305,6 +305,7 @@ fn main() {
             view::draw_body_orbits,
             view::draw_trajectories,
             view::draw_burn_points,
+            view::draw_soi_changes,
             view::draw_zones,
             view::draw_touchdowns,
             rendezvous::draw,

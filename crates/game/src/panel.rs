@@ -10,7 +10,7 @@
 //! Bevys Picking; das hält die Abhängigkeiten klein.
 
 use crate::Sim;
-use crate::hud::{UiFont, format_span, km};
+use crate::hud::{self, UiFont, format_span, km};
 use crate::node_ui::{Selection, UiMessage};
 use crate::rendezvous::{Rendezvous, TARGET_COLOR, TargetInfo, distance_text};
 use crate::status_bar::{STATUS_HEIGHT, StatusBar, over_status};
@@ -122,10 +122,10 @@ impl Param {
         }
     }
 
-    fn value(self, launch: &Launch, now: f64) -> String {
+    fn value(self, launch: &Launch, now: f64, day: f64) -> String {
         let p = &launch.profile;
         match self {
-            Param::StartIn => format_span((launch.time - now).max(0.0)),
+            Param::StartIn => format_span((launch.time - now).max(0.0), day),
             Param::Heading => format!("{:.0}°", p.heading),
             Param::Turn => km(p.turn_altitude),
             Param::Apoapsis => km(p.target_apoapsis),
@@ -371,7 +371,10 @@ fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
                 if plan.matching.burn.start > now {
                     lines.push(row(
                         "Angleichen",
-                        format!("in {}", format_span(plan.matching.burn.start - now)),
+                        format!(
+                            "in {}",
+                            format_span(plan.matching.burn.start - now, hud::day(world))
+                        ),
                     ));
                     lines.push(row(
                         "  Δv",
@@ -383,7 +386,7 @@ fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
                     format!(
                         "{}, {}",
                         distance_text(plan.distance),
-                        format_span(plan.contact - plan.matching.burn.end)
+                        format_span(plan.contact - plan.matching.burn.end, hud::day(world))
                     ),
                 ));
                 if let sim::VesselStatus::Approaching { distance } =
@@ -394,7 +397,7 @@ fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
                 lines.push(row("  Δv", format!("{:.1} m/s", plan.approach_delta_v)));
                 lines.push(row(
                     "Kontakt",
-                    format!("in {}", format_span(plan.contact - now)),
+                    format!("in {}", format_span(plan.contact - now, hud::day(world))),
                 ));
             }
             Err(e) => lines.push(format!("Andocken geht nicht: {e}")),
@@ -405,7 +408,10 @@ fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
         Some(a) => {
             lines.push(row(
                 "Annäherung",
-                format!("in {}", format_span((a.time - world.time).max(0.0))),
+                format!(
+                    "in {}",
+                    format_span((a.time - world.time).max(0.0), hud::day(world))
+                ),
             ));
             if a.revolutions > 0 {
                 lines.push(row(
@@ -431,7 +437,10 @@ fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
         }
         for (name, time) in [("  AN in", plane.ascending), ("  DN in", plane.descending)] {
             if let Some(t) = time {
-                lines.push(row(name, format_span((t - world.time).max(0.0))));
+                lines.push(row(
+                    name,
+                    format_span((t - world.time).max(0.0), hud::day(world)),
+                ));
             }
         }
     }
@@ -481,7 +490,10 @@ fn launch_result(world: &World, i: usize) -> String {
     let mut lines = vec![
         row(
             "Brennschluss",
-            format!("in {}", format_span((burn.end - world.time).max(0.0))),
+            format!(
+                "in {}",
+                format_span((burn.end - world.time).max(0.0), hud::day(world))
+            ),
         ),
         row("  in Höhe", km(altitude)),
         row(
@@ -655,7 +667,7 @@ pub fn sync(
     set(&mut result, launch_result(world, i));
     if let Some(launch) = launch {
         for (ParamValue(param), mut text) in &mut values {
-            set(&mut text, param.value(&launch, world.time));
+            set(&mut text, param.value(&launch, world.time, hud::day(world)));
         }
     }
 }
