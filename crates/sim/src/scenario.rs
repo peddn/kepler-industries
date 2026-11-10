@@ -1,9 +1,10 @@
 //! Startszenario für die Vorführung.
 
-use crate::body::{Atmosphere, Body, SurfacePoint};
+use crate::body::{Atmosphere, Body, BodyOrbit, SurfacePoint, circular_period};
 use crate::kepler::state_from_apsides;
 use crate::landing::LandingZone;
 use crate::world::{Base, VesselParams, World};
+use std::f64::consts::PI;
 
 /// Fiktiver Heimatplanet in Kerbin-Größe: kleine Welt, kurze Umlaufzeiten,
 /// ein Orbit ist mit einer einzigen Stufe erreichbar.
@@ -20,6 +21,29 @@ pub fn home_planet() -> Body {
             scale_height: 5_000.0,
             top_altitude: 70_000.0,
         },
+        orbit: None,
+    }
+}
+
+/// Mond wie der Mun in KSP: 200 km Radius, g = 1,63 m/s², ohne Luft, auf
+/// einer Kreisbahn 12.000 km über dem Mittelpunkt des Planeten (Umlauf etwa
+/// 38,6 h, Einflusssphäre etwa 2.430 km). Gebundene Rotation: Er zeigt dem
+/// Planeten immer dieselbe Seite, Länge 0° zum Planeten hin (deshalb beginnt
+/// er bei 180°).
+pub fn moon(planet: &Body) -> Body {
+    let radius = 200_000.0;
+    let distance = 12_000_000.0;
+    Body {
+        name: "Mond".into(),
+        gm: 1.63 * radius * radius,
+        radius,
+        rotation_period: circular_period(planet.gm, distance),
+        atmosphere: Atmosphere::NONE,
+        orbit: Some(BodyOrbit {
+            parent: 0,
+            radius: distance,
+            phase: PI,
+        }),
     }
 }
 
@@ -50,12 +74,14 @@ pub const FERRY: VesselParams = VesselParams {
     parachute_area: 400.0,
 };
 
-/// Ein Planet, eine Startbasis, zwei Satelliten: einer stabil oberhalb der
+/// Ein Planet mit Mond, eine Startbasis, zwei Satelliten: einer stabil oberhalb der
 /// Atmosphäre, einer zu tief abgesetzt. Ohne Eingriff bremst die Luft ihn bei
 /// jedem Durchgang ab, bis er abstürzt. Mit einem Manöver an der Apoapsis
 /// lässt er sich retten. Dazu eine Fähre an der Startbasis, die starten kann.
 pub fn demo() -> World {
-    let mut world = World::new(vec![home_planet()]);
+    let planet = home_planet();
+    let moon = moon(&planet);
+    let mut world = World::new(vec![planet, moon]);
     let planet = &world.bodies[0];
     let (gm, r) = (planet.gm, planet.radius);
 

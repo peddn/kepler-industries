@@ -25,7 +25,8 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use bevy::window::PrimaryWindow;
-use sim::{ManeuverNode, Plan, PlanError, Segment, Trajectory, World, kepler, maneuver};
+use sim::body::body_state;
+use sim::{BodyId, ManeuverNode, Plan, PlanError, Segment, Trajectory, World, kepler, maneuver};
 
 /// Trefferradius in Pixeln.
 const PICK_RADIUS: f32 = 14.0;
@@ -62,6 +63,11 @@ pub struct Selection(pub Option<usize>);
 /// nur eins gewählt.
 #[derive(Resource, Default)]
 pub struct SelectedZone(pub Option<usize>);
+
+/// Gewählter Himmelskörper (der Mond; der Planet ist ohne Auswahl im Fokus).
+/// Auch er schließt Schiff und Zielgebiet aus.
+#[derive(Resource, Default)]
+pub struct SelectedBody(pub Option<BodyId>);
 
 /// Gewählter Node des gewählten Schiffs, erkannt an seinem gesetzten
 /// Zeitpunkt. So bleibt die Wahl erhalten, wenn ein früherer Node ausgeführt
@@ -292,6 +298,16 @@ impl<'a> Projector<'a> {
         self.camera.viewport_to_world(&self.transform, cursor).ok()
     }
 
+    /// Trifft der Strahl unter der Maus eine Kugel (vor der Kamera)?
+    fn hits_sphere(&self, cursor: Vec2, center: Vec3, radius: f32) -> bool {
+        let Some(ray) = self.ray(cursor) else {
+            return false;
+        };
+        let to_center = center - ray.origin;
+        let along = to_center.dot(*ray.direction);
+        along > 0.0 && to_center.length_squared() - along * along <= radius * radius
+    }
+
     /// Auf den Bildschirm, auch wenn der Planet davor liegt (für Nodes und
     /// Griffe, die immer obenauf gezeichnet werden).
     fn screen(&self, p: Vec3) -> Option<Vec2> {
@@ -445,6 +461,7 @@ pub fn input(
     mut selection: ResMut<Selection>,
     mut selected: ResMut<SelectedNode>,
     mut zone: ResMut<SelectedZone>,
+    mut body: ResMut<SelectedBody>,
     mut drag: ResMut<Drag>,
     mut message: ResMut<UiMessage>,
     buttons: Res<ButtonInput<MouseButton>>,
@@ -475,11 +492,13 @@ pub fn input(
             .find(|&i| world.vessels[i].docked_to.is_none());
         selected.0 = None;
         zone.0 = None;
+        body.0 = None;
     }
     if keys.just_pressed(KeyCode::Escape) {
         selection.0 = None;
         selected.0 = None;
         zone.0 = None;
+        body.0 = None;
     }
     if (keys.just_pressed(KeyCode::Delete) || keys.just_pressed(KeyCode::Backspace))
         && let Some((i, k)) = selected_node(world, &selection, &selected)
@@ -684,6 +703,7 @@ pub fn input(
                 &mut selection,
                 &mut selected,
                 &mut zone,
+                &mut body,
                 &projector,
                 rig.focus,
                 orbit_points(rig.near),
@@ -709,14 +729,15 @@ pub fn zone_center(world: &World, k: usize) -> DVec3 {
 }
 
 /// Klick: zuerst Schiffe, dann Zielgebiete, dann die Bahn des gewählten
-/// Schiffs. Ein Klick auf die Bahn fügt einen Node in die Kette ein, auch auf
-/// Bahnstücke nach einem geplanten Manöver.
+/// Schiffs, zuletzt der Mond. Ein Klick auf die Bahn fügt einen Node in die
+/// Kette ein, auch auf Bahnstücke nach einem geplanten Manöver.
 #[allow(clippy::too_many_arguments)]
 fn click(
     world: &mut World,
     selection: &mut Selection,
     selected: &mut SelectedNode,
     zone: &mut SelectedZone,
+    body: &mut SelectedBody,
     projector: &Projector,
     focus: DVec3,
     points: usize,
@@ -737,6 +758,7 @@ fn click(
         }
         selection.0 = Some(i);
         zone.0 = None;
+        body.0 = None;
         return Ok(());
     }
 
@@ -751,6 +773,7 @@ fn click(
         selection.0 = None;
         selected.0 = None;
         zone.0 = Some(k);
+        body.0 = None;
         return Ok(());
     }
 
@@ -767,7 +790,23 @@ fn click(
             selected.0 = Some(time);
             // Vorerst ist jede Kette sofort scharf.
             world.set_armed(i, true)?;
+            return Ok(());
         }
+    }
+
+    // Erst nach der Bahn: Sie läuft oft vor dem Mond entlang.
+    let body_hit = (1..world.bodies.len()).find(|&b| {
+        let center = to_view(body_state(&world.bodies, b, world.time).position, focus);
+        let radius = world.bodies[b].radius as f32;
+        projector.project(center).is_some_and(|screen| {
+            screen.distance(cursor) < PICK_RADIUS || projector.hits_sphere(cursor, center, radius)
+        })
+    });
+    if let Some(b) = body_hit {
+        selection.0 = None;
+        selected.0 = None;
+        zone.0 = None;
+        body.0 = Some(b);
     }
     Ok(())
 }

@@ -1,6 +1,6 @@
 //! Kamerafokus: `F` richtet die Kamera auf die Auswahl (gewählter Node, sonst
-//! Schiff, sonst Zielgebiet, ohne Auswahl den Planeten); steht sie schon
-//! darauf, geht sie zurück zum Planeten. `N` schaltet die Nahansicht.
+//! Schiff, sonst Zielgebiet oder Mond, ohne Auswahl den Planeten); steht sie
+//! schon darauf, geht sie zurück zum Planeten. `N` schaltet die Nahansicht.
 //!
 //! Der Fokus ist unabhängig von der Auswahl: Die Kamera bleibt auf ihrem
 //! Objekt und folgt ihm, bis man wieder `F` drückt. So kann man z. B. ein
@@ -8,19 +8,21 @@
 //! Brems-Node einstellen.
 
 use crate::Sim;
-use crate::camera::{CameraRig, Focus};
-use crate::node_ui::{Drag, SelectedNode, SelectedZone, Selection, UiMessage};
+use crate::camera::{CameraRig, Focus, PLANET};
+use crate::node_ui::{Drag, SelectedBody, SelectedNode, SelectedZone, Selection, UiMessage};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use sim::World;
+use sim::body::body_state;
 
 /// Was `F` in den Fokus nähme: ausdrücklich gewählter Node, sonst das Schiff,
-/// sonst das Zielgebiet, sonst der Planet.
+/// sonst das Zielgebiet oder der Mond, sonst der Planet.
 pub fn focus_of_selection(
     world: &World,
     selection: &Selection,
     selected: &SelectedNode,
     zone: &SelectedZone,
+    body: &SelectedBody,
 ) -> Focus {
     if let Some(i) = selection.0 {
         let nodes = world.vessels[i].trajectory.nodes();
@@ -31,14 +33,21 @@ pub fn focus_of_selection(
             _ => Focus::Vessel(i),
         };
     }
-    zone.0.map_or(Focus::Planet, Focus::Zone)
+    match (zone.0, body.0) {
+        (Some(k), _) => Focus::Zone(k),
+        (None, Some(b)) => Focus::Body(b),
+        (None, None) => PLANET,
+    }
 }
 
 /// Lage des Fokus im Simulationssystem; `None`, wenn es das Objekt nicht
 /// (mehr) gibt.
 pub fn position(world: &World, focus: Focus) -> Option<DVec3> {
     Some(match focus {
-        Focus::Planet => DVec3::ZERO,
+        Focus::Body(b) => {
+            world.bodies.get(b)?;
+            body_state(&world.bodies, b, world.time).position
+        }
         Focus::Vessel(i) => {
             world.vessels.get(i)?;
             world.vessel_state(i).1.position
@@ -71,7 +80,7 @@ pub fn position(world: &World, focus: Focus) -> Option<DVec3> {
 /// Name des Fokus für die Anzeige.
 pub fn name(world: &World, focus: Focus) -> String {
     match focus {
-        Focus::Planet => "Planet".into(),
+        Focus::Body(b) => world.bodies[b].name.clone(),
         Focus::Vessel(i) => world.vessels[i].name.clone(),
         Focus::Node { vessel, time } => {
             let nodes = world.vessels[vessel].trajectory.nodes();
@@ -90,23 +99,21 @@ pub fn keys(
     selection: Res<Selection>,
     selected: Res<SelectedNode>,
     zone: Res<SelectedZone>,
+    body: Res<SelectedBody>,
     real_time: Res<Time<Real>>,
     mut rig: ResMut<CameraRig>,
     mut message: ResMut<UiMessage>,
 ) {
     if keys.just_pressed(KeyCode::KeyF) {
-        let wanted = focus_of_selection(&sim.0, &selection, &selected, &zone);
-        let target = if wanted == rig.target {
-            Focus::Planet
-        } else {
-            wanted
-        };
+        let wanted = focus_of_selection(&sim.0, &selection, &selected, &zone, &body);
+        let target = if wanted == rig.target { PLANET } else { wanted };
         rig.set_target(target);
     }
     if keys.just_pressed(KeyCode::KeyN) {
-        if rig.target == Focus::Planet {
+        if matches!(rig.target, Focus::Body(_)) {
             message.say(
-                "Nahansicht: erst mit F ein Objekt in den Fokus nehmen".into(),
+                "Nahansicht: erst mit F ein Schiff, einen Node oder ein Zielgebiet in den Fokus nehmen"
+                    .into(),
                 sim.0.time,
                 real_time.elapsed_secs_f64(),
             );
@@ -135,7 +142,7 @@ pub fn follow(sim: Res<Sim>, drag: Res<Drag>, mut rig: ResMut<CameraRig>) {
         Focus::Node { vessel, .. } if vessel < world.vessels.len() => {
             rig.target = Focus::Vessel(vessel);
         }
-        _ => rig.set_target(Focus::Planet),
+        _ => rig.set_target(PLANET),
     }
     rig.focus = position(world, rig.target).unwrap_or(DVec3::ZERO);
 }

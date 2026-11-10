@@ -1,13 +1,14 @@
-//! Darstellung: Planet, Atmosphäre, Basen, Schiffe und ihre Bahnen.
+//! Darstellung: Planet, Mond, Atmosphäre, Basen, Schiffe und ihre Bahnen.
 
 use crate::Sim;
 use crate::camera::{self, CameraRig, MainCamera, to_view};
-use crate::node_ui::{SelectedZone, Selection};
+use crate::node_ui::{SelectedBody, SelectedZone, Selection};
 use crate::rendezvous::TARGET_COLOR;
 use bevy::math::DVec3;
 use bevy::prelude::*;
+use sim::body::{body_state, sphere_of_influence};
 use sim::integrator::Sample;
-use sim::{Event, Segment, SurfacePoint, VesselStatus, World, kepler};
+use sim::{BodyId, Event, Segment, SurfacePoint, VesselStatus, World, kepler};
 
 /// Aktuelle Bahn.
 const ORBIT_COLOR: Color = Color::srgb(0.35, 0.75, 1.0);
@@ -25,6 +26,12 @@ const OUTSIDE_COLOR: Color = Color::srgb(1.0, 0.9, 0.2);
 /// Markierung des gewählten Zielgebiets (wie ein gewähltes Schiff).
 const SELECTED_ZONE_COLOR: Color = Color::srgb(1.0, 0.85, 0.2);
 const GRID_COLOR: Color = Color::srgba(1.0, 1.0, 1.0, 0.12);
+/// Bahn des Monds und seine Einflusssphäre (gewählt: wie ein gewähltes
+/// Zielgebiet).
+const BODY_ORBIT_COLOR: Color = Color::srgba(0.8, 0.8, 0.85, 0.35);
+const SOI_COLOR: Color = Color::srgba(0.8, 0.8, 0.85, 0.2);
+/// Stützpunkte für Mondbahn und Einflusssphäre.
+const BODY_ORBIT_POINTS: usize = 720;
 /// Größe der Markierungen relativ zum Abstand zur Kamera (bleibt auf dem
 /// Bildschirm gleich groß, egal wie weit man herauszoomt).
 const MARKER_SCALE: f32 = 0.007;
@@ -52,8 +59,9 @@ pub fn orbit_points(near: bool) -> usize {
     }
 }
 
+/// Kugel (und Atmosphäre) eines Himmelskörpers.
 #[derive(Component)]
-pub struct PlanetMarker;
+pub struct BodyMarker(BodyId);
 
 #[derive(Component)]
 pub struct BaseMarker(usize);
@@ -104,12 +112,18 @@ pub fn setup(
         ..default()
     };
 
-    for body in &sim.0.bodies {
+    for (b, body) in sim.0.bodies.iter().enumerate() {
+        // Der Planet grün, Monde grau.
+        let color = if b == 0 {
+            Color::srgb(0.18, 0.42, 0.32)
+        } else {
+            Color::srgb(0.5, 0.5, 0.52)
+        };
         commands.spawn((
-            PlanetMarker,
+            BodyMarker(b),
             Mesh3d(planet_sphere.clone()),
             MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: Color::srgb(0.18, 0.42, 0.32),
+                base_color: color,
                 perceptual_roughness: 0.9,
                 ..default()
             })),
@@ -118,7 +132,7 @@ pub fn setup(
         if body.atmosphere.exists() {
             let outer = (body.radius + body.atmosphere.top_altitude) as f32;
             commands.spawn((
-                PlanetMarker,
+                BodyMarker(b),
                 Mesh3d(sphere.clone()),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgba(0.45, 0.65, 1.0, 0.12),
@@ -170,8 +184,8 @@ pub fn sync_markers(
     selection: Res<Selection>,
     materials: Res<MarkerMaterials>,
     camera: Single<&Transform, With<MainCamera>>,
-    mut planets: Query<(&PlanetMarker, &mut Transform), Without<MainCamera>>,
-    mut bases: Query<(&BaseMarker, &mut Transform), (Without<MainCamera>, Without<PlanetMarker>)>,
+    mut planets: Query<(&BodyMarker, &mut Transform), Without<MainCamera>>,
+    mut bases: Query<(&BaseMarker, &mut Transform), (Without<MainCamera>, Without<BodyMarker>)>,
     mut vessels: Query<
         (
             &VesselMarker,
@@ -180,7 +194,7 @@ pub fn sync_markers(
         ),
         (
             Without<MainCamera>,
-            Without<PlanetMarker>,
+            Without<BodyMarker>,
             Without<BaseMarker>,
         ),
     >,
@@ -189,9 +203,9 @@ pub fn sync_markers(
     let camera_position = camera.translation;
     let target = selection.0.and_then(|i| world.vessels[i].target);
 
-    for (_, mut transform) in &mut planets {
-        // In PR 1 sitzt der einzige Körper im Ursprung der Simulation.
-        transform.translation = to_view(DVec3::ZERO, rig.focus);
+    for (BodyMarker(b), mut transform) in &mut planets {
+        let center = body_state(&world.bodies, *b, world.time).position;
+        transform.translation = to_view(center, rig.focus);
     }
 
     for (BaseMarker(i), mut transform) in &mut bases {
@@ -222,16 +236,17 @@ pub fn sync_markers(
     }
 }
 
-/// Breiten- und Längenlinien, die sich mit dem Planeten drehen. Ohne sie wäre
-/// die Rotation einer einfarbigen Kugel nicht zu sehen.
+/// Breiten- und Längenlinien, die sich mit Planet und Mond drehen. Ohne sie
+/// wäre die Rotation einer einfarbigen Kugel nicht zu sehen.
 pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) {
     let world = &sim.0;
-    for body in &world.bodies {
+    for (b, body) in world.bodies.iter().enumerate() {
+        let center = body_state(&world.bodies, b, world.time).position;
         let radius = body.radius + GRID_LIFT;
         let point = |lat: f64, lon: f64| {
             let p = SurfacePoint::from_degrees(lat, lon);
             to_view(
-                body.body_fixed_to_inertial(p.body_fixed_direction() * radius, world.time),
+                center + body.body_fixed_to_inertial(p.body_fixed_direction() * radius, world.time),
                 rig.focus,
             )
         };
@@ -245,6 +260,43 @@ pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) 
                 GRID_COLOR,
             );
         }
+    }
+}
+
+/// Bahn des Monds um den Planeten und seine Einflusssphäre, beides Kreise in
+/// der Äquatorebene. Die Einflusssphäre ist eine Kugel; gezeichnet wird ihr
+/// Umriss in der Bahnebene, beim gewählten Mond in dessen Farbe.
+pub fn draw_body_orbits(
+    sim: Res<Sim>,
+    rig: Res<CameraRig>,
+    chosen: Res<SelectedBody>,
+    mut gizmos: Gizmos,
+) {
+    let world = &sim.0;
+    let circle = |center: DVec3, radius: f64| {
+        (0..=BODY_ORBIT_POINTS).map(move |i| {
+            let angle = std::f64::consts::TAU * i as f64 / BODY_ORBIT_POINTS as f64;
+            let (sin, cos) = angle.sin_cos();
+            center + DVec3::new(cos, sin, 0.0) * radius
+        })
+    };
+    for (b, body) in world.bodies.iter().enumerate() {
+        let Some(orbit) = &body.orbit else { continue };
+        let parent = body_state(&world.bodies, orbit.parent, world.time).position;
+        gizmos.linestrip(
+            circle(parent, orbit.radius).map(|p| to_view(p, rig.focus)),
+            BODY_ORBIT_COLOR,
+        );
+        let center = body_state(&world.bodies, b, world.time).position;
+        let color = if chosen.0 == Some(b) {
+            SELECTED_ZONE_COLOR
+        } else {
+            SOI_COLOR
+        };
+        gizmos.linestrip(
+            circle(center, sphere_of_influence(&world.bodies, b)).map(|p| to_view(p, rig.focus)),
+            color,
+        );
     }
 }
 

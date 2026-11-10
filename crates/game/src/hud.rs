@@ -2,11 +2,12 @@
 
 use crate::camera::CameraRig;
 use crate::focus;
-use crate::node_ui::{self, SelectedNode, SelectedZone, Selection};
+use crate::node_ui::{self, SelectedBody, SelectedNode, SelectedZone, Selection};
 use crate::rendezvous::distance_text;
 use crate::{Sim, TimeWarp};
 use bevy::prelude::*;
 use bevy::text::FontSize;
+use sim::body::{body_state, orbital_period, sphere_of_influence};
 use sim::{Crash, Event, Plan, Segment, SurfacePoint, Touchdown, VesselStatus, World, kepler};
 use std::ops::Range;
 
@@ -74,6 +75,39 @@ pub(crate) fn format_time(seconds: f64) -> String {
         rest % 3600 / 60,
         rest % 60
     )
+}
+
+/// Angaben zu einem gewählten Mond.
+fn body_details(world: &World, b: usize) -> Vec<String> {
+    let body = &world.bodies[b];
+    let gravity = body.gm / (body.radius * body.radius);
+    let mut lines = vec![format!(
+        "{}: Radius {}, Schwerkraft {gravity:.2} m/s²{}",
+        body.name,
+        km(body.radius),
+        if body.atmosphere.exists() {
+            ""
+        } else {
+            ", keine Luft"
+        }
+    )];
+    if let (Some(orbit), Some(period)) = (&body.orbit, orbital_period(&world.bodies, b)) {
+        let parent = &world.bodies[orbit.parent];
+        let distance = body_state(&world.bodies, b, world.time)
+            .position
+            .distance(body_state(&world.bodies, orbit.parent, world.time).position);
+        lines.push(format!(
+            "Bahn um {} in {}, Umlauf {}",
+            parent.name,
+            km(distance),
+            format_span(period)
+        ));
+        lines.push(format!(
+            "Einflusssphäre {}",
+            km(sphere_of_influence(&world.bodies, b))
+        ));
+    }
+    lines
 }
 
 /// Zeitspanne, z. B. "00:12:34" oder "2 d 03:04:05".
@@ -343,6 +377,7 @@ pub fn update(
     selection: Res<Selection>,
     selected: Res<SelectedNode>,
     zone: Res<SelectedZone>,
+    body: Res<SelectedBody>,
     rig: Res<CameraRig>,
     mut text: Single<&mut Text, With<Hud>>,
     mut warning: Single<&mut TextSpan, (With<HudWarning>, Without<HudRest>)>,
@@ -444,11 +479,15 @@ pub fn update(
             lines.push(format!("Gelandet: {}", landed.join(", ")));
         }
     }
+    if let Some(b) = body.0 {
+        lines.push(String::new());
+        lines.extend(body_details(world, b));
+    }
     lines.push(String::new());
     // Kurze Zeilen, damit rechts Platz für die Seitenleiste bleibt.
     lines.extend(
         [
-            "Linksklick: Schiff / Zielgebiet / Node wählen, Node setzen",
+            "Linksklick: Schiff / Zielgebiet / Mond / Node wählen, Node setzen",
             "Griffe ziehen: Δv (Umschalt: fein)   Node ziehen: verschieben",
             "↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff",
             "H: Zeitraffer-Stopp   , / .: Zeitraffer   Leertaste: Pause",
