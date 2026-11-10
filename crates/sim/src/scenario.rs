@@ -6,14 +6,14 @@ use crate::landing::LandingZone;
 use crate::world::{Base, VesselParams, World};
 use std::f64::consts::PI;
 
-/// Fiktiver Heimatplanet in Kerbin-Größe: kleine Welt, kurze Umlaufzeiten,
-/// ein Orbit ist mit einer einzigen Stufe erreichbar.
+/// Zorb, der Heimatplanet der Zorbels, in Kerbin-Größe: kleine Welt, kurze
+/// Umlaufzeiten, ein Orbit ist mit einer einzigen Stufe erreichbar.
 pub fn home_planet() -> Body {
     let radius = 600_000.0;
     let surface_gravity = 9.81;
     let gm = surface_gravity * radius * radius;
     Body {
-        name: "Heimat".into(),
+        name: "Zorb".into(),
         gm,
         radius,
         rotation_period: 6.0 * 3600.0,
@@ -36,7 +36,7 @@ fn home_system_radius(gm: f64) -> f64 {
     DISTANCE * (gm / SUN_GM).powf(0.4)
 }
 
-/// Mond wie der Mun in KSP: 200 km Radius, g = 1,63 m/s², ohne Luft, auf
+/// Zoon, der Mond von Zorb, wie der Mun in KSP: 200 km Radius, g = 1,63 m/s², ohne Luft, auf
 /// einer Kreisbahn 12.000 km über dem Mittelpunkt des Planeten (Umlauf etwa
 /// 38,6 h, Einflusssphäre etwa 2.430 km). Gebundene Rotation: Er zeigt dem
 /// Planeten immer dieselbe Seite, Länge 0° zum Planeten hin (deshalb beginnt
@@ -45,7 +45,7 @@ pub fn moon(planet: &Body) -> Body {
     let radius = 200_000.0;
     let distance = 12_000_000.0;
     Body {
-        name: "Mond".into(),
+        name: "Zoon".into(),
         gm: 1.63 * radius * radius,
         radius,
         rotation_period: circular_period(planet.gm, distance),

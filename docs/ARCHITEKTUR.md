@@ -143,7 +143,7 @@ integriert und spürt keine Schiffe. Der erste Körper ruht im Ursprung. Die
 Einflusssphäre folgt nach Laplace aus Bahnradius und Massen: a · (m/M)^0,4
 (`body::sphere_of_influence`); darin zählt für ein Schiff nur die Schwerkraft
 des Monds (Patched Conics, ab dem Wechsel der Einflusssphäre). Der Mond im
-Spiel entspricht dem Mun in KSP (200 km, g = 1,63 m/s², 12.000 km Abstand,
+Spiel, Zoon, entspricht dem Mun in KSP (200 km, g = 1,63 m/s², 12.000 km Abstand,
 Umlauf 38,6 h, Einflusssphäre 2.430 km) und ist gebunden: Rotation und Umlauf
 haben dieselbe Dauer, Länge 0° zeigt immer zum Planeten.
 
@@ -332,6 +332,10 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 ## Getroffene Spielentscheidungen
 
 - 3D, kleine Planeten (Kerbin-Größe), **keine Raketenstufen**.
+- **Namen:** Der Heimatplanet heißt Zorb, sein Mond Zoon, die Sonne Zunn,
+  die Bewohner Zorbels. Die Namen der Himmelskörper stehen nur im Szenario
+  (`Body::name`), alle Anzeigen lesen sie von dort; alte Spielstände
+  behalten ihre Namen.
 - **Aufschlagkreuz und Bahnlinie:** Das Kreuz zeigt den genauen Punkt auf dem
   Boden (dreht mit dem Planeten), die Bahn wird ohne Planetendrehung
   gezeichnet. Dass das Ende der Linie vor dem Aufschlag nicht am Kreuz liegt,
@@ -515,7 +519,7 @@ und Modulen.
   leer, fallen zuerst nur Dienste aus (Funk, Scans, Aufträge); der Flug bleibt
   auf Schienen, Manöver laufen weiter. Ob ein Schiff ohne Strom auch nicht
   mehr steuern kann, wird später bewusst entschieden.
-- **Sonne** in der Simulation: erst für die Haushalte (Schatten, Solarertrag,
+- **Sonne** (Zunn) in der Simulation: erst für die Haushalte (Schatten, Solarertrag,
   Gleichgewichtstemperatur) und für Schiffe, die das Heimatsystem verlassen;
   für Planet und Mond mit Patched Conics wird sie nicht gebraucht. Bis dahin
   gibt es sie nur als Licht in der Darstellung. Das Heimatsystem endet an der

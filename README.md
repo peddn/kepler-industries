@@ -8,7 +8,8 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 
 ## Stand
 
-Ein Planet mit Atmosphäre und ein Mond, eine Startbasis, zwei Satelliten mit
+Der Planet Zorb, Heimat der Zorbels, mit Atmosphäre, sein Mond Zoon (die
+Sonne Zunn ist bisher nur Licht), eine Startbasis, zwei Satelliten mit
 Triebwerk, eine Fähre am Boden und eine im Orbit. „Relais-1" kreist stabil oberhalb der Atmosphäre.
 „Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang durch die Luft
 abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
@@ -63,7 +64,7 @@ Flugrichtung und entfernt sich stetig (in 100 km Höhe etwa 6 km pro Umlauf).
 Es hat danach das Hauptschiff als Ziel, zum Wiederandocken. So lässt sich zum
 Beispiel ein Satellit betanken.
 
-Der Mond ist wie der Mun in KSP: 200 km Radius, Schwerkraft 1,63 m/s², keine
+Der Mond Zoon ist wie der Mun in KSP: 200 km Radius, Schwerkraft 1,63 m/s², keine
 Luft. Er kreist in 12.000 km Abstand über dem Äquator (Umlauf etwa 38,6 h) und
 zeigt dem Planeten immer dieselbe Seite. Um ihn liegt seine Einflusssphäre
 (etwa 2.430 km, dünner Kreis): Darin zählt nur seine Schwerkraft, außerhalb
@@ -76,8 +77,8 @@ Brennen. Gezeichnet wird wie in KSP: Das Stück um den Mond liegt um die
 Stelle, an der er beim Eintritt stehen wird (dort ein blasser „Geistermond“),
 kleine Ringe markieren Ein- und Austritt. Weil der Mond während des
 Vorbeiflugs weiterzieht, klafft beim Austritt eine Lücke. Links steht die
-nächste Begegnung („Begegnung: Mond in 05:07:05, Periapsis 194 km“), im Flug
-„Orbit um Mond“; Nodes um den Mond gelten relativ zu ihm, und in der
+nächste Begegnung („Begegnung: Zoon in 05:07:05, Periapsis 194 km“), im Flug
+„Orbit um Zoon“; Nodes um den Mond gelten relativ zu ihm, und in der
 Nahansicht liegt der Mond unten. Zum Ausprobieren: Mondfähre-4 mit 836 m/s
 prograd nach 10 Minuten (`--node 3,600,836,0,0`) fliegt in etwa 200 km Höhe
 am Mond vorbei; mit einem Brennen gegen die Flugrichtung an der Periapsis
