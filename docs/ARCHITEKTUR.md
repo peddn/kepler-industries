@@ -49,8 +49,11 @@ Decay"-Bug, der per Patch nur „stark reduziert" wurde.
 
 **Regel:** Ein Keplerabschnitt speichert seinen Zustand zu Beginn (Epoche) und
 verändert ihn nie. Jede Position wird direkt daraus berechnet
-(`kepler::propagate`), bei Ellipsen nach Abzug ganzer Umläufe. Neue Bahnen
-entstehen nur durch ausdrückliche Ereignisse.
+(`kepler::propagate`), bei Ellipsen nach Abzug ganzer Umläufe. Das
+Newton-Verfahren dafür fällt auf eine eingegrenzte Suche zurück, wenn es aus
+dem Ruder läuft (vorgekommen bei Hyperbeln knapp über der Parabel, *Test:*
+`near_parabolic_hyperbola`). Neue Bahnen entstehen nur durch ausdrückliche
+Ereignisse.
 *Test:* `no_drift_after_thousand_orbits`, `stable_orbit_never_changes`.
 
 ### 4. Kein „aktives Schiff", keine Physik-Blase
@@ -112,7 +115,9 @@ abgesichert, die ohne Bevy laufen.
 Der Test `save_and_load_round_trip` hat gezeigt: `serde_json` liest Zahlen
 ohne die Option `float_roundtrip` nicht bitgenau zurück. Jedes künftige
 Speicherformat muss Zahlen exakt erhalten. Der Spielstand trägt eine
-Versionsnummer (`SAVE_VERSION`). Auch das Protokoll gehört dazu (`World::log`):
+Versionsnummer (`SAVE_VERSION`). Ältere Spielstände müssen vorerst nicht
+laden (Entscheidung: Kompatibilität wird erst gepflegt, wenn es Spieler mit
+wertvollen Ständen gibt). Auch das Protokoll gehört dazu (`World::log`):
 Die Einträge entstehen, wenn ein Abschnitt der Zeitleiste endet, mit dessen
 genauem Zeitpunkt, und sind deshalb wie alles andere unabhängig von der
 Schrittgröße (*Test:* `log_is_independent_of_step_size`).
@@ -135,8 +140,8 @@ bruchstückhaft.
 Ein Körper ohne Luft ist der Spezialfall Bodendichte 0, Freiflug der
 Spezialfall „kein Schub".
 
-**Monde auf Schienen:** Ein Mond läuft wie in KSP auf einer festen
-Keplerbahn um seinen Mutterkörper (`BodyOrbit`), beschrieben durch die sechs
+**Körper auf Schienen:** Planeten und Monde laufen wie in KSP auf einer
+festen Keplerbahn um ihren Mutterkörper (`BodyOrbit`), beschrieben durch die sechs
 Bahnelemente zum Zeitpunkt 0: große Halbachse, Exzentrizität, Neigung, Länge
 des aufsteigenden Knotens, Argument der Periapsis, mittlere Anomalie. Seine
 Lage wird für jeden Zeitpunkt direkt berechnet (`body::body_state`): Die
@@ -144,8 +149,13 @@ mittlere Anomalie wächst gleichmäßig (über den Rest der Umlaufzeit wie die
 Rotation, damit auch nach Jahren genau), die exzentrische folgt aus der
 Kepler-Gleichung (Newton). Mutterkörper kann jeder Körper sein, die Lage
 wird rekursiv zusammengesetzt (Monde von Monden gingen also, sind aber nicht
-getestet). Ein Mond wird nie integriert und spürt keine Schiffe. Der erste
-Körper ruht im Ursprung. Wie in KSP gibt es keine Achsneigung: Alle Körper
+getestet). Ein Körper wird nie integriert und spürt keine Schiffe. Die Sonne
+Zunn (wie Kerbol) hat keine Bahn, ruht im Ursprung und reicht unendlich weit.
+Nummern wie in KSP: erst die Sonne, dann der Heimatplanet (`World::home`, er
+zählt die Tage, die Kamera beginnt bei ihm) mit seinen Monden, dann die
+anderen Planeten. Zorb kreist wie Kerbin um Zunn (13.599.840 km, Jahr
+9.203.545 s), Nura wie Duna (große Halbachse 20.726.155 km, Exzentrizität
+0,051, Einflusssphäre 47.900 km, dünne Luft bis 50 km). Wie in KSP gibt es keine Achsneigung: Alle Körper
 drehen sich um +Z, die Neigung einer Bahn gilt gegenüber dieser gemeinsamen
 Äquatorebene. Die Einflusssphäre folgt nach Laplace aus großer Halbachse und
 Massen: a · (m/M)^0,4 (`body::sphere_of_influence`, auch bei Ellipsen gleich
@@ -157,17 +167,19 @@ dieselbe Dauer, Länge 0° zeigt immer zum Planeten (bei einer Ellipse
 schwankte der Planet dabei am Himmel, Libration). Zimm ähnelt Minmus (60 km,
 g = 0,49 m/s², große Halbachse 47.000 km, Neigung 6°, Einflusssphäre
 2.250 km), ist aber leicht elliptisch (Exzentrizität 0,1) und dreht sich
-frei. Alte Spielstände mit Kreisbahnen (`radius`, `phase`) laden als Ellipse
-ohne Exzentrizität und Neigung.
+frei.
 
 **Wechsel der Einflusssphäre** (`soi.rs`): An der Grenze endet ein Abschnitt
 (`SoiEntry`, `SoiExit`), der nächste läuft um den anderen Körper weiter, ein
 Brennen ebenso (es wird geteilt, Richtung, Schub und Massenstrom bleiben).
 Der Austritt ist auf der Keplerbahn analytisch
 (`kepler::time_to_radius_outbound`). Den Eintritt in die Sphäre des Monds
-muss man suchen, weil er sich bewegt: Der Abstand wird so fein abgetastet,
-dass sich Schiff und Mond pro Schritt höchstens um ein Viertel des Radius
-gegeneinander bewegen; ein Vorzeichenwechsel wird per Bisektion eingegrenzt
+muss man suchen, weil er sich bewegt: Der Abstand wird nah heran so fein
+abgetastet, dass sich Schiff und Mond pro Schritt höchstens um ein Viertel
+des Radius gegeneinander bewegen, weit weg in so großen Schritten, wie sie
+bei höchster Geschwindigkeit mindestens bis zur Grenze brauchen (so wird kein
+Eintritt übersprungen, und eine Bahn um die Sonne kostet nur wenige hundert
+Punkte); ein Vorzeichenwechsel wird per Bisektion eingegrenzt
 (auf 1 µs), ein tiefer Punkt zwischen zwei Abtastpunkten per Goldenem Schnitt
 (knappe Streifschüsse). Gesucht wird nur, wenn der Abstand der Bahn zum
 Planeten überhaupt in den Bereich fällt, den der Mond samt Sphäre zwischen
@@ -176,10 +188,11 @@ Umlauf weit; ohne Treffer endet der Keplerabschnitt dort mit `Continue`, und
 der nächste sucht weiter, wenn er an der Reihe ist. Bahnen in Planetennähe
 bleiben ein einziger offener Abschnitt wie bisher. Schrittweise berechnete
 Abschnitte prüfen beide Grenzen bei jedem Schritt, wie den Bodenkontakt.
-Alles hängt nur vom Anfangszustand ab (Regel 6). Das Heimatsystem endet an
-der Einflusssphäre des Planeten (84.159 km, wie Kerbin gegenüber Kerbol,
-`Body::soi_radius`): Dort endet die Zeitleiste (`LeavesSystem`), das Schiff
-ist im Sonnenorbit (`VesselStatus::Escaped`), nichts lässt sich mehr planen.
+Alles hängt nur vom Anfangszustand ab (Regel 6). Wer Zorbs Einflusssphäre
+verlässt (84.159 km, wie Kerbin gegenüber Kerbol), fliegt um Zunn weiter;
+der Eintritt in einen Planeten wird genauso gesucht wie der in einen Mond.
+Ein Node um die Sonne geht wie jeder andere. Die Sonne verlässt man nie
+(offene Bahnen um sie werden in Fenstern von 10 Mio. s weitergesucht).
 Rendezvous, Bahnebene und Andocken zählen nur Zeiten, in denen beide Schiffe
 um denselben Körper fliegen.
 
@@ -371,7 +384,8 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 ## Getroffene Spielentscheidungen
 
 - 3D, kleine Planeten (Kerbin-Größe), **keine Raketenstufen**.
-- **Namen:** Der Heimatplanet heißt Zorb, seine Monde Zoon und Zimm, die Sonne Zunn,
+- **Namen:** Der Heimatplanet heißt Zorb, seine Monde Zoon und Zimm, der
+  zweite Planet Nura, die Sonne Zunn,
   die Bewohner Zorbels. Die Namen der Himmelskörper stehen nur im Szenario
   (`Body::name`), alle Anzeigen lesen sie von dort; alte Spielstände
   behalten ihre Namen.
@@ -435,9 +449,10 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 - **Zeit:** Es gibt eine Spielzeit für alles. Angezeigt wird sie in Tagen
   des Heimatplaneten, die Tageslänge kommt aus seiner Rotation (`hud::day`,
   heute 6 h); keine Ortszeit, kein Kalender pro Körper, auch am Mond gilt
-  diese Zeit (wie die Kerbin-Zeit in KSP). Kommt die Sonne, wird der Tag der
-  Sonnentag, aus Umdrehung und Umlauf um die Sonne berechnet (KSP lässt
-  Kerbin dafür in 5:59:09 drehen, damit der Sonnentag genau 6 h dauert).
+  diese Zeit (wie die Kerbin-Zeit in KSP). Der Tag ist der Sonnentag, aus
+  Umdrehung und Umlauf um die Sonne berechnet (`body::day_length`); wie
+  Kerbin dreht sich Zorb dafür in 5:59:09, damit der Sonnentag genau 6 h
+  dauert.
 - **Bahnen um den Mond zeichnen** wie in KSP (`view::anchors`):
   Aufeinanderfolgende Abschnitte um denselben Körper bilden ein Stück; es
   liegt um die Stelle, an der der Körper zu Beginn des Stücks steht
@@ -561,14 +576,10 @@ und Modulen.
   leer, fallen zuerst nur Dienste aus (Funk, Scans, Aufträge); der Flug bleibt
   auf Schienen, Manöver laufen weiter. Ob ein Schiff ohne Strom auch nicht
   mehr steuern kann, wird später bewusst entschieden.
-- **Sonne** (Zunn) in der Simulation: erst für die Haushalte (Schatten, Solarertrag,
-  Gleichgewichtstemperatur) und für Schiffe, die das Heimatsystem verlassen;
-  für Planet und Mond mit Patched Conics wird sie nicht gebraucht. Bis dahin
-  gibt es sie nur als Licht in der Darstellung. Das Heimatsystem endet an der
-  Einflusssphäre des Planeten (etwa 84.000 km, aus Masse und Abstand der
-  Sonne wie bei Kerbin): Dort endet die Zeitleiste eines Schiffs („verlässt
-  das Heimatsystem“, danach im Sonnenorbit, nicht simuliert), statt es falsch
-  weiterzurechnen.
+- **Sonne** (Zunn): ist in der Simulation (Wurzel der Körper, Flüge zwischen
+  den Planeten). Für die Haushalte fehlen noch Schatten, Solarertrag und
+  Gleichgewichtstemperatur; Abstand und Richtung zur Sonne gibt es schon
+  (`body_state`).
 - **Gestrichen:** Technikalterung, Lagrange-Punkte (mit Patched Conics nicht möglich)
 
 ## UI-Ideen (nach dem Grundgerüst)
@@ -608,6 +619,7 @@ nichts verloren geht.
    Abdocken ✓
 7. Mond: auf Schienen ✓ (Bahnelemente wie KSP, Einflusssphäre, wählen,
    Kamera, zweiter Mond Zimm), Wechsel
-   der Einflusssphäre ✓ (mit Rand des Heimatsystems, Zeichnung wie KSP),
-   Landen und Starten auf Zoon ✓ (Wendewinkel, Zielgebiete), Landebrennen ✓
+   der Einflusssphäre ✓ (Zeichnung wie KSP), Landen und Starten auf Zoon ✓
+   (Wendewinkel, Zielgebiete), Landebrennen ✓, Sonne ✓ (Zunn als Wurzel,
+   zweiter Planet Nura, Flüge zwischen Planeten, Licht aus ihrer Richtung)
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

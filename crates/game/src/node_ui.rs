@@ -261,7 +261,7 @@ pub fn sync_label(
     }
 }
 
-/// Bildschirmprojektion mit Verdeckung durch den Planeten.
+/// Bildschirmprojektion mit Verdeckung durch den Heimatplaneten.
 pub(crate) struct Projector<'a> {
     camera: &'a Camera,
     transform: GlobalTransform,
@@ -272,19 +272,20 @@ pub(crate) struct Projector<'a> {
 }
 
 impl<'a> Projector<'a> {
-    /// Für den Planeten im Ursprung der Simulation (`focus`: Fokuspunkt).
+    /// Mit dem Heimatplaneten von `world` (`focus`: Fokuspunkt).
     pub(crate) fn new(
         camera: &'a Camera,
         transform: &Transform,
         focus: DVec3,
-        planet_radius: f64,
+        world: &World,
     ) -> Self {
+        let planet = body_state(&world.bodies, world.home, world.time).position;
         Self {
             camera,
             transform: GlobalTransform::from(*transform),
             eye: transform.translation,
-            planet_center: to_view(DVec3::ZERO, focus),
-            planet_radius: planet_radius as f32,
+            planet_center: to_view(planet, focus),
+            planet_radius: world.bodies[world.home].radius as f32,
         }
     }
 
@@ -547,7 +548,7 @@ pub fn input(
         return;
     };
     let (camera, transform) = *camera;
-    let projector = Projector::new(camera, transform, rig.focus, world.bodies[0].radius);
+    let projector = Projector::new(camera, transform, rig.focus, world);
 
     // Klicks auf Seitenleiste, Δv-Balken und Statusleiste gehören diesen.
     let over_ui = over_panel(&shown, &window, cursor)
@@ -807,14 +808,18 @@ fn click(
         }
     }
 
-    // Erst nach der Bahn: Sie läuft oft vor dem Mond entlang.
-    let body_hit = (1..world.bodies.len()).find(|&b| {
-        let center = to_view(body_state(&world.bodies, b, world.time).position, focus);
-        let radius = world.bodies[b].radius as f32;
-        projector.project(center).is_some_and(|screen| {
-            screen.distance(cursor) < PICK_RADIUS || projector.hits_sphere(cursor, center, radius)
-        })
-    });
+    // Erst nach der Bahn: Sie läuft oft vor dem Mond entlang. Der
+    // Heimatplanet selbst ist der Hintergrund (Klicks dort wählen nichts).
+    let body_hit = (0..world.bodies.len())
+        .filter(|&b| b != world.home)
+        .find(|&b| {
+            let center = to_view(body_state(&world.bodies, b, world.time).position, focus);
+            let radius = world.bodies[b].radius as f32;
+            projector.project(center).is_some_and(|screen| {
+                screen.distance(cursor) < PICK_RADIUS
+                    || projector.hits_sphere(cursor, center, radius)
+            })
+        });
     if let Some(b) = body_hit {
         selection.0 = None;
         selected.0 = None;

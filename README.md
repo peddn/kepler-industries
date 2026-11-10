@@ -8,8 +8,8 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 
 ## Stand
 
-Der Planet Zorb, Heimat der Zorbels, mit Atmosphäre, seine Monde Zoon und
-Zimm (die Sonne Zunn ist bisher nur Licht), eine Startbasis, zwei Satelliten mit
+Die Sonne Zunn mit zwei Planeten: Zorb, Heimat der Zorbels, mit
+Atmosphäre und den Monden Zoon und Zimm, weiter draußen Nura; eine Startbasis, zwei Satelliten mit
 Triebwerk, eine Fähre am Boden und eine im Orbit. „Relais-1" kreist stabil oberhalb der Atmosphäre.
 „Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang durch die Luft
 abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
@@ -95,9 +95,7 @@ wenig Schub kostet es mehr (bei Schub/Gewicht 1,5 etwa 700 m/s): Es beginnt
 höher, und die Schwerkraft zieht länger dagegen. Zielgebiete gibt
 es auf der Nahseite (Zorb im Zenit) und der Fernseite. Zurück geht es mit
 einem Start von Zoon (Voreinstellung siehe oben, die 30-km-Bahn kostet etwa
-670 m/s). Wer mehr als etwa 84.000 km vom Planeten wegfliegt,
-verlässt das Heimatsystem: Danach ist das Schiff im Sonnenorbit und wird
-(noch) nicht weiter simuliert.
+670 m/s).
 
 Weiter draußen kreist der kleine Mond Zimm, ähnlich Minmus in KSP: 60 km
 Radius, Schwerkraft 0,49 m/s², keine Luft, auf einer leicht elliptischen,
@@ -108,13 +106,28 @@ Neigung, aufsteigender Knoten, Argument der Periapsis, mittlere Anomalie);
 die Karte zeigt die Ellipse, die Mondkarte Abstand und Neigung. Weil Zimms
 Bahn geneigt ist, trifft man ihn aus der Äquatorebene nur in der Nähe der
 Knoten: Mondfähre-4 mit 924 m/s prograd nach 122.100 s
-(`--node 3,122100,924,0,0`) fliegt in etwa 570 km Höhe an ihm vorbei. Zum
-Ansehen der ganzen Bahn lässt sich jetzt weiter herauszoomen.
+(`--node 3,122100,924,0,0`) fliegt in etwa 570 km Höhe an ihm vorbei.
 
-Die Uhr oben links zählt Tage des Planeten: Ein Tag ist eine Umdrehung
-(6 h, die Stunden laufen von 0 bis 5), abgeleitet aus seiner Rotation. Diese
-eine Zeit gilt überall, auch am Mond (wie die Kerbin-Zeit in KSP); Zeitspannen
-wie „2 d 03:04:05“ zählen dieselben Tage.
+Zorb kreist wie Kerbin um die Sonne Zunn (13,6 Mio. km, ein Jahr hat 426
+Tage). Seine Einflusssphäre reicht etwa 84.000 km weit; wer sie verlässt, ist
+auf einer Bahn um Zunn und kann zu einem anderen Planeten fliegen, genauso
+wie zu einem Mond. Nura ist Duna aus KSP nachempfunden: 320 km Radius,
+Schwerkraft 2,94 m/s², dünne Luft bis 50 km, 20,7 Mio. km von Zunn
+(leicht elliptisch), Einflusssphäre etwa 47.900 km. Ein Startfenster öffnet
+sich, wenn Nura Zorb etwa 44° vorausläuft, alle gut 900 Tage; das erste
+gleich zu Beginn. Mondfähre-4 mit 1.090 m/s prograd nach 163.400 s
+(`--node 3,163400,1090,0,0`) verlässt Zorb und erreicht nach etwa 270 Tagen
+Nuras Einflusssphäre (Periapsis knapp 10.000 km; mit einem Korrektur-Node
+unterwegs geht es tiefer). Zunn leuchtet als Kugel, das Licht kommt aus
+ihrer Richtung, Tag- und Nachtseite der Planeten passen also. Die Karte
+zoomt bis zum ganzen Sonnensystem heraus; `F` auf Zunn oder einen Planeten
+(anklicken) zeigt ihn, Planeten bleiben aus der Ferne als Punkt sichtbar.
+
+Die Uhr oben links zählt Tage von Zorb: Ein Tag ist ein Sonnentag (6 h, die
+Stunden laufen von 0 bis 5), abgeleitet aus Drehung und Umlauf um Zunn; wie
+Kerbin dreht sich Zorb dafür gegenüber den Sternen in 5:59:09. Diese eine
+Zeit gilt überall, auch am Mond und auf Nura (wie die Kerbin-Zeit in KSP);
+Zeitspannen wie „2 d 03:04:05“ zählen dieselben Tage.
 
 Die Kamera lässt sich mit `F` auf das gewählte Objekt richten: Schiff,
 Node, Zielgebiet (Raute in der Kreismitte anklicken) oder Mond. Sie folgt ihm, auch
@@ -152,8 +165,8 @@ zeigt ein rotes Kreuz den Aufschlagpunkt.
 
 *Fähre-3 zu Relais-1 (rosa): Start im Startfenster (Kurs 120°, Neigung zum
 Ziel 0,3°), Node 1 macht die Bahn auf 100 km rund, Node 2 hebt sie leicht
-an, damit die Fähre aufholt. Nach drei Umläufen kommt sie Relais-1 auf 641 m
-nahe (Ringe mit Linie). Nachspielen mit den Optionen unten.*
+an, damit die Fähre aufholt. Nach drei Umläufen kommt sie Relais-1 auf
+etwa 600 m nahe (Ringe mit Linie). Nachspielen mit den Optionen unten.*
 
 ![Protokoll](docs/screenshots/protokoll.png)
 
@@ -164,8 +177,8 @@ Umlauf tiefer in die Luft taucht, bis sie abstürzt.*
 ![Andocken geplant](docs/screenshots/andocken-plan.png)
 
 *Fähre-3 vor dem Andocken an Relais-1: In 10 Minuten gleicht sie an der
-engsten Stelle (641 m) mit 104 m/s an, fliegt in 6 Minuten heran (5 m/s) und
-hat danach noch 176 m/s.*
+engsten Stelle (624 m) mit 110 m/s an, fliegt in 6 Minuten heran (7 m/s) und
+hat danach noch gut 160 m/s.*
 
 ![Andocken aus der Nähe](docs/screenshots/andocken.png)
 
@@ -190,6 +203,14 @@ ohne Luft (Wende ab 100 m mit 70°, Ziel 30 km). Nachspielen mit
 `--node 3,600,836,0,0 --node 3,24740,-380,0,0 --time 26500 --select 3
 --focus 3 --near --camera 20,25,60` und „Start planen“.*
 
+![Sonnensystem](docs/screenshots/sonnensystem.png)
+
+*Mondfähre-4 (gelb, unten) auf dem Weg nach Nura: Zunn in der Mitte, innen
+Zorbs Bahn (die grüne Markierung sind Zorbs Zielgebiete), außen die von
+Nura. Die blaue Bahn um die Sonne führt in Nuras Einflusssphäre (Ringe
+rechts unten), links steht die Begegnung in 131 Tagen. Nachspielen mit `--node 3,163400,1090,0,0 --time 3000000
+--select 3 --focus-body 0 --camera 30,60,55000000`.*
+
 ![Mond](docs/screenshots/mond.png)
 
 *Der Mond ist gewählt: Bahn um den Planeten, Einflusssphäre gelb, links seine
@@ -205,7 +226,7 @@ mitnimmt, und zeigt, was beide danach haben.*
 ![Nahansicht](docs/screenshots/nahansicht.png)
 
 *Nahansicht beim Rendezvous aus dem Bild darüber: Kamera auf Fähre-3 (gelb),
-Relais-1 (rosa) ist 903 m entfernt, die engste Annäherung kommt in 6 s.*
+Relais-1 (rosa) ist 912 m entfernt, die engste Annäherung kommt in 6 s.*
 
 ![Zielgebiet aus der Nähe](docs/screenshots/zielgebiet-nah.png)
 
@@ -288,7 +309,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | `Entf` / `Rücktaste` | gewählten Node löschen |
 | `H` | Zeitraffer-Stopp für das gewählte Schiff an/aus: Beginnt es zu brennen, hält der Zeitraffer genau dort an und schaltet auf 1× |
 | `Esc` | Auswahl aufheben |
-| `.` / `,` | Zeitraffer schneller / langsamer (1× bis 100 000×) |
+| `.` / `,` | Zeitraffer schneller / langsamer (1× bis 1 000 000×) |
 | Leertaste | Pause |
 
 Griffe: gelbgrün prograd/retrograd, violett normal/antinormal, türkis radial
@@ -305,7 +326,8 @@ cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,
 - `--camera GIER,NEIGUNG,KM`: Blickwinkel in Grad, Abstand vom Fokus in km
 - `--focus SCHIFF` / `--focus-zone ZIELGEBIET`: Kamera auf ein Schiff bzw.
   Zielgebiet (0 = Startbasis, 1 = Übungsfeld, 2 = Messfeld Ost)
-- `--focus-body KÖRPER`: Kamera auf einen Himmelskörper (0 = Planet, 1 = Mond)
+- `--focus-body KÖRPER`: Kamera auf einen Himmelskörper (0 = Zunn, 1 = Zorb,
+  2 = Zoon, 3 = Zimm, 4 = Nura)
 - `--near`: Nahansicht (mit `--focus` oder `--focus-zone`)
 - `--dock SCHIFF`: Andocken an das Ziel einschalten (nach `--target`)
 - `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2, 2 = Fähre-3)
@@ -322,23 +344,23 @@ Rendezvous Fähre-3 → Relais-1 aus dem Bild oben (Start im Startfenster,
 Zirkularisieren, Aufholen):
 
 ```sh
-cargo run -p game -- --time 11100 --launch 2,11325,120,1.5,100 --target 2,0 \
-  --node 2,11638,682,0,0 --node 2,12616,99.75,0,0
+cargo run -p game -- --time 11100 --launch 2,11299,120,1.5,100 --target 2,0 \
+  --node 2,11612,682,0,0 --node 2,12590,102.25,0,0
 ```
 
 Mit Andocken (`--dock 2`) und dann mitten im Anflug aus der Nähe (Bild
 „Andocken aus der Nähe“):
 
 ```sh
-cargo run -p game -- --time 21800 --launch 2,11325,120,1.5,100 --target 2,0 \
-  --node 2,11638,682,0,0 --node 2,12616,99.75,0,0 --dock 2 --focus 2 --near --camera 40,20,0.6
+cargo run -p game -- --time 21772 --launch 2,11299,120,1.5,100 --target 2,0 \
+  --node 2,11612,682,0,0 --node 2,12590,102.25,0,0 --dock 2 --focus 2 --near --camera 40,20,0.6
 ```
 
 Dasselbe ohne Andocken kurz vor der Annäherung in der Nahansicht (Bild „Nahansicht“):
 
 ```sh
-cargo run -p game -- --time 21588 --launch 2,11325,120,1.5,100 --target 2,0 \
-  --node 2,11638,682,0,0 --node 2,12616,99.75,0,0 --focus 2 --near --camera 50,25,6
+cargo run -p game -- --time 21570 --launch 2,11299,120,1.5,100 --target 2,0 \
+  --node 2,11612,682,0,0 --node 2,12590,102.25,0,0 --focus 2 --near --camera 50,25,6
 ```
 
 ## Tests

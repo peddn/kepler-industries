@@ -7,7 +7,7 @@
 //! Zielgebiet im Blick behalten und dabei das Schiff wählen und dessen
 //! Brems-Node einstellen.
 
-use crate::camera::{CameraRig, Focus, PLANET};
+use crate::camera::{CameraRig, Focus};
 use crate::node_ui::{Drag, SelectedBody, SelectedNode, SelectedZone, Selection, UiMessage};
 use crate::{Sim, view};
 use bevy::math::DVec3;
@@ -36,7 +36,7 @@ pub fn focus_of_selection(
     match (zone.0, body.0) {
         (Some(k), _) => Focus::Zone(k),
         (None, Some(b)) => Focus::Body(b),
-        (None, None) => PLANET,
+        (None, None) => Focus::Body(world.home),
     }
 }
 
@@ -119,7 +119,11 @@ pub fn keys(
 ) {
     if keys.just_pressed(KeyCode::KeyF) {
         let wanted = focus_of_selection(&sim.0, &selection, &selected, &zone, &body);
-        let target = if wanted == rig.target { PLANET } else { wanted };
+        let target = if wanted == rig.target {
+            rig.home()
+        } else {
+            wanted
+        };
         rig.set_target(target);
     }
     if keys.just_pressed(KeyCode::KeyN) {
@@ -156,7 +160,10 @@ pub fn follow(sim: Res<Sim>, drag: Res<Drag>, mut rig: ResMut<CameraRig>) {
         Focus::Node { vessel, .. } if vessel < world.vessels.len() => {
             rig.target = Focus::Vessel(vessel);
         }
-        _ => rig.set_target(PLANET),
+        _ => {
+            let home = rig.home();
+            rig.set_target(home);
+        }
     }
     (rig.focus, rig.center) = position(world, rig.target).unwrap_or((DVec3::ZERO, DVec3::ZERO));
 }

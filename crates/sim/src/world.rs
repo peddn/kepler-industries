@@ -15,7 +15,7 @@ use crate::trajectory::{Event, Segment, Trajectory};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 6;
+pub const SAVE_VERSION: u32 = 7;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -157,8 +157,6 @@ pub enum VesselStatus {
     Docked {
         host: usize,
     },
-    /// Hat das Heimatsystem verlassen: im Sonnenorbit, nicht simuliert.
-    Escaped,
 }
 
 /// Wirksame Werte eines Verbunds: Hauptschiff `host` und angedockte Teile.
@@ -194,6 +192,9 @@ pub struct World {
     /// Spielzeit in s seit Spielbeginn.
     pub time: f64,
     pub bodies: Vec<Body>,
+    /// Der Heimatplanet: Seine Drehung zählt die Tage (diese eine Zeit gilt
+    /// überall), die Kamera beginnt bei ihm.
+    pub home: BodyId,
     pub vessels: Vec<Vessel>,
     pub bases: Vec<Base>,
     /// Zielgebiete zum Landen.
@@ -210,6 +211,7 @@ impl World {
             save_version: SAVE_VERSION,
             time: 0.0,
             bodies,
+            home: 0,
             vessels: Vec::new(),
             bases: Vec::new(),
             zones: Vec::new(),
@@ -397,7 +399,6 @@ impl World {
 
     /// Alle freien Schiffe bis `t` vorrücken (ohne Andocken).
     fn advance_all(&mut self, t: f64) {
-        let before = self.time;
         self.time = t;
         let params: Vec<VesselParams> = (0..self.vessels.len()).map(|i| self.params(i)).collect();
         let mut entries = Vec::new();
@@ -411,18 +412,6 @@ impl World {
                 vessel: i,
                 kind,
             }));
-            // Die Zeitleiste endet dort, kein Abschnitt folgt: hier eintragen.
-            let last = vessel.trajectory.current();
-            if last.end_event() == Some(Event::LeavesSystem)
-                && before < last.end()
-                && last.end() <= t
-            {
-                entries.push(LogEntry {
-                    time: last.end(),
-                    vessel: i,
-                    kind: LogKind::LeavesSystem,
-                });
-            }
         }
         entries.sort_by(|a, b| a.time.total_cmp(&b.time).then(a.vessel.cmp(&b.vessel)));
         for entry in &mut entries {
@@ -977,10 +966,6 @@ impl World {
                     altitude: state.position.length() - body.radius,
                 }
             }
-            Segment::Kepler {
-                end: Some((t_end, Event::LeavesSystem)),
-                ..
-            } if *t_end <= self.time => VesselStatus::Escaped,
             Segment::Kepler { state, end, .. } => {
                 let info = kepler::orbit_info(body.gm, state);
                 VesselStatus::Orbit {

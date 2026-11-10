@@ -4,8 +4,8 @@
 //! Bezugssysteme sind nur gegeneinander verschoben, nicht gedreht).
 //!
 //! - **Austritt** (Abstand zum eigenen Körper wird größer als der Radius der
-//!   Sphäre): analytisch auf der Keplerbahn (`kepler::time_to_radius_outbound`).
-//!   Aus dem Planeten heraus heißt das: Das Schiff verlässt das Heimatsystem.
+//!   Sphäre): analytisch auf der Keplerbahn (`kepler::time_to_radius_outbound`),
+//!   in die Sphäre des Mutterkörpers. Die Sonne verlässt man nie.
 //! - **Eintritt** in die Sphäre eines Monds: Der Mond bewegt sich (auch auf
 //!   einer geneigten Ellipse), deshalb wird gesucht. Der Abstand zum Mond wird so fein abgetastet, dass beide
 //!   sich pro Schritt höchstens um ein Viertel des Radius gegeneinander
@@ -29,9 +29,9 @@ use glam::DVec3;
 const SCAN_FRACTION: f64 = 0.25;
 /// Genauigkeit eines Wechselzeitpunkts in s.
 const TIME_TOLERANCE: f64 = 1e-6;
-/// Suchfenster auf offenen Bahnen, die nie eine Sphäre verlassen (nur in
-/// alten Spielständen ohne Rand des Heimatsystems).
-const OPEN_WINDOW: f64 = 86_400.0;
+/// Suchfenster auf offenen Bahnen, die nie eine Sphäre verlassen (um die
+/// Sonne, deren Sphäre unbegrenzt ist), in s.
+const OPEN_WINDOW: f64 = 10_000_000.0;
 
 /// Lage im System von `to` statt `from` zum Zeitpunkt `t`.
 pub fn convert(
@@ -45,15 +45,6 @@ pub fn convert(
     StateVector {
         position: state.position + a.position - b.position,
         velocity: state.velocity + a.velocity - b.velocity,
-    }
-}
-
-/// Wohin das Schiff beim Verlassen der Sphäre von `body` kommt: in die des
-/// Mutterkörpers, oder (beim Planeten) aus dem Heimatsystem hinaus.
-pub fn exit_event(bodies: &[Body], body: BodyId) -> Event {
-    match bodies[body].orbit {
-        Some(_) => Event::SoiExit,
-        None => Event::LeavesSystem,
     }
 }
 
@@ -144,31 +135,27 @@ fn entry_into(
         return None;
     }
     // Höchste Geschwindigkeit auf der Bahn und auf der des Monds (jeweils in
-    // der Periapsis, Vis-Viva): So schnell bewegen sie sich höchstens
-    // gegeneinander.
+    // der Periapsis, Vis-Viva): So schnell ändert sich der Abstand höchstens.
     let alpha = 2.0 / state.position.length() - state.velocity.length_squared() / gm;
     let fastest = (gm * (2.0 / info.periapsis - alpha)).sqrt();
     let e = orbit.eccentricity;
     let moon_speed = (gm / orbit.semi_major_axis * (1.0 + e) / (1.0 - e)).sqrt();
-    let step = SCAN_FRACTION * radius / (fastest + moon_speed);
-    let n = ((until - t0) / step).ceil().max(1.0) as usize;
+    let speed = fastest + moon_speed;
+    let fine = SCAN_FRACTION * radius / speed;
 
     // Abstand über der Grenze (negativ: drin).
     let gap = |t: f64| {
         let p = kepler::propagate(gm, *state, t - t0).position;
         p.distance(relative(bodies, body, child, t)) - radius
     };
-    let time = |i: usize| {
-        if i == n {
-            until
-        } else {
-            t0 + (until - t0) * i as f64 / n as f64
-        }
-    };
     let mut before: Option<(f64, f64)> = None; // vorletzter Punkt
     let mut last = (t0, gap(t0));
-    for i in 1..=n {
-        let next = (time(i), gap(time(i)));
+    while last.0 < until {
+        // Weit weg in großen Schritten: Bei höchstens `speed` ist das Schiff
+        // frühestens nach gap / speed drin, so wird kein Eintritt
+        // übersprungen. Nah heran fein, wie ein fester Schritt.
+        let t = (last.0 + fine.max(last.1 / speed)).min(until);
+        let next = (t, gap(t));
         if last.1 > 0.0 && next.1 <= 0.0 {
             return Some(bisect(&gap, last.0, next.0));
         }
@@ -262,7 +249,7 @@ impl<'a> Watch<'a> {
         let (r0, r1) = (s0.position.length(), s1.position.length());
         if r0 < self.exit && r1 >= self.exit {
             let fraction = (self.exit - r0) / (r1 - r0);
-            return Some((fraction, exit_event(self.bodies, self.body)));
+            return Some((fraction, Event::SoiExit));
         }
         self.moons.iter().find_map(|&(c, radius)| {
             let d0 = s0

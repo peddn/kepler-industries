@@ -23,7 +23,17 @@ use bevy::window::WindowResolution;
 pub struct Sim(pub sim::World);
 
 /// Zeitraffer-Stufen wie in KSP.
-pub const WARP_LEVELS: [f64; 8] = [1.0, 5.0, 10.0, 50.0, 100.0, 1_000.0, 10_000.0, 100_000.0];
+pub const WARP_LEVELS: [f64; 9] = [
+    1.0,
+    5.0,
+    10.0,
+    50.0,
+    100.0,
+    1_000.0,
+    10_000.0,
+    100_000.0,
+    1_000_000.0,
+];
 
 #[derive(Resource, Default)]
 pub struct TimeWarp {
@@ -216,7 +226,8 @@ fn main() {
         );
         std::process::exit(2);
     }
-    let mut rig = camera::CameraRig::new(world.bodies.iter().map(|b| b.radius).collect());
+    let mut rig =
+        camera::CameraRig::new(world.bodies.iter().map(|b| b.radius).collect(), world.home);
     if let Some(focus) = options.focus {
         rig.set_target(focus);
         rig.set_near(options.near);
@@ -299,7 +310,7 @@ fn main() {
                 rendezvous::update,
             )
                 .chain(),
-            view::sync_markers,
+            (view::sync_markers, view::aim_sunlight),
             node_ui::draw,
             node_ui::sync_label,
             rendezvous::sync_labels,

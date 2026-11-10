@@ -3,7 +3,7 @@
 use glam::DVec3;
 use sim::docking::{CONTACT_SPEED, DOCKING_RANGE, SEPARATION_SPEED, angular_velocity};
 use sim::kepler;
-use sim::scenario::{FERRY, SATELLITE, demo};
+use sim::scenario::{FERRY, SATELLITE, ZORB, demo};
 use sim::{
     BudgetItem, DockError, Launch, LaunchProfile, LogKind, ManeuverNode, Segment, UndockError,
     VesselStatus, World,
@@ -25,13 +25,13 @@ fn rendezvous(phasing: f64) -> World {
         .set_launch(
             FERRY_ID,
             Launch {
-                time: 11_325.0,
+                time: 11_299.0,
                 profile,
             },
         )
         .unwrap();
     world.set_armed(FERRY_ID, true).unwrap();
-    for (time, dv) in [(11_638.0, 682.0), (12_616.0, phasing)] {
+    for (time, dv) in [(11_612.0, 682.0), (12_590.0, phasing)] {
         world
             .add_node(
                 FERRY_ID,
@@ -47,7 +47,7 @@ fn rendezvous(phasing: f64) -> World {
 }
 
 fn docking() -> World {
-    let mut world = rendezvous(99.75);
+    let mut world = rendezvous(102.25);
     world.set_docking(FERRY_ID, true).unwrap();
     world
 }
@@ -63,7 +63,7 @@ fn plan(world: &World) -> sim::DockPlan {
 /// danach ein kurzer Anflug; der Δv-Haushalt zählt beides.
 #[test]
 fn plan_after_rendezvous() {
-    let before = rendezvous(99.75).approach(FERRY_ID).unwrap();
+    let before = rendezvous(102.25).approach(FERRY_ID).unwrap();
     let world = docking();
     let plan = plan(&world);
     assert_eq!(plan.matching.node.time, before.time);
@@ -310,7 +310,7 @@ fn undock_splits_fuel_and_separates() {
     // Beide bleiben in derselben Ebene: keine Knoten AN/DN.
     let plane = world.plane_to_target(FERRY_ID).unwrap();
     assert!(plane.coplanar && plane.ascending.is_none(), "{plane:?}");
-    let period = kepler::period(world.bodies[0].gm, &b).unwrap();
+    let period = kepler::period(world.bodies[ZORB].gm, &b).unwrap();
     let now = world.time;
     world.advance_to(now + 0.5 * period);
     let half = gap(&world);

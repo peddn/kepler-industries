@@ -3,7 +3,7 @@
 
 use glam::DVec3;
 use sim::kepler::state_from_apsides;
-use sim::scenario::{FERRY, SATELLITE, demo, home_planet, moon};
+use sim::scenario::{FERRY, SATELLITE, ZORB, demo, home_planet, moon};
 use sim::{
     Crash, Launch, LaunchProfile, LogKind, ManeuverNode, StateVector, VesselParams, VesselStatus,
     World,
@@ -177,7 +177,7 @@ fn hop_to_practice_field() {
     let VesselStatus::Landed { point } = world.vessel_status(2) else {
         panic!("gelandet erwartet");
     };
-    assert_eq!(world.zone_at(0, &point), Some(field));
+    assert_eq!(world.zone_at(ZORB, &point), Some(field));
 }
 
 /// Außerhalb eines Zielgebiets: aufgesetzt, die Entfernung zum nächsten wird
@@ -248,7 +248,7 @@ fn landing_is_independent_of_step_size() {
 /// Kette. Startet in der Apoapsis.
 fn falling_to_zoon(thrust: f64) -> World {
     let planet = home_planet();
-    let moon = moon(&planet);
+    let moon = moon(0, &planet);
     let mut world = World::new(vec![planet, moon]);
     let (gm, r) = (world.bodies[1].gm, world.bodies[1].radius);
     let state = state_from_apsides(gm, r - 50_000.0, r + 30_000.0, 0.0, 0.0, 0.0, true);
@@ -352,7 +352,7 @@ fn landing_burn_is_saved() {
 #[test]
 fn too_late_to_brake() {
     let planet = home_planet();
-    let moon = moon(&planet);
+    let moon = moon(0, &planet);
     let mut world = World::new(vec![planet, moon]);
     let r = world.bodies[1].radius;
     let state = StateVector {

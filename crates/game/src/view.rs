@@ -103,9 +103,19 @@ pub fn orbit_points(near: bool) -> usize {
     }
 }
 
-/// Kugel (und Atmosphäre) eines Himmelskörpers.
+/// Kugel (oder Atmosphäre) eines Himmelskörpers mit ihrem Radius. Die Kugel
+/// selbst (`dot`) wird aus der Ferne nie kleiner als ein Punkt, damit man
+/// Planeten auch in der Übersicht findet; die Atmosphäre bleibt echt groß.
 #[derive(Component)]
-pub struct BodyMarker(BodyId);
+pub struct BodyMarker {
+    body: BodyId,
+    radius: f32,
+    dot: bool,
+}
+
+/// So groß ist ein Himmelskörper aus der Ferne mindestens, relativ zu den
+/// Markierungen der Schiffe.
+const BODY_DOT: f32 = 0.8;
 
 #[derive(Component)]
 pub struct BaseMarker(usize);
@@ -130,8 +140,10 @@ pub fn setup(
 ) {
     camera::spawn(&mut commands);
 
-    // Sonne: weit entfernt, daher paralleles Licht.
+    // Sonne: weit entfernt, daher paralleles Licht, aus ihrer Richtung
+    // (`aim_sunlight`).
     commands.spawn((
+        SunLight,
         DirectionalLight {
             illuminance: 6_000.0,
             ..default()
@@ -156,30 +168,52 @@ pub fn setup(
         ..default()
     };
 
+    let home = sim.0.home;
     for (b, body) in sim.0.bodies.iter().enumerate() {
-        // Der Planet grün, Monde grau.
-        let color = if b == 0 {
-            Color::srgb(0.18, 0.42, 0.32)
+        // Die Sonne leuchtet selbst; der Heimatplanet grün, andere Planeten
+        // mit Luft rostrot, Monde grau.
+        let material = if body.orbit.is_none() {
+            unlit(Color::srgb(1.0, 0.86, 0.45))
         } else {
-            Color::srgb(0.5, 0.5, 0.52)
-        };
-        commands.spawn((
-            BodyMarker(b),
-            Mesh3d(planet_sphere.clone()),
-            MeshMaterial3d(materials.add(StandardMaterial {
+            let color = if b == home {
+                Color::srgb(0.18, 0.42, 0.32)
+            } else if body.atmosphere.exists() {
+                Color::srgb(0.62, 0.33, 0.2)
+            } else {
+                Color::srgb(0.5, 0.5, 0.52)
+            };
+            StandardMaterial {
                 base_color: color,
                 perceptual_roughness: 0.9,
                 ..default()
-            })),
+            }
+        };
+        commands.spawn((
+            BodyMarker {
+                body: b,
+                radius: body.radius as f32,
+                dot: true,
+            },
+            Mesh3d(planet_sphere.clone()),
+            MeshMaterial3d(materials.add(material)),
             Transform::from_scale(Vec3::splat(body.radius as f32)),
         ));
         if body.atmosphere.exists() {
             let outer = (body.radius + body.atmosphere.top_altitude) as f32;
+            let haze = if b == home {
+                Color::srgba(0.45, 0.65, 1.0, 0.12)
+            } else {
+                Color::srgba(0.95, 0.65, 0.45, 0.10)
+            };
             commands.spawn((
-                BodyMarker(b),
+                BodyMarker {
+                    body: b,
+                    radius: outer,
+                    dot: false,
+                },
                 Mesh3d(sphere.clone()),
                 MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::srgba(0.45, 0.65, 1.0, 0.12),
+                    base_color: haze,
                     alpha_mode: AlphaMode::Blend,
                     unlit: true,
                     ..default()
@@ -220,6 +254,33 @@ fn marker_scale(position: Vec3, camera: Vec3) -> Vec3 {
     Vec3::splat(position.distance(camera) * MARKER_SCALE)
 }
 
+/// Das Licht der Sonne.
+#[derive(Component)]
+pub struct SunLight;
+
+/// Das Licht kommt aus der Richtung der Sonne (zum Fokus hin), so passen Tag
+/// und Nacht auf den Körpern. Ohne Sonne bleibt es, wie es ist.
+pub fn aim_sunlight(
+    sim: Res<Sim>,
+    rig: Res<CameraRig>,
+    mut light: Single<&mut Transform, With<SunLight>>,
+) {
+    let world = &sim.0;
+    let Some(sun) = world.bodies.iter().position(|b| b.orbit.is_none()) else {
+        return;
+    };
+    let from_sun = rig.focus - body_state(&world.bodies, sun, world.time).position;
+    if let Some(direction) = from_sun.try_normalize() {
+        let direction = dir_to_view(direction);
+        let up = if direction.y.abs() > 0.99 {
+            Vec3::X
+        } else {
+            Vec3::Y
+        };
+        **light = Transform::default().looking_to(direction, up);
+    }
+}
+
 /// Überträgt die Positionen aus der Simulation auf die Bevy-Objekte.
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn sync_markers(
@@ -247,9 +308,17 @@ pub fn sync_markers(
     let camera_position = camera.translation;
     let target = selection.0.and_then(|i| world.vessels[i].target);
 
-    for (BodyMarker(b), mut transform) in &mut planets {
-        let center = body_state(&world.bodies, *b, world.time).position;
+    for (marker, mut transform) in &mut planets {
+        let center = body_state(&world.bodies, marker.body, world.time).position;
         transform.translation = to_view(center, rig.focus);
+        let radius = if marker.dot {
+            marker
+                .radius
+                .max(marker_scale(transform.translation, camera_position).x * BODY_DOT)
+        } else {
+            marker.radius
+        };
+        transform.scale = Vec3::splat(radius);
     }
 
     for (BaseMarker(i), mut transform) in &mut bases {
@@ -268,12 +337,7 @@ pub fn sync_markers(
         let status = world.vessel_status(*i);
         let p = to_view(vessel_position(world, *i), rig.focus);
         transform.translation = p;
-        // Aus dem Heimatsystem hinaus: nicht mehr zu sehen.
-        transform.scale = if status == VesselStatus::Escaped {
-            Vec3::ZERO
-        } else {
-            marker_scale(p, camera_position)
-        };
+        transform.scale = marker_scale(p, camera_position);
         let wanted = match status {
             VesselStatus::Wreck { .. } => &materials.wreck,
             _ if selection.0 == Some(*i) => &materials.selected,
@@ -290,7 +354,13 @@ pub fn sync_markers(
 /// wäre die Rotation einer einfarbigen Kugel nicht zu sehen.
 pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) {
     let world = &sim.0;
-    for (b, body) in world.bodies.iter().enumerate() {
+    // Nicht auf der leuchtenden Sonne (ohne Bahn).
+    for (b, body) in world
+        .bodies
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| b.orbit.is_some())
+    {
         let center = body_state(&world.bodies, b, world.time).position;
         let radius = body.radius + GRID_LIFT;
         let point = |lat: f64, lon: f64| {
@@ -313,9 +383,10 @@ pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) 
     }
 }
 
-/// Bahnen der Monde um den Planeten (Ellipsen in ihrer Bahnebene) und ihre
-/// Einflusssphären. Die Einflusssphäre ist eine Kugel; gezeichnet wird ihr
-/// Umriss in der Bahnebene, beim gewählten Mond in dessen Farbe.
+/// Bahnen der Planeten und Monde um ihren Mutterkörper (Ellipsen in ihrer
+/// Bahnebene) und ihre Einflusssphären. Die Einflusssphäre ist eine Kugel;
+/// gezeichnet wird ihr Umriss in der Bahnebene, beim gewählten Körper in
+/// dessen Farbe.
 pub fn draw_body_orbits(
     sim: Res<Sim>,
     rig: Res<CameraRig>,
@@ -323,14 +394,18 @@ pub fn draw_body_orbits(
     mut gizmos: Gizmos,
 ) {
     let world = &sim.0;
-    let angles = || {
-        (0..=BODY_ORBIT_POINTS).map(|i| std::f64::consts::TAU * i as f64 / BODY_ORBIT_POINTS as f64)
+    let angles = |from: f64| {
+        (0..=BODY_ORBIT_POINTS)
+            .map(move |i| from + std::f64::consts::TAU * i as f64 / BODY_ORBIT_POINTS as f64)
     };
     for (b, body) in world.bodies.iter().enumerate() {
         let Some(orbit) = &body.orbit else { continue };
         let parent = body_state(&world.bodies, orbit.parent, world.time).position;
+        // Ein Eckpunkt liegt genau beim Körper: Die Sehnen einer großen Bahn
+        // weichen sonst nahe bei ihm sichtbar ab.
+        let now = orbit.eccentric_anomaly(world.bodies[orbit.parent].gm, world.time);
         gizmos.linestrip(
-            angles().map(|e| to_view(parent + orbit.point_at(e), rig.focus)),
+            angles(now).map(|e| to_view(parent + orbit.point_at(e), rig.focus)),
             BODY_ORBIT_COLOR,
         );
         let center = body_state(&world.bodies, b, world.time).position;
@@ -341,7 +416,7 @@ pub fn draw_body_orbits(
         };
         let (plane, soi) = (orbit.orientation(), sphere_of_influence(&world.bodies, b));
         gizmos.linestrip(
-            angles().map(|angle| {
+            angles(0.0).map(|angle| {
                 let (sin, cos) = angle.sin_cos();
                 to_view(center + plane * DVec3::new(cos, sin, 0.0) * soi, rig.focus)
             }),
@@ -394,9 +469,8 @@ pub fn draw_trajectories(
         .map(|t| world.host(t));
     let points = orbit_points(rig.near);
     for (i, vessel) in world.vessels.iter().enumerate() {
-        // Angedockte Schiffe fliegen mit ihrem Hauptschiff; aus dem
-        // Heimatsystem hinaus wird nichts mehr gezeichnet.
-        if vessel.docked_to.is_some() || world.vessel_status(i) == VesselStatus::Escaped {
+        // Angedockte Schiffe fliegen mit ihrem Hauptschiff.
+        if vessel.docked_to.is_some() {
             continue;
         }
         let orbit_color = if target == Some(i) {
@@ -629,8 +703,8 @@ pub fn draw_soi_changes(
 ) {
     let world = &sim.0;
     let eye = camera.translation;
-    for (i, vessel) in world.vessels.iter().enumerate() {
-        if vessel.docked_to.is_some() || world.vessel_status(i) == VesselStatus::Escaped {
+    for vessel in &world.vessels {
+        if vessel.docked_to.is_some() {
             continue;
         }
         let anchors = anchors(world, &vessel.trajectory);

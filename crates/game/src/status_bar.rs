@@ -159,10 +159,6 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             ),
             TEXT_COLOR,
         ),
-        LogKind::LeavesSystem => (
-            "verlässt das Heimatsystem (Sonnenorbit, nicht simuliert)".into(),
-            ATMOSPHERE_COLOR,
-        ),
     };
     Line {
         time: entry.time,

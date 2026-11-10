@@ -2,7 +2,7 @@
 
 use glam::DVec3;
 use sim::kepler::time_to_apoapsis;
-use sim::scenario::demo;
+use sim::scenario::{ZOON, ZORB, demo};
 use sim::{
     Crash, LOG_LIMIT, Launch, LaunchProfile, LogEntry, LogKind, ManeuverNode, Segment, World,
 };
@@ -31,7 +31,7 @@ fn launch_and_circularize() {
     world.set_launch(FERRY, launch).unwrap();
     world.set_armed(FERRY, true).unwrap();
     // Node an der Apoapsis der ersten Keplerbahn nach dem Aufstieg.
-    let gm = world.bodies[0].gm;
+    let gm = world.bodies[ZORB].gm;
     let burn_end = world.vessels[FERRY].trajectory.launch().unwrap().burn.end;
     let (start, state) = world.vessels[FERRY]
         .trajectory
@@ -148,7 +148,7 @@ fn landing_names_the_zone() {
         LogKind::Landed {
             point: touchdown.point,
             zone: Some(field),
-            body: 0,
+            body: ZORB,
         }
     );
 }
@@ -223,7 +223,7 @@ fn log_is_saved() {
 #[test]
 fn landing_on_the_moon_is_logged_with_its_body() {
     let mut world = sim::scenario::demo();
-    let moon = &world.bodies[1];
+    let moon = &world.bodies[ZOON];
     let (gm, r) = (moon.gm, moon.radius + 30_000.0);
     let near_side = world
         .zones
@@ -231,7 +231,7 @@ fn landing_on_the_moon_is_logged_with_its_body() {
         .position(|z| z.name == "Nahseite")
         .unwrap();
     let orbit = sim::kepler::state_from_apsides(gm, r, r, 0.0, 0.0, 0.0, false);
-    world.spawn_vessel("Lander", sim::scenario::FERRY, 2_000.0, 1, orbit);
+    world.spawn_vessel("Lander", sim::scenario::FERRY, 2_000.0, ZOON, orbit);
     let lander = world.vessels.len() - 1;
     // Absenken an verschiedenen Stellen, bis das Kreuz in der Nahseite liegt.
     let world = (0..1_000)
@@ -252,7 +252,7 @@ fn landing_on_the_moon_is_logged_with_its_body() {
         .expect("eine Stelle trifft die Nahseite");
     let mut world = world;
     let touchdown = world.touchdown(lander).unwrap();
-    assert_eq!(touchdown.body, 1);
+    assert_eq!(touchdown.body, ZOON);
     world.advance_to(touchdown.time + 1.0);
     let entry = world.log.last().unwrap();
     assert_eq!(
@@ -260,7 +260,7 @@ fn landing_on_the_moon_is_logged_with_its_body() {
         LogKind::Landed {
             point: touchdown.point,
             zone: Some(near_side),
-            body: 1,
+            body: ZOON,
         }
     );
 }
