@@ -39,6 +39,10 @@ pub const NEAR_MIN_DISTANCE: f64 = 10.0;
 pub const MAP_OBJECT_DISTANCE: f64 = 50_000.0;
 /// Abstand beim Einschalten der Nahansicht (höchstens, m).
 pub const NEAR_DISTANCE: f64 = 2_000.0;
+/// Bahnlinien in der Nahansicht: voll bis zum 3-fachen Kameraabstand vom
+/// Fokus, ab dem 10-fachen unsichtbar (siehe `CameraRig::fade`).
+const FADE_START: f32 = 3.0;
+const FADE_END: f32 = 10.0;
 
 #[derive(Resource)]
 pub struct CameraRig {
@@ -116,6 +120,19 @@ impl CameraRig {
             self.distance = self.distance.min(NEAR_DISTANCE);
         }
         self.clamp_distance();
+    }
+
+    /// Deckkraft einer Bahnlinie am Punkt `p` (relativ zum Fokus). In der
+    /// Nahansicht läuft sie mit dem Abstand vom Fokus aus, ab `FADE_START`
+    /// bis `FADE_END` mal dem Kameraabstand. Die Perspektive ist korrekt, aber
+    /// aus der Nähe sähe man den Rest des Umlaufs fast genau von der Kante, als
+    /// Linie mit scharfem Knick. Nur die Deckkraft ändert sich, nie die Lage.
+    pub fn fade(&self, p: Vec3) -> f32 {
+        if !self.near {
+            return 1.0;
+        }
+        let d = self.distance as f32;
+        ((FADE_END * d - p.length()) / ((FADE_END - FADE_START) * d)).clamp(0.0, 1.0)
     }
 
     /// Achsen der Kamera in Bevy-Koordinaten: oben, vorn (Gierwinkel 0) und

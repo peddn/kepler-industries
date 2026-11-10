@@ -352,7 +352,13 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   weg. Bahnen werden dann mit 4096 statt 256 Punkten pro Umlauf gezeichnet
   und angeklickt (sonst liegt ein Schiff bis 50 m neben seiner Linie). Treffer
   auf Bahnen werden in 3D mit dem Strahl unter der Maus gesucht, damit auch
-  Stücke zählen, deren Enden außerhalb des Bildes liegen. Die Planetenkugel
+  Stücke zählen, deren Enden außerhalb des Bildes liegen. Bahnlinien laufen
+  aus (`CameraRig::fade`): voll bis zum 3-fachen Kameraabstand vom Fokus,
+  ab dem 10-fachen unsichtbar und nicht mehr anklickbar. Aus 600 m sähe man
+  den Rest eines Umlaufs von 700 km Radius sonst fast genau von der Kante,
+  als senkrechte Linie mit Knick. Nur die Deckkraft ändert sich, kein Punkt
+  wird verschoben; mit dem Zoom wächst die Grenze, die Bahn kommt ganz zurück.
+  Die Planetenkugel
   ist auf etwa 6 m genau, Zielgebiete und Aufsetzkreuz liegen 2 m, das
   Gitter 10 m über dem Boden. Später kommen hier die Modelle der Schiffe hin.
 - **Seitenleiste rechts** für alles, was man bedient, als Karten je nach Lage

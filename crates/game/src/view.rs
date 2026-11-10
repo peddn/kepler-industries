@@ -327,7 +327,9 @@ pub fn draw_trajectories(
                     };
                     // Pro Umlauf `points` Stützpunkte, für Teilstücke anteilig.
                     let n = ((points as f64 * (to - from) / span).ceil() as usize).max(16);
-                    gizmos.linestrip(
+                    path(
+                        &mut gizmos,
+                        &rig,
                         (0..=n).map(|i| {
                             let t = from + (to - from) * i as f64 / n as f64;
                             to_view(segment.state_at(&world.bodies, t).position, rig.focus)
@@ -339,14 +341,7 @@ pub fn draw_trajectories(
                     let color = if burn.is_some() {
                         after_burn = true;
                         if segment.start() <= now && now < segment.end() {
-                            draw_momentary_orbit(
-                                &mut gizmos,
-                                world,
-                                segment,
-                                now,
-                                rig.focus,
-                                points,
-                            );
+                            draw_momentary_orbit(&mut gizmos, world, segment, now, &rig, points);
                         }
                         BURN_COLOR
                     } else {
@@ -359,7 +354,7 @@ pub fn draw_trajectories(
                         segment,
                         samples,
                         from,
-                        rig.focus,
+                        &rig,
                         color,
                         every,
                     );
@@ -368,7 +363,9 @@ pub fn draw_trajectories(
                 Segment::Approach { .. } => {
                     // Anflug zum Andocken: kurz und langsam, fein gezeichnet.
                     let (a, b) = (from, segment.end());
-                    gizmos.linestrip(
+                    path(
+                        &mut gizmos,
+                        &rig,
                         (0..=64).map(|i| {
                             let t = a + (b - a) * i as f64 / 64.0;
                             to_view(segment.state_at(&world.bodies, t).position, rig.focus)
@@ -390,7 +387,7 @@ fn draw_momentary_orbit(
     world: &World,
     segment: &Segment,
     now: f64,
-    focus: DVec3,
+    rig: &CameraRig,
     points: usize,
 ) {
     let body = &world.bodies[segment.body()];
@@ -403,10 +400,12 @@ fn draw_momentary_orbit(
     let to =
         kepler::time_to_radius_inbound(body.gm, &state, boundary).map_or(span, |dt| dt.min(span));
     let n = ((points as f64 * to / span).ceil() as usize).max(16);
-    gizmos.linestrip(
+    path(
+        gizmos,
+        rig,
         (0..=n).map(|i| {
             let dt = to * i as f64 / n as f64;
-            to_view(kepler::propagate(body.gm, state, dt).position, focus)
+            to_view(kepler::propagate(body.gm, state, dt).position, rig.focus)
         }),
         ORBIT_COLOR,
     );
@@ -420,19 +419,37 @@ fn draw_samples(
     segment: &Segment,
     samples: &[Sample],
     from: f64,
-    focus: DVec3,
+    rig: &CameraRig,
     color: Color,
     every: usize,
 ) {
     let start = segment.state_at(&world.bodies, from).position;
     let rest = samples.iter().filter(|s| s.time > from);
     let step = every.max(1);
-    gizmos.linestrip(
+    path(
+        gizmos,
+        rig,
         std::iter::once(start)
             .chain(rest.step_by(step).map(|s| s.state.position))
             .chain(std::iter::once(samples[samples.len() - 1].state.position))
-            .map(|p| to_view(p, focus)),
+            .map(|p| to_view(p, rig.focus)),
         color,
+    );
+}
+
+/// Bahnlinie durch `points` (relativ zum Fokus). In der Nahansicht läuft sie
+/// mit der Entfernung aus (`CameraRig::fade`); die Punkte bleiben, wo sie sind.
+fn path(
+    gizmos: &mut Gizmos,
+    rig: &CameraRig,
+    points: impl IntoIterator<Item = Vec3>,
+    color: Color,
+) {
+    let alpha = color.alpha();
+    gizmos.linestrip_gradient(
+        points
+            .into_iter()
+            .map(|p| (p, color.with_alpha(alpha * rig.fade(p)))),
     );
 }
 
