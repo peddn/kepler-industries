@@ -608,7 +608,7 @@ pub fn input(
                         node.delta_v[axis] += sign * rate * real_time.delta_secs_f64();
 
                         // Anschlag am Tankinhalt (Masse am Brennbeginn).
-                        let params = world.vessels[i].params;
+                        let params = world.params(i);
                         let available =
                             params.exhaust_velocity * (plan.burn.start_mass / params.dry_mass).ln();
                         let (limited, hit) =

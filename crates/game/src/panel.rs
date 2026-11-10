@@ -471,7 +471,7 @@ fn launch_result(world: &World, i: usize) -> String {
         );
     };
     let burn = &plan.burn;
-    let params = &world.vessels[i].params;
+    let params = world.params(i);
     let ascent = trajectory.segments().find(|s| s.is_burn());
     let altitude = ascent.map_or(0.0, |s| {
         s.state_at(&world.bodies, burn.end).position.length() - world.bodies[s.body()].radius

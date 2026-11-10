@@ -304,7 +304,7 @@ fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
         format!(
             "{when}, Dauer {:.1} s, Treibstoff danach {:.1} kg",
             burn.duration(),
-            burn.end_mass() - vessel.params.dry_mass
+            burn.end_mass() - world.params(i).dry_mass
         ),
     ];
     if burn.delta_v() < dv.length() - 0.05 {

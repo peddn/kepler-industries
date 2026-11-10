@@ -176,7 +176,7 @@ pub fn sync(
 ) {
     let world = &sim.0;
     let vessel = selection.0.filter(|&i| {
-        let params = &world.vessels[i].params;
+        let params = world.params(i);
         params.thrust > 0.0 && params.fuel_capacity > 0.0
     });
     shown.0 = vessel.is_some();
