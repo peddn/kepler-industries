@@ -473,9 +473,11 @@ pub fn draw_trajectories(
                     );
                 }
                 Segment::Integrated { samples, burn, .. } => {
-                    let color = if burn.is_some() {
+                    let color = if let Some(burn) = burn {
                         after_burn = true;
-                        if segment.start() <= now && now < segment.end() {
+                        // Beim Landebrennen ginge die momentane Bahn nur in
+                        // den Boden und verdeckte den Weg nach unten.
+                        if segment.start() <= now && now < segment.end() && !burn.is_landing() {
                             draw_momentary_orbit(
                                 &mut gizmos,
                                 world,
@@ -683,7 +685,7 @@ pub fn draw_touchdowns(
         let Some(t) = world.touchdown(i) else {
             continue;
         };
-        let color = match (t.braking, t.zone) {
+        let color = match (t.landing, t.zone) {
             (Ok(_), Some(_)) => ZONE_COLOR,
             (Ok(_), None) => OUTSIDE_COLOR,
             (Err(_), _) => IMPACT_COLOR,

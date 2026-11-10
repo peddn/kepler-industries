@@ -29,9 +29,12 @@ Apoapsis kann man schon vor dem Abheben setzen.
 Gelandet wird über einen Node, der die Bahn in die Luft führt. Die Vorschau
 rechnet bis zum Boden, mit Fallschirm (unter 3 km). Ein Kreuz zeigt, wo das
 Schiff aufsetzt: grün im Zielgebiet (grüne Kreise), gelb außerhalb, rot bei
-einem Absturz. Die letzte Bremsung ist abstrahiert: Die Geschwindigkeit am
-Boden muss als Δv abgebremst werden, mit genug Treibstoff und Schub größer als
-das Gewicht. Wer daneben landet, kommt mit einem Hop ins Ziel: einem Start mit
+einem Absturz. Das letzte Stück fliegt das Schiff selbst: Käme es schneller
+als 5 m/s am Boden an, zündet es vorher automatisch ein Landebrennen (gelb auf
+der Bahn, „Landen“ im Δv-Balken), voller Schub gegen die Bewegung zum Boden,
+so spät, dass es knapp über dem Boden zum Stehen kommt. Das braucht Schub
+größer als das Gewicht und genug Treibstoff; sonst wird gar nicht gebremst und
+das Schiff stürzt ab. Wer daneben landet, kommt mit einem Hop ins Ziel: einem Start mit
 niedriger Ziel-Apoapsis, zum Beispiel von der Startbasis zum Übungsfeld 60 km
 östlich (Kurs 90°, Ziel-Apoapsis etwa 27 km). Relais-1 und Sonde-2 sind
 Satelliten ohne Fallschirm und mit weniger Schub als Gewicht: Sie stürzen beim
@@ -86,8 +89,10 @@ Nahansicht liegt der Mond unten. Zum Ausprobieren: Mondfähre-4 mit 836 m/s
 prograd nach 10 Minuten (`--node 3,600,836,0,0`) fliegt in etwa 200 km Höhe
 am Mond vorbei; mit einem Brennen gegen die Flugrichtung an der Periapsis
 bleibt sie bei ihm. Gelandet wird auf Zoon wie auf Zorb über einen Node, nur
-ohne Luftbremsung und Fallschirm: Die ganze Geschwindigkeit wird beim
-Aufsetzen abgebremst, aus einer niedrigen Bahn etwa 600 m/s. Zielgebiete gibt
+ohne Luftbremsung und Fallschirm: Das Landebrennen bremst die ganze
+Geschwindigkeit, aus einer niedrigen Bahn mit viel Schub etwa 550 m/s. Mit
+wenig Schub kostet es mehr (bei Schub/Gewicht 1,5 etwa 700 m/s): Es beginnt
+höher, und die Schwerkraft zieht länger dagegen. Zielgebiete gibt
 es auf der Nahseite (Zorb im Zenit) und der Fernseite. Zurück geht es mit
 einem Start von Zoon (Voreinstellung siehe oben, die 30-km-Bahn kostet etwa
 670 m/s). Wer mehr als etwa 84.000 km vom Planeten wegfliegt,
@@ -108,7 +113,7 @@ Beispiel an zwei Schiffe beim Rendezvous.
 
 Ganz unten steht in der Statusleiste die letzte Meldung: Start, Brennbeginn
 und Brennschluss (mit der Bahn danach), Eintritt in die Atmosphäre (mit der
-Periapsis), Landung (grün) und Absturz (rot, mit Grund). Gelb dazwischen
+Periapsis), Landebrennen, Landung (grün) und Absturz (rot, mit Grund). Gelb dazwischen
 Hinweise der Bedienung, z. B. warum ein Node nicht geht. Ein Klick auf ▲
 rechts klappt die letzten Meldungen auf, mit Mausrad und Scrollleiste. So
 sieht man auch nach langem Zeitraffer, was passiert ist. Das Protokoll gehört

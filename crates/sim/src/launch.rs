@@ -206,6 +206,7 @@ pub fn plan(
             spin: body.spin(),
             kick: kick_radians(launch.profile.kick),
         }),
+        descent: None,
     };
 
     // Dieselben Schritte wie später in der Zeitleiste (`integrate_arc`).

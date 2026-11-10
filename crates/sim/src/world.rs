@@ -9,7 +9,7 @@ use crate::kepler::{self, StateVector};
 use crate::landing::{self, Crash, LandingZone};
 use crate::launch::Launch;
 use crate::log::{LOG_LIMIT, LogEntry, LogKind};
-use crate::maneuver::{self, ManeuverNode, PlanError};
+use crate::maneuver::{self, Burn, ManeuverNode, PlanError};
 use crate::rendezvous::{self, Approach, PlaneCrossing};
 use crate::trajectory::{Event, Segment, Trajectory};
 use serde::{Deserialize, Serialize};
@@ -48,7 +48,7 @@ pub enum BudgetItem {
     Launch,
     /// Node der Kette (Stelle in der Kette).
     Node(usize),
-    /// Bremsen beim Aufsetzen.
+    /// Landebrennen vor dem Aufsetzen.
     Landing,
     /// Andocken: Angleichen und Anflug.
     Docking,
@@ -60,14 +60,23 @@ pub struct Touchdown {
     pub time: f64,
     pub body: BodyId,
     pub point: SurfacePoint,
-    /// Geschwindigkeit relativ zum Boden kurz vor dem Aufsetzen (m/s).
+    /// Geschwindigkeit relativ zum Boden beim Aufsetzen (m/s).
     pub speed: f64,
-    /// Δv fürs Bremsen, oder warum es ein Absturz wird.
-    pub braking: Result<f64, Crash>,
+    /// Das Landebrennen davor (keins, wenn das Schiff ohnehin langsam genug
+    /// ist), oder warum es ein Absturz wird.
+    pub landing: Result<Option<LandingBurn>, Crash>,
     /// Zielgebiet, in dem der Punkt liegt.
     pub zone: Option<usize>,
     /// Nächstes Zielgebiet auf dem Körper und Abstand zum Mittelpunkt (m).
     pub nearest: Option<(usize, f64)>,
+}
+
+/// Das Landebrennen vor einem Bodenkontakt.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LandingBurn {
+    pub burn: Burn,
+    /// Höhe beim Zünden (m).
+    pub altitude: f64,
 }
 
 /// Wie sich das Δv eines Schiffs auf die geplanten Brennvorgänge verteilt.
@@ -226,24 +235,36 @@ impl World {
     }
 
     /// Vorausgesagter Bodenkontakt (nur in der Zukunft): wann, wo, wie schnell,
-    /// ob das Schiff aufsetzt, und das Zielgebiet.
+    /// mit welchem Landebrennen oder warum ein Absturz, und das Zielgebiet.
     pub fn touchdown(&self, vessel: usize) -> Option<Touchdown> {
-        let v = &self.vessels[self.host(vessel)];
-        let segment = v
-            .trajectory
+        let trajectory = &self.vessels[self.host(vessel)].trajectory;
+        let segment = trajectory
             .segments()
             .find(|s| s.end_event() == Some(Event::GroundContact) && s.end() > self.time)?;
         let (body_id, time) = (segment.body(), segment.end());
         let body = &self.bodies[body_id];
         let state = segment.state_at(&self.bodies, time);
-        let mass = segment.mass_at(time);
         let (point, _) = body.inertial_to_surface(state.position, time);
+        let speed = landing::ground_speed(body, &state);
+        let landing = if speed > landing::SAFE_SPEED {
+            Err(segment.crash().unwrap_or(Crash::TooLate))
+        } else {
+            Ok(trajectory.landing().map(|&burn| {
+                let ignition = trajectory
+                    .predicted_state(&self.bodies, burn.start)
+                    .map_or(f64::NAN, |(_, s)| s.position.length());
+                LandingBurn {
+                    burn,
+                    altitude: ignition - body.radius,
+                }
+            }))
+        };
         Some(Touchdown {
             time,
             body: body_id,
             point,
-            speed: landing::ground_speed(body, &state),
-            braking: landing::braking(body, &self.params(vessel), &state, mass),
+            speed,
+            landing,
             zone: self.zone_at(body_id, &point),
             nearest: self.nearest_zone(body_id, &point),
         })
@@ -741,12 +762,21 @@ impl World {
     }
 
     /// Frühester Brennbeginn nach jetzt unter den Schiffen, bei denen der
-    /// Zeitraffer dafür anhalten soll.
+    /// Zeitraffer dafür anhalten soll: das erste Brennen einer scharfen Kette
+    /// oder das Landebrennen (das kommt immer).
     pub fn next_halting_burn(&self) -> Option<f64> {
         self.vessels
             .iter()
-            .filter(|v| v.halt_warp_at_burn && v.docked_to.is_none() && v.trajectory.armed())
-            .filter_map(|v| v.trajectory.burns().first().map(|b| b.start))
+            .filter(|v| v.halt_warp_at_burn && v.docked_to.is_none())
+            .flat_map(|v| {
+                let chain = v
+                    .trajectory
+                    .armed()
+                    .then(|| v.trajectory.burns().first().copied());
+                [chain.flatten(), v.trajectory.landing().copied()]
+            })
+            .flatten()
+            .map(|b| b.start)
             .filter(|&start| start > self.time)
             .min_by(f64::total_cmp)
     }
@@ -890,18 +920,19 @@ impl World {
             }
             end_mass = plan.end_mass;
         }
-        let mut rest = ve * (end_mass / params.dry_mass).ln();
-        // Bremsen beim Aufsetzen; reicht der Rest nicht, fehlt die Differenz.
+        // Das Landebrennen; reicht der Treibstoff nicht, alles, was nach der
+        // Kette bleibt, und was dann noch fehlt.
         if let Some(touchdown) = self.touchdown(index) {
-            match touchdown.braking {
-                Ok(delta_v) if delta_v > 0.0 => {
-                    burns.push((BudgetItem::Landing, delta_v));
-                    rest -= delta_v;
+            match touchdown.landing {
+                Ok(Some(LandingBurn { burn, .. })) if burn.end > now => {
+                    let from = burn.mass_at(now.max(burn.start));
+                    burns.push((BudgetItem::Landing, ve * (from / burn.end_mass()).ln()));
+                    end_mass = burn.end_mass();
                 }
-                Err(Crash::NoFuel { available }) => {
-                    burns.push((BudgetItem::Landing, available));
-                    missing += touchdown.speed - available;
-                    rest = 0.0;
+                Err(Crash::NoFuel { missing: short, .. }) => {
+                    burns.push((BudgetItem::Landing, ve * (end_mass / params.dry_mass).ln()));
+                    missing += short;
+                    end_mass = params.dry_mass;
                 }
                 _ => {}
             }
@@ -910,7 +941,7 @@ impl World {
             full: params.full_delta_v(),
             available: ve * (mass / params.dry_mass).ln(),
             burns,
-            rest: rest.max(0.0),
+            rest: ve * (end_mass / params.dry_mass).ln(),
             missing,
         }
     }

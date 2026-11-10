@@ -19,12 +19,17 @@
 //! An der Grenze einer Einflusssphäre (siehe `soi`) endet ein Abschnitt; der
 //! nächste läuft um den anderen Körper weiter, ein Brennen ebenso. Jeder
 //! Abschnitt rechnet relativ zu seinem Körper.
+//!
+//! Endet ein Freiflug zu schnell am Boden, endet sein Abschnitt stattdessen
+//! am Beginn des Landebrennens (siehe `landing`); das ist ein `Integrated`-
+//! Abschnitt mit Schub wie jedes Brennen, danach fällt das Schiff die letzten
+//! Zentimeter.
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::docking::{self, DockError, DockPlan, DockRequest, Docking};
 use crate::integrator::{self, Forces, Sample};
 use crate::kepler::{self, StateVector};
-use crate::landing;
+use crate::landing::{self, Crash, Outcome};
 use crate::launch::{self, Launch, LaunchPlan};
 use crate::log::LogKind;
 use crate::maneuver::{self, Burn, ManeuverNode, Plan, PlanError};
@@ -46,8 +51,10 @@ pub enum Event {
     AtmosphereEntry,
     /// Verlassen der Atmosphäre: weiter auf einer Keplerbahn.
     AtmosphereExit,
-    /// Bodenberührung: Wrack.
+    /// Bodenberührung: aufgesetzt oder Wrack.
     GroundContact,
+    /// Beginn des automatischen Landebrennens (siehe `landing`).
+    LandingStart,
     /// Beginn des geplanten Brennmanövers.
     BurnStart,
     /// Ende des Brennmanövers.
@@ -76,7 +83,10 @@ impl Event {
 
     /// Die Bahn führt in die Luft oder auf den Boden.
     pub fn is_descent(self) -> bool {
-        matches!(self, Event::AtmosphereEntry | Event::GroundContact)
+        matches!(
+            self,
+            Event::AtmosphereEntry | Event::GroundContact | Event::LandingStart
+        )
     }
 }
 
@@ -91,6 +101,9 @@ pub enum Segment {
         /// Zeitpunkt und Art des Endes; `None`, wenn die Bahn weder Luft noch
         /// Boden berührt und kein Manöver geplant ist.
         end: Option<(f64, Event)>,
+        /// Endet der Freiflug mit einem Absturz: warum nicht gebremst wird.
+        #[serde(default)]
+        crash: Option<Crash>,
     },
     Integrated {
         body: BodyId,
@@ -101,6 +114,9 @@ pub enum Segment {
         /// Brennmanöver, falls in diesem Abschnitt das Triebwerk läuft.
         burn: Option<Burn>,
         end_event: Event,
+        /// Endet der Freiflug mit einem Absturz: warum nicht gebremst wird.
+        #[serde(default)]
+        crash: Option<Crash>,
     },
     Surface {
         body: BodyId,
@@ -173,6 +189,25 @@ impl Segment {
         matches!(self, Segment::Integrated { burn: Some(_), .. })
     }
 
+    /// Das Landebrennen, falls dieser Abschnitt eins ist.
+    pub fn landing_burn(&self) -> Option<&Burn> {
+        match self {
+            Segment::Integrated {
+                burn: Some(burn), ..
+            } if burn.is_landing() => Some(burn),
+            _ => None,
+        }
+    }
+
+    /// Endet der Abschnitt mit einem Absturz: warum (ohne Angabe: ein Brennen
+    /// führt in den Boden).
+    pub fn crash(&self) -> Option<Crash> {
+        match self {
+            Segment::Kepler { crash, .. } | Segment::Integrated { crash, .. } => *crash,
+            _ => None,
+        }
+    }
+
     pub fn mass_at(&self, t: f64) -> f64 {
         match self {
             Segment::Integrated {
@@ -196,12 +231,15 @@ impl Segment {
         match self {
             Segment::Kepler { start, state, .. } => kepler::propagate(body.gm, *state, t - start),
             Segment::Integrated { samples, .. } => {
-                // Erster Stützpunkt mit Zeit >= t, dann zwischen Vorgänger und ihm interpolieren.
+                // Erster Stützpunkt mit Zeit >= t, dann zwischen Vorgänger und
+                // ihm interpolieren (genau auf ihm: sein Zustand).
                 let i = samples.partition_point(|s| s.time < t);
                 if i == 0 {
                     samples[0].state
                 } else if i >= samples.len() {
                     samples[samples.len() - 1].state
+                } else if samples[i].time == t {
+                    samples[i].state
                 } else {
                     integrator::interpolate(&samples[i - 1], &samples[i], t)
                 }
@@ -238,8 +276,9 @@ impl Segment {
             Event::AtmosphereEntry => {
                 integrated(bodies, params, body, t, state, mass, None, pending)
             }
-            Event::AtmosphereExit => kepler_segment(bodies, body, t, state, mass, pending),
-            Event::GroundContact => touchdown(bodies, params, body, t, state, mass),
+            Event::AtmosphereExit => kepler_segment(bodies, params, body, t, state, mass, pending),
+            Event::GroundContact => touchdown(bodies, body, t, state, mass),
+            Event::LandingStart => landing_burn(bodies, params, body, t, state, mass),
             Event::BurnStart | Event::Liftoff => {
                 let burn = *pending?;
                 integrated(bodies, params, body, t, state, mass, Some(burn), None)
@@ -249,7 +288,9 @@ impl Segment {
                 Segment::Integrated {
                     burn: Some(burn), ..
                 } => integrated(bodies, params, body, t, state, mass, Some(*burn), None),
-                Segment::Kepler { .. } => kepler_segment(bodies, body, t, state, mass, pending),
+                Segment::Kepler { .. } => {
+                    kepler_segment(bodies, params, body, t, state, mass, pending)
+                }
                 _ => integrated(bodies, params, body, t, state, mass, None, pending),
             },
             Event::SoiEntry(_) | Event::SoiExit => {
@@ -274,12 +315,14 @@ fn burn_start_after(pending: Option<&Burn>, t: f64) -> Option<f64> {
     pending.map(|b| b.start).filter(|&s| s >= t)
 }
 
-/// Keplerabschnitt ab `t`, inklusive seines Endereignisses: Luft oder Boden,
-/// Verlassen der Einflusssphäre, Brennbeginn; kann die Bahn die Sphäre eines
-/// Monds erreichen, außerdem deren Eintritt (gesucht bis zum Ende des
-/// Suchfensters, sonst endet der Abschnitt dort mit `Continue`).
+/// Keplerabschnitt ab `t`, inklusive seines Endereignisses: Luft oder Boden
+/// (davor eventuell das Landebrennen), Verlassen der Einflusssphäre,
+/// Brennbeginn; kann die Bahn die Sphäre eines Monds erreichen, außerdem
+/// deren Eintritt (gesucht bis zum Ende des Suchfensters, sonst endet der
+/// Abschnitt dort mit `Continue`).
 fn kepler_segment(
     bodies: &[Body],
+    params: &VesselParams,
     body_id: BodyId,
     t: f64,
     state: StateVector,
@@ -311,17 +354,28 @@ fn kepler_segment(
             end = Some((window, Event::Continue));
         }
     }
+    let mut crash = None;
+    if let Some((contact, Event::GroundContact)) = end {
+        let at = |time: f64| kepler::propagate(body.gm, state, time - t);
+        match plan_landing(bodies, params, body_id, t, (contact, at(contact)), mass, at) {
+            Some(Ok(ignition)) => end = Some((ignition, Event::LandingStart)),
+            Some(Err(reason)) => crash = Some(reason),
+            None => {}
+        }
+    }
     Segment::Kepler {
         body: body_id,
         start: t,
         state,
         mass,
         end,
+        crash,
     }
 }
 
 /// Schrittweise berechneter Abschnitt: mit Schub, wenn `burn` gesetzt ist,
-/// sonst Freiflug durch die Luft (endet spätestens am Beginn von `pending`).
+/// sonst Freiflug durch die Luft (endet spätestens am Beginn von `pending`,
+/// vor dem Boden eventuell mit dem Landebrennen).
 #[allow(clippy::too_many_arguments)]
 fn integrated(
     bodies: &[Body],
@@ -330,7 +384,7 @@ fn integrated(
     t: f64,
     state: StateVector,
     mass: f64,
-    burn: Option<Burn>,
+    mut burn: Option<Burn>,
     pending: Option<&Burn>,
 ) -> Segment {
     let forces = Forces {
@@ -345,15 +399,97 @@ fn integrated(
         None => burn_start_after(pending, t).map(|s| (s, Event::BurnStart)),
     };
     let watch = soi::Watch::new(bodies, body_id);
-    let (samples, end_event) =
+    let (mut samples, mut end_event) =
         integrator::integrate_arc(&forces, Sample { time: t, state }, stop, &watch);
+    let mut crash = None;
+    let last = samples[samples.len() - 1];
+    match burn {
+        // Das Landebrennen endet, sobald das Schiff steht.
+        Some(b) if b.is_landing() && end_event == Event::BurnEnd => {
+            burn = Some(Burn {
+                end: last.time,
+                ..b
+            });
+        }
+        None if end_event == Event::GroundContact => {
+            let contact = (last.time, last.state);
+            let at = |time: f64| integrator::state_on_arc(&forces, &samples, time);
+            match plan_landing(bodies, params, body_id, t, contact, mass, at) {
+                Some(Ok(ignition)) => {
+                    let state = at(ignition);
+                    samples.retain(|s| s.time < ignition);
+                    samples.push(Sample {
+                        time: ignition,
+                        state,
+                    });
+                    end_event = Event::LandingStart;
+                }
+                Some(Err(reason)) => crash = Some(reason),
+                None => {}
+            }
+        }
+        _ => {}
+    }
     Segment::Integrated {
         body: body_id,
         samples,
         mass,
         burn,
         end_event,
+        crash,
     }
+}
+
+/// Landebrennen ab `t` (siehe `landing`): voller Schub gegen die Bewegung
+/// zum Boden, bis das Schiff steht.
+fn landing_burn(
+    bodies: &[Body],
+    params: &VesselParams,
+    body_id: BodyId,
+    t: f64,
+    state: StateVector,
+    mass: f64,
+) -> Segment {
+    let burn = Burn::landing(t, mass, params, &bodies[body_id], &state);
+    integrated(bodies, params, body_id, t, state, mass, Some(burn), None)
+}
+
+/// Ein Freiflug ab `from` trifft auf den Boden (`contact`: Zeitpunkt und
+/// Zustand); `at(t)` ist sein Zustand davor (genau wie in der Zeitleiste). Zu
+/// schnell dafür: Beginn des Landebrennens, oder warum nicht gebremst wird.
+/// `None`: langsam genug.
+fn plan_landing(
+    bodies: &[Body],
+    params: &VesselParams,
+    body_id: BodyId,
+    from: f64,
+    (contact, contact_state): (f64, StateVector),
+    mass: f64,
+    at: impl Fn(f64) -> StateVector,
+) -> Option<Result<f64, Crash>> {
+    let body = &bodies[body_id];
+    let speed = landing::ground_speed(body, &contact_state);
+    if speed <= landing::SAFE_SPEED {
+        return None;
+    }
+    Some(landing::latest_start(
+        body,
+        params,
+        mass,
+        from,
+        contact,
+        speed,
+        |t| {
+            let Segment::Integrated {
+                samples, end_event, ..
+            } = landing_burn(bodies, params, body_id, t, at(t), mass)
+            else {
+                unreachable!("Brennen wird schrittweise berechnet");
+            };
+            let end = samples[samples.len() - 1].state;
+            Outcome::of(body, end_event == Event::GroundContact, &end)
+        },
+    ))
 }
 
 /// Freiflug ab `t`: schrittweise, wenn dort Luft ist, sonst Kepler.
@@ -371,7 +507,7 @@ fn coast(
     if body.atmosphere.density(altitude) > 0.0 {
         integrated(bodies, params, body_id, t, state, mass, None, pending)
     } else {
-        kepler_segment(bodies, body_id, t, state, mass, pending)
+        kepler_segment(bodies, params, body_id, t, state, mass, pending)
     }
 }
 
@@ -417,18 +553,16 @@ fn orbit_end(bodies: &[Body], body_id: BodyId, t0: f64, state: &StateVector, unt
 
 /// Protokolleintrag für das Ende des Abschnitts `done` (auf ihn folgt `next`).
 /// Zielgebiete kennt die Zeitleiste nicht, die trägt `World` nach.
-fn log_entry(
-    bodies: &[Body],
-    params: &VesselParams,
-    done: &Segment,
-    next: &Segment,
-) -> Option<LogKind> {
+fn log_entry(bodies: &[Body], done: &Segment, next: &Segment) -> Option<LogKind> {
     let at = done.end();
     let body = &bodies[done.body()];
     let altitude = |r: f64| r - body.radius;
     Some(match done.end_event()? {
         Event::Liftoff => LogKind::Liftoff,
         Event::BurnStart => LogKind::BurnStart,
+        Event::LandingStart => LogKind::LandingBurn,
+        // Nach dem Landebrennen folgt gleich das Aufsetzen.
+        Event::BurnEnd if done.landing_burn().is_some() => return None,
         Event::BurnEnd => {
             let info = kepler::orbit_info(body.gm, &done.state_at(bodies, at));
             LogKind::BurnEnd {
@@ -447,12 +581,10 @@ fn log_entry(
                 return None;
             };
             if *wreck {
-                let state = done.state_at(bodies, at);
-                let reason = landing::braking(body, params, &state, done.mass_at(at)).err()?;
                 LogKind::Crashed {
                     point: *point,
                     zone: None,
-                    reason,
+                    reason: done.crash().unwrap_or(Crash::TooLate),
                     body: done.body(),
                 }
             } else {
@@ -478,25 +610,16 @@ fn log_entry(
     })
 }
 
-/// Bodenkontakt: aufsetzen (Treibstoff fürs Bremsen abgezogen) oder Wrack,
-/// siehe `landing`.
-fn touchdown(
-    bodies: &[Body],
-    params: &VesselParams,
-    body_id: BodyId,
-    t: f64,
-    state: StateVector,
-    mass: f64,
-) -> Segment {
+/// Bodenkontakt: aufgesetzt, oder zu schnell und ein Wrack (siehe `landing`).
+fn touchdown(bodies: &[Body], body_id: BodyId, t: f64, state: StateVector, mass: f64) -> Segment {
     let body = &bodies[body_id];
     let (point, _) = body.inertial_to_surface(state.position, t);
-    let braking = landing::braking(body, params, &state, mass);
     Segment::Surface {
         body: body_id,
         start: t,
         point,
-        mass: braking.map_or(mass, |dv| landing::mass_after(params, mass, dv)),
-        wreck: braking.is_err(),
+        mass,
+        wreck: landing::ground_speed(body, &state) > landing::SAFE_SPEED,
         liftoff: None,
     }
 }
@@ -579,6 +702,7 @@ fn restart(
             ..
         } => Some(kepler_segment(
             bodies,
+            params,
             *body,
             *start,
             *state,
@@ -1007,7 +1131,7 @@ impl Trajectory {
                 .segments
                 .pop_front()
                 .expect("mindestens zwei Abschnitte");
-            if let Some(kind) = log_entry(bodies, params, &done, &self.segments[0]) {
+            if let Some(kind) = log_entry(bodies, &done, &self.segments[0]) {
                 log.push((at, kind));
             }
             if done.end_event() == Some(Event::GroundContact) {
@@ -1015,9 +1139,13 @@ impl Trajectory {
                 self.launch = None;
                 self.nodes.clear();
                 self.docking = None;
-            } else if done.is_burn() && !done.end_event().is_some_and(Event::continues) {
+            } else if done.is_burn()
+                && done.landing_burn().is_none()
+                && !done.end_event().is_some_and(Event::continues)
+            {
                 // Ausgeführt: zuerst der Aufstieg, dann die Nodes der Reihe
-                // nach. Das Angleichen bleibt stehen, bis angedockt ist.
+                // nach. Das Angleichen bleibt stehen, bis angedockt ist. Das
+                // Landebrennen gehört nicht zur Kette.
                 if self.launch.is_some() {
                     self.launch = None;
                 } else if !self.nodes.is_empty() {
@@ -1377,6 +1505,11 @@ impl Trajectory {
             };
         }
         (angle / std::f64::consts::TAU + 1e-9).floor() as u32
+    }
+
+    /// Das Landebrennen auf der vorausberechneten Bahn (auch das laufende).
+    pub fn landing(&self) -> Option<&Burn> {
+        self.segments.iter().find_map(Segment::landing_burn)
     }
 
     /// Vorausberechneter Absturz: Zeitpunkt, Körper und Ort.

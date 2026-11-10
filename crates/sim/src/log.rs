@@ -30,6 +30,8 @@ pub enum LogKind {
     Liftoff,
     /// Ein geplantes Brennen beginnt.
     BurnStart,
+    /// Das Landebrennen beginnt (siehe `landing`).
+    LandingBurn,
     /// Brennschluss und die Bahn danach (Apoapsis `None` bei offener Bahn).
     BurnEnd {
         apoapsis: Option<f64>,

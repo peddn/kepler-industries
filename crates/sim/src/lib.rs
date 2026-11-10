@@ -30,5 +30,6 @@ pub use maneuver::{Burn, ManeuverNode, Plan, PlanError};
 pub use rendezvous::{Approach, PlaneCrossing};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
 pub use world::{
-    Base, BudgetItem, DeltaVBudget, Touchdown, Vessel, VesselParams, VesselStatus, World,
+    Base, BudgetItem, DeltaVBudget, LandingBurn, Touchdown, Vessel, VesselParams, VesselStatus,
+    World,
 };
