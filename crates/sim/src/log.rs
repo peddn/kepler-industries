@@ -59,10 +59,8 @@ pub enum LogKind {
     Docked { host: usize },
     /// Vom Verbund um das Hauptschiff `host` abgedockt, mit `fuel` kg.
     Undocked { host: usize, fuel: f64 },
-    /// In die Einflusssphäre des Monds `body` eingetreten; Periapsis über ihm.
+    /// In die Einflusssphäre von `body` eingetreten; Periapsis über ihm.
     SoiEntry { body: BodyId, periapsis: f64 },
-    /// Die Einflusssphäre des Monds `body` verlassen (zurück zum Planeten).
+    /// Die Einflusssphäre von `body` verlassen (zurück zum Mutterkörper).
     SoiExit { body: BodyId },
-    /// Das Heimatsystem verlassen: Sonnenorbit, nicht simuliert.
-    LeavesSystem,
 }

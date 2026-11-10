@@ -65,13 +65,11 @@ pub enum Event {
     Liftoff,
     /// Kontakt beim Andocken: Das Schiff wird Teil eines Verbunds.
     Docking,
-    /// Eintritt in die Einflusssphäre des Monds: weiter um ihn.
+    /// Eintritt in die Einflusssphäre eines Körpers (Mond oder Planet):
+    /// weiter um ihn.
     SoiEntry(BodyId),
-    /// Verlassen der Einflusssphäre eines Monds: weiter um den Mutterkörper.
+    /// Verlassen der Einflusssphäre: weiter um den Mutterkörper.
     SoiExit,
-    /// Verlassen der Einflusssphäre des Planeten: Das Schiff verlässt das
-    /// Heimatsystem, die Zeitleiste endet (Sonnenorbit, nicht simuliert).
-    LeavesSystem,
 }
 
 impl Event {
@@ -303,9 +301,8 @@ impl Segment {
                     _ => coast(bodies, params, to, t, state, mass, pending),
                 }
             }
-            // Danach geht es im Verbund weiter (siehe `World`); aus dem
-            // Heimatsystem hinaus wird nicht mehr simuliert.
-            Event::Docking | Event::LeavesSystem => return None,
+            // Danach geht es im Verbund weiter (siehe `World`).
+            Event::Docking => return None,
         })
     }
 }
@@ -337,8 +334,7 @@ fn kepler_segment(
     };
     let natural = kepler::time_to_radius_inbound(body.gm, &state, body.boundary_radius())
         .map(|dt| (t + dt, natural_event));
-    let exit = soi::exit_time(bodies, body_id, t, &state)
-        .map(|t_exit| (t_exit, soi::exit_event(bodies, body_id)));
+    let exit = soi::exit_time(bodies, body_id, t, &state).map(|t_exit| (t_exit, Event::SoiExit));
     let burn = burn_start_after(pending, t).map(|t_burn| (t_burn, Event::BurnStart));
     // Bei Gleichstand gewinnt das erste: Luft oder Boden vor allem anderen.
     let mut end = [natural, exit, burn]
@@ -604,7 +600,6 @@ fn log_entry(bodies: &[Body], done: &Segment, next: &Segment) -> Option<LogKind>
             }
         }
         Event::SoiExit => LogKind::SoiExit { body: done.body() },
-        Event::LeavesSystem => LogKind::LeavesSystem,
         // Andocken trägt `World` ein (sie kennt das Hauptschiff).
         Event::AtmosphereExit | Event::Continue | Event::Docking => return None,
     })
@@ -776,10 +771,7 @@ fn locate(
         }
     } else {
         leg.find(|s| s.start() <= node.time && node.time < s.end())
-            .ok_or(match segments.back().and_then(Segment::end_event) {
-                Some(Event::LeavesSystem) => PlanError::LeftSystem,
-                _ => PlanError::BeyondPrediction,
-            })?
+            .ok_or(PlanError::BeyondPrediction)?
     };
     if matches!(segment, Segment::Surface { .. }) {
         return Err(PlanError::OnGround);

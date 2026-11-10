@@ -1,13 +1,13 @@
 //! Tests für den Wechsel der Einflusssphäre: Mond-Vorbeiflug, Brennen über
-//! die Grenze, Einfang, Verlassen des Heimatsystems.
+//! die Grenze, Einfang, Bahn um die Sonne, Flug zu Nura.
 
 use glam::DVec3;
 use sim::body::{body_state, sphere_of_influence};
 use sim::kepler::{StateVector, orbit_info, state_from_apsides};
 use sim::log::LogKind;
-use sim::scenario::{FERRY, home_planet, moon};
+use sim::scenario::{FERRY, NURA, ZOON, ZORB, ZUNN, home_planet, moon, solar_system};
 use sim::trajectory::{Event, Segment};
-use sim::{ManeuverNode, PlanError, VesselStatus, World};
+use sim::{ManeuverNode, VesselStatus, World};
 use std::f64::consts::PI;
 
 const MOON: usize = 1;
@@ -18,7 +18,7 @@ const BURN: f64 = 1_000.0;
 /// Planet und Mond, ohne Schiffe.
 fn system() -> World {
     let planet = home_planet();
-    let moon = moon(&planet);
+    let moon = moon(0, &planet);
     World::new(vec![planet, moon])
 }
 
@@ -262,64 +262,95 @@ fn demo_ferry_reaches_the_moon() {
         .collect();
     let entry = s
         .iter()
-        .position(|x| matches!(x.end_event(), Some(Event::SoiEntry(MOON))))
+        .position(|x| matches!(x.end_event(), Some(Event::SoiEntry(ZOON))))
         .expect("Begegnung");
-    let moon = &world.bodies[MOON];
+    let moon = &world.bodies[ZOON];
     let state = s[entry + 1].state_at(&world.bodies, s[entry].end());
     let periapsis = orbit_info(moon.gm, &state).periapsis - moon.radius;
     assert!(periapsis > 50_000.0 && periapsis < 500_000.0, "{periapsis}");
 }
 
-/// Schnell genug hinaus: Die Zeitleiste endet am Rand des Heimatsystems
-/// (84.159 km). Danach ist das Schiff im Sonnenorbit, nicht simuliert; das
-/// Protokoll trägt es genau einmal ein, neue Nodes gehen nicht mehr.
+/// Schnell genug hinaus: Am Rand von Zorbs Einflusssphäre (84.159 km)
+/// wechselt die Bahn zu Zunn und geht dort weiter; das Protokoll trägt den
+/// Wechsel ein, auf der Bahn um die Sonne lassen sich Nodes setzen.
 #[test]
-fn escape_leaves_the_home_system() {
-    let mut world = system();
-    let gm = world.bodies[0].gm;
-    let r1 = world.bodies[0].radius + LOW;
-    // Brennen bei +X, weit weg vom Mond (der steht bei −X).
-    ferry_at(&mut world, -(gm / r1.powi(3)).sqrt() * BURN);
+fn escape_goes_around_the_sun() {
+    let mut world = World::new(solar_system());
+    world.home = ZORB;
+    let (gm, r) = (world.bodies[ZORB].gm, world.bodies[ZORB].radius + LOW);
+    let state = state_from_apsides(gm, r, r, 0.0, 0.0, 0.0, false);
+    world.spawn_vessel("Fähre", FERRY, 4_000.0, ZORB, state);
     let node = ManeuverNode {
         time: BURN,
         delta_v: DVec3::new(1_500.0, 0.0, 0.0),
     };
     world.add_node(0, node).unwrap();
     world.set_armed(0, true).unwrap();
-    let last = world.vessels[0]
-        .trajectory
-        .segments()
-        .last()
-        .unwrap()
-        .clone();
-    assert_eq!(last.end_event(), Some(Event::LeavesSystem));
-    assert!(
-        !segments(&world)
-            .iter()
-            .any(|x| matches!(x.end_event(), Some(Event::SoiEntry(_))))
-    );
-    let r = last.state_at(&world.bodies, last.end()).position.length();
-    assert!(
-        (r - sphere_of_influence(&world.bodies, 0)).abs() < 1.0,
-        "{r}"
-    );
-
-    world.advance_to(last.end() - 100.0);
-    assert!(matches!(world.vessel_status(0), VesselStatus::Orbit { .. }));
-    world.advance_to(last.end() + 100.0);
-    world.advance_to(last.end() + 200.0);
-    assert_eq!(world.vessel_status(0), VesselStatus::Escaped);
-    let left: Vec<_> = world
-        .log
+    let s = segments(&world);
+    let exit = s
         .iter()
-        .filter(|e| e.kind == LogKind::LeavesSystem)
-        .collect();
-    assert_eq!(left.len(), 1);
-    assert_eq!(left[0].time, last.end());
+        .position(|x| x.end_event() == Some(Event::SoiExit))
+        .expect("verlässt Zorb");
+    assert_eq!(s[exit].body(), ZORB);
+    assert_eq!(s[exit + 1].body(), ZUNN);
+    let t = s[exit].end();
+    let r_exit = s[exit].state_at(&world.bodies, t).position.length();
+    let soi = sphere_of_influence(&world.bodies, ZORB);
+    assert!((soi / 84_159_286.0 - 1.0).abs() < 1e-6, "{soi}");
+    assert!((r_exit - soi).abs() < 1.0, "{r_exit}");
+    // Um die Sonne: gebunden, fast auf Zorbs Bahn.
+    let sun = &world.bodies[ZUNN];
+    let around_sun = s[exit + 1].state_at(&world.bodies, t);
+    let info = orbit_info(sun.gm, &around_sun);
+    assert!(info.apoapsis.is_some());
+    let distance = around_sun.position.length();
+    assert!(
+        (distance / 13_599_840_256.0 - 1.0).abs() < 0.01,
+        "{distance}"
+    );
 
+    world.advance_to(t + 100.0);
+    assert!(matches!(world.vessel_status(0), VesselStatus::Orbit { .. }));
+    assert_eq!(world.vessel_state(0).0, ZUNN);
+    assert!(
+        world
+            .log
+            .iter()
+            .any(|e| e.kind == LogKind::SoiExit { body: ZORB } && e.time == t)
+    );
     let node = ManeuverNode {
-        time: world.time + 100.0,
+        time: world.time + 1_000_000.0,
         delta_v: DVec3::new(10.0, 0.0, 0.0),
     };
-    assert_eq!(world.add_node(0, node), Err(PlanError::LeftSystem));
+    world.add_node(0, node).unwrap();
+}
+
+/// In der Demo: Mondfähre-4 fliegt mit 1.090 m/s prograd nach 163.400 s
+/// (gut 7 Tagen, im ersten Startfenster) aus Zorbs Sphäre zu Zunn und nach
+/// etwa 270 Tagen in Nuras Sphäre.
+#[test]
+fn demo_ferry_reaches_nura() {
+    let mut world = sim::scenario::demo();
+    let node = ManeuverNode {
+        time: 163_400.0,
+        delta_v: DVec3::new(1_090.0, 0.0, 0.0),
+    };
+    world.add_node(3, node).unwrap();
+    let s: Vec<Segment> = world.vessels[3].trajectory.segments().cloned().collect();
+    let entry = s
+        .iter()
+        .position(|x| x.end_event() == Some(Event::SoiEntry(NURA)))
+        .expect("Begegnung mit Nura");
+    assert_eq!(s[entry].body(), ZUNN);
+    assert!(
+        s[..entry]
+            .iter()
+            .any(|x| x.body() == ZORB && x.end_event() == Some(Event::SoiExit))
+    );
+    let days = s[entry].end() / world.bodies[ZORB].rotation_period;
+    assert!(days > 250.0 && days < 290.0, "{days}");
+    let nura = &world.bodies[NURA];
+    let state = s[entry + 1].state_at(&world.bodies, s[entry].end());
+    let periapsis = orbit_info(nura.gm, &state).periapsis - nura.radius;
+    assert!(periapsis > 0.0 && periapsis < 20_000_000.0, "{periapsis}");
 }

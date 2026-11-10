@@ -71,7 +71,7 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>) {
 /// Länge eines Tags in s: eine Umdrehung des Heimatplaneten. Überall gilt
 /// diese eine Zeit (wie die Kerbin-Zeit in KSP), auch beim Mond.
 pub(crate) fn day(world: &World) -> f64 {
-    world.bodies[0].rotation_period
+    sim::body::day_length(&world.bodies, world.home)
 }
 
 /// Ganze Sekunden eines Tags (für die Anzeige, mindestens 1).
@@ -94,7 +94,7 @@ pub(crate) fn format_time(seconds: f64, day: f64) -> String {
 /// " auf dem Mond", wenn das Schiff nicht beim Planeten ist.
 fn on_body(world: &World, i: usize) -> String {
     match world.vessel_state(i).0 {
-        0 => String::new(),
+        b if b == world.home => String::new(),
         b => format!(" auf {}", world.bodies[b].name),
     }
 }
@@ -122,7 +122,6 @@ fn next_sphere_change(world: &World, trajectory: &sim::Trajectory) -> Option<Str
                 format!("Begegnung: {} in {when}, Periapsis {low}", name(moon))
             }
             Event::SoiExit => format!("Verlässt {} in {when}", name(segment.body())),
-            Event::LeavesSystem => format!("Verlässt das Heimatsystem in {when}!"),
             _ => return None,
         })
     })
@@ -194,8 +193,13 @@ pub(crate) fn format_span(seconds: f64, day: f64) -> String {
     }
 }
 
+/// Strecke in km, ab einer Million km in Mio. km.
 pub(crate) fn km(meters: f64) -> String {
-    format!("{:.1} km", meters / 1000.0)
+    if meters.abs() >= 1.0e9 {
+        format!("{:.2} Mio. km", meters / 1.0e9)
+    } else {
+        format!("{:.1} km", meters / 1000.0)
+    }
 }
 
 pub(crate) fn place(point: &SurfacePoint) -> String {
@@ -235,9 +239,7 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
     lines.extend(next_sphere_change(world, trajectory));
     // Nodes gehen im Flug und am Boden mit geplantem Start (danach).
     let launch = trajectory.launch();
-    let can_plan = launch.is_some()
-        || !(matches!(trajectory.current(), Segment::Surface { .. })
-            || world.vessel_status(i) == VesselStatus::Escaped);
+    let can_plan = launch.is_some() || !matches!(trajectory.current(), Segment::Surface { .. });
     if let Some(plan) = launch
         && plan.burn.start > world.time
     {
@@ -449,7 +451,7 @@ fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
             // Der Körper der Bahn danach (das Brennen kann die Sphäre wechseln).
             let body = &world.bodies[after.body()];
             let info = kepler::orbit_info(body.gm, state);
-            let around = if after.body() == 0 {
+            let around = if after.body() == world.home {
                 String::new()
             } else {
                 format!(" um {}", body.name)
@@ -506,7 +508,7 @@ pub fn update(
                 descending,
             } => {
                 let body = &world.bodies[world.vessel_state(i).0];
-                let around = if world.vessel_state(i).0 == 0 {
+                let around = if world.vessel_state(i).0 == world.home {
                     String::new()
                 } else {
                     format!(" um {}", body.name)
@@ -563,7 +565,6 @@ pub fn update(
                 Some(k) => format!("Wrack in {}", world.zones[k].name),
                 None => format!("Wrack bei {}{}", place(&point), on_body(world, i)),
             },
-            VesselStatus::Escaped => "im Sonnenorbit (nicht simuliert)".into(),
             VesselStatus::Approaching { distance } => {
                 format!("Anflug zum Andocken, noch {}", distance_text(distance))
             }

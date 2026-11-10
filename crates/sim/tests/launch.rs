@@ -288,7 +288,7 @@ fn save_and_load_with_launch() {
 #[test]
 fn profile_defaults_follow_the_body() {
     let planet = home_planet();
-    let moon = sim::scenario::moon(&planet);
+    let moon = sim::scenario::moon(0, &planet);
     assert_eq!(LaunchProfile::for_body(&planet), LaunchProfile::default());
     assert_eq!(LaunchProfile::default().kick, 10.0);
     assert_eq!(LaunchProfile::default().target_apoapsis, 100_000.0);
@@ -328,7 +328,7 @@ fn orbit_cost(world: &World, vessel: usize) -> f64 {
 #[test]
 fn launch_from_the_moon() {
     let planet = home_planet();
-    let moon = sim::scenario::moon(&planet);
+    let moon = sim::scenario::moon(0, &planet);
     let mut world = World::new(vec![planet, moon.clone()]);
     world.spawn_landed(
         "Fähre",

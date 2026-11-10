@@ -159,7 +159,7 @@ fn approach_only_in_flight() {
     let mut world = sim::scenario::demo();
     world.set_target(2, Some(0));
     assert_eq!(world.approach(2), None);
-    let liftoff = 11_325.0;
+    let liftoff = 11_299.0;
     let profile = sim::LaunchProfile {
         heading: 120.0,
         ..sim::LaunchProfile::default()

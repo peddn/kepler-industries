@@ -2,7 +2,7 @@
 
 use glam::DVec3;
 use sim::kepler::{self, state_from_apsides};
-use sim::scenario::{SATELLITE, demo, home_planet};
+use sim::scenario::{SATELLITE, ZORB, demo, home_planet};
 use sim::{ManeuverNode, PlanError, Segment, VesselParams, VesselStatus, World};
 
 const DAY: f64 = 86_400.0;
@@ -28,7 +28,7 @@ fn orbit_after_burn(world: &World, index: usize) -> (f64, f64) {
     let Some(Segment::Kepler { state, .. }) = trajectory.segment_after(&burn) else {
         panic!("nach dem Brennen muss eine Keplerbahn folgen");
     };
-    let body = &world.bodies[0];
+    let body = &world.bodies[world.home];
     let info = kepler::orbit_info(body.gm, state);
     (
         info.periapsis - body.radius,
@@ -193,7 +193,7 @@ fn rescue_probe_at_apoapsis() {
     // Erst den ersten Durchgang durch die Luft abwarten.
     world.advance_to(1_300.0);
     let (_, state) = world.vessel_state(1);
-    let apoapsis_in = kepler::time_to_apoapsis(world.bodies[0].gm, &state).unwrap();
+    let apoapsis_in = kepler::time_to_apoapsis(world.bodies[ZORB].gm, &state).unwrap();
     world
         .add_node(
             1,

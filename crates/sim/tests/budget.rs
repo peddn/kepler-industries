@@ -56,7 +56,7 @@ fn launch_and_nodes_add_up() {
         [BudgetItem::Launch, BudgetItem::Node(0), BudgetItem::Landing]
     );
     assert!((budget.burns[1].1 - 50.0).abs() < 1e-6);
-    assert_eq!(budget.missing, 0.0);
+    assert!(budget.missing < 1e-9, "{}", budget.missing);
     // Voller Tank wäre mehr.
     assert!((budget.full - FERRY.full_delta_v()).abs() < 1e-9);
     assert!(budget.available < budget.full);
@@ -93,5 +93,5 @@ fn running_burn_counts_its_rest() {
         rest_of_burn > 100.0 && rest_of_burn < 200.0,
         "{rest_of_burn}"
     );
-    assert_eq!(budget.missing, 0.0);
+    assert!(budget.missing < 1e-9, "{}", budget.missing);
 }

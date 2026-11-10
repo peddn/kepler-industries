@@ -18,13 +18,10 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use sim::BodyId;
 
-/// Ohne anderes Ziel: der Planet.
-pub const PLANET: Focus = Focus::Body(0);
-
 /// Worauf die Kamera gerichtet ist.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Focus {
-    /// Himmelskörper: 0 der Planet, 1 der Mond.
+    /// Himmelskörper: Sonne, Planet oder Mond.
     Body(BodyId),
     Vessel(usize),
     /// Node eines Schiffs, erkannt an seinem gesetzten Zeitpunkt.
@@ -43,9 +40,9 @@ pub const NEAR_MIN_DISTANCE: f64 = 10.0;
 pub const MAP_OBJECT_DISTANCE: f64 = 50_000.0;
 /// Abstand beim Einschalten der Nahansicht (höchstens, m).
 pub const NEAR_DISTANCE: f64 = 2_000.0;
-/// Weiter als so viele Planetenradien zoomt die Kamera nicht heraus (der
-/// äußere Mond und der Rand des Heimatsystems passen ins Bild).
-const MAX_DISTANCE_RADII: f64 = 250.0;
+/// Weiter zoomt die Kamera nicht heraus (m): Das ganze Sonnensystem passt
+/// ins Bild.
+const MAX_DISTANCE: f64 = 1.0e11;
 
 #[derive(Resource)]
 pub struct CameraRig {
@@ -66,13 +63,15 @@ pub struct CameraRig {
     pub planet_distance: f64,
     /// Radien der Himmelskörper (m), für die Abstände zu ihnen.
     radii: Vec<f64>,
+    /// Der Heimatplanet: Ohne anderes Ziel schaut die Kamera auf ihn.
+    home: BodyId,
 }
 
 impl CameraRig {
-    pub fn new(radii: Vec<f64>) -> Self {
-        let planet = radii[0] * 4.0;
+    pub fn new(radii: Vec<f64>, home: BodyId) -> Self {
+        let planet = radii[home] * 4.0;
         Self {
-            target: PLANET,
+            target: Focus::Body(home),
             focus: DVec3::ZERO,
             center: DVec3::ZERO,
             near: false,
@@ -81,7 +80,13 @@ impl CameraRig {
             pitch: 0.45,
             planet_distance: planet,
             radii,
+            home,
         }
+    }
+
+    /// Ohne anderes Ziel: der Heimatplanet.
+    pub fn home(&self) -> Focus {
+        Focus::Body(self.home)
     }
 
     /// Erlaubter Abstand zum Fokus.
@@ -91,7 +96,7 @@ impl CameraRig {
             (_, false) => MAP_MIN_DISTANCE,
             (_, true) => NEAR_MIN_DISTANCE,
         };
-        (min, self.radii[0] * MAX_DISTANCE_RADII)
+        (min, MAX_DISTANCE)
     }
 
     pub fn clamp_distance(&mut self) {
@@ -100,20 +105,20 @@ impl CameraRig {
     }
 
     /// Richtet die Kamera auf ein anderes Ziel und wählt einen passenden
-    /// Abstand: zurück zum Planeten der alte, auf den Mond das Vierfache
-    /// seines Radius, auf ein Objekt in der Karte `MAP_OBJECT_DISTANCE`, in
-    /// der Nahansicht bleibt er.
+    /// Abstand: zurück zum Heimatplaneten der alte, auf einen anderen Körper
+    /// das Vierfache seines Radius, auf ein Objekt in der Karte
+    /// `MAP_OBJECT_DISTANCE`, in der Nahansicht bleibt er.
     pub fn set_target(&mut self, target: Focus) {
         if target == self.target {
             return;
         }
-        if self.target == PLANET {
+        if self.target == self.home() {
             self.planet_distance = self.distance;
         }
         self.target = target;
         if let Focus::Body(b) = target {
             self.near = false;
-            self.distance = if b == 0 {
+            self.distance = if b == self.home {
                 self.planet_distance
             } else {
                 self.radii[b] * 4.0

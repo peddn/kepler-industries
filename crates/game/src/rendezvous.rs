@@ -161,7 +161,7 @@ pub fn sync_labels(
     mut labels: Query<(&Label, &mut Node, &mut Text)>,
 ) {
     let (camera, transform) = *camera;
-    let projector = Projector::new(camera, transform, rig.focus, sim.0.bodies[0].radius);
+    let projector = Projector::new(camera, transform, rig.focus, &sim.0);
     for (label, mut node, mut text) in &mut labels {
         let shown = info.0.as_ref().and_then(|info| {
             let (position, value) = match label {

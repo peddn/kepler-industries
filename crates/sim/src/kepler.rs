@@ -85,26 +85,36 @@ pub fn propagate(gm: f64, s: StateVector, dt: f64) -> StateVector {
         sqrt_mu * dt / r0
     };
 
-    // Newton-Verfahren auf der universellen Kepler-Gleichung. Die Ableitung
-    // nach chi ist gerade der Bahnradius r.
-    let mut c = 0.5;
-    let mut s_ = 1.0 / 6.0;
-    let mut z = 0.0;
-    for _ in 0..100 {
+    // Universelle Kepler-Gleichung: F(chi) = sqrt(mu)·dt. F steigt streng
+    // (die Ableitung nach chi ist gerade der Bahnradius r > 0); `None`, wenn
+    // die Zahlen überlaufen (chi viel zu groß).
+    let equation = |chi: f64| {
         let chi2 = chi * chi;
-        z = alpha * chi2;
-        (c, s_) = stumpff(z);
+        let z = alpha * chi2;
+        let (c, s_) = stumpff(z);
         let r = chi2 * c + sigma0 * chi * (1.0 - z * s_) + r0 * (1.0 - z * c);
         let f = sigma0 * chi2 * c + (1.0 - alpha * r0) * chi2 * chi * s_ + r0 * chi - sqrt_mu * dt;
+        (f.is_finite() && r.is_finite() && r > 0.0).then_some((f, r))
+    };
+
+    // Newton-Verfahren. Ein schlechter Startwert (vor allem bei Hyperbeln
+    // nahe der Parabel) kann es aus dem Ruder laufen lassen; dann sicher mit
+    // eingegrenztem Newton (`solve_bracketed`).
+    let mut converged = false;
+    for _ in 0..100 {
+        let Some((f, r)) = equation(chi) else { break };
         let delta = f / r;
         chi -= delta;
         if delta.abs() <= 1e-14 * chi.abs().max(1.0) {
-            let chi2 = chi * chi;
-            z = alpha * chi2;
-            (c, s_) = stumpff(z);
+            converged = chi.is_finite();
             break;
         }
     }
+    if !converged {
+        chi = solve_bracketed(&equation, dt, sqrt_mu * dt / r0);
+    }
+    let z = alpha * chi * chi;
+    let (c, s_) = stumpff(z);
 
     let chi2 = chi * chi;
     let f = 1.0 - chi2 / r0 * c;
@@ -115,6 +125,51 @@ pub fn propagate(gm: f64, s: StateVector, dt: f64) -> StateVector {
     let g_dot = 1.0 - chi2 / r * c;
     let velocity = f_dot * r0_vec + g_dot * v0_vec;
     StateVector { position, velocity }
+}
+
+/// Löst F(chi) = 0 für eine streng steigende Funktion `equation` (Wert und
+/// Ableitung, `None` bei Überlauf: dort ist F sehr groß), deren Nullstelle
+/// das Vorzeichen von `dt` hat: erst eingrenzen (von 0 aus verdoppeln), dann
+/// Newton, der auf Bisektion zurückfällt, wenn er die Grenzen verlässt.
+fn solve_bracketed(equation: &impl Fn(f64) -> Option<(f64, f64)>, dt: f64, guess: f64) -> f64 {
+    // Bei Überlauf liegt chi auf der Seite von dt weit hinter der Nullstelle.
+    let beyond = |chi: f64| equation(chi).is_none_or(|(f, _)| f * dt >= 0.0);
+    let (mut lo, mut hi) = (0.0f64, guess.abs().max(1e-6) * dt.signum());
+    for _ in 0..2_000 {
+        if beyond(hi) {
+            break;
+        }
+        lo = hi;
+        hi *= 2.0;
+    }
+    // Jetzt liegt die Nullstelle zwischen lo (davor) und hi (dahinter).
+    let mut chi = 0.5 * (lo + hi);
+    for _ in 0..200 {
+        let next = match equation(chi) {
+            Some((f, r)) => {
+                if f * dt >= 0.0 {
+                    hi = chi;
+                } else {
+                    lo = chi;
+                }
+                let newton = chi - f / r;
+                if (newton - lo) * (newton - hi) < 0.0 {
+                    newton
+                } else {
+                    0.5 * (lo + hi)
+                }
+            }
+            None => {
+                hi = chi;
+                0.5 * (lo + hi)
+            }
+        };
+        if (next - chi).abs() <= 1e-14 * next.abs().max(1.0) {
+            return next;
+        }
+        chi = next;
+    }
+    chi
 }
 
 /// Kenngrößen einer Bahn, z. B. für die Anzeige.
@@ -406,5 +461,28 @@ mod tests {
         let at = propagate(GM, s, dt);
         assert!((at.position.length() - (R + 900_000.0)).abs() < 1e-3);
         assert!(time_to_apoapsis(GM, &hyperbolic()).is_none());
+    }
+
+    /// Hyperbel knapp über der Parabel (e = 1,01, nach dem Verlassen eines
+    /// Monds): Der Startwert nach Vallado lässt Newton hier teils
+    /// davonlaufen. Das Ergebnis muss trotzdem stimmen: Energie und
+    /// Drehimpuls bleiben, Teilschritte ergeben dasselbe wie ein Schritt.
+    #[test]
+    fn near_parabolic_hyperbola() {
+        let gm = 9.81 * 600_000.0f64.powi(2);
+        let s = StateVector {
+            position: DVec3::new(-13_148_755.310_743_332, -5_621_477.802_893_415, 0.0),
+            velocity: DVec3::new(-1_076.464_463_229_148, -417.453_340_934_449_44, 0.0),
+        };
+        assert!((orbit_info(gm, &s).eccentricity - 1.0106).abs() < 1e-3);
+        let energy = |s: &StateVector| s.velocity.length_squared() / 2.0 - gm / s.position.length();
+        let momentum = |s: &StateVector| s.position.cross(s.velocity);
+        for dt in [1.0, 100.0, 150.0, 151.0, 400.0, 10_000.0, -150.0] {
+            let at = propagate(gm, s, dt);
+            assert!((energy(&at) - energy(&s)).abs() < 1e-6, "{dt}");
+            assert!(momentum(&at).distance(momentum(&s)) < 1e-2, "{dt}");
+            let halves = propagate(gm, propagate(gm, s, dt / 2.0), dt / 2.0);
+            assert_close(at, halves, 1e-3, 1e-6);
+        }
     }
 }

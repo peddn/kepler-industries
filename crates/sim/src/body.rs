@@ -6,8 +6,8 @@
 //!
 //! Monde laufen auf Schienen (wie in KSP): eine feste Keplerbahn um den
 //! Mutterkörper aus sechs Bahnelementen, für jeden Zeitpunkt direkt berechnet
-//! (`body_state`). Der erste Körper (`bodies[0]`) ruht im Ursprung. Alle
-//! Körper drehen sich um +Z (keine Achsneigung, wie in KSP); die Neigung einer
+//! (`body_state`). Der Körper ohne Bahn, die Sonne, ruht im Ursprung; ihre
+//! Einflusssphäre ist unbegrenzt. Alle Körper drehen sich um +Z (keine Achsneigung, wie in KSP); die Neigung einer
 //! Bahn gilt gegenüber dieser gemeinsamen Äquatorebene.
 
 use crate::kepler::StateVector;
@@ -94,31 +94,23 @@ impl SurfacePoint {
 /// Bahn eines Körpers um seinen Mutterkörper: eine Ellipse (oder ein Kreis),
 /// beschrieben durch die sechs Bahnelemente zum Zeitpunkt 0. Mit Neigung 0
 /// läuft sie in der Äquatorebene im Drehsinn der Rotation (von Norden aus
-/// gegen den Uhrzeigersinn); über 90° läuft sie rückwärts. Alte Spielstände
-/// mit Kreisbahnen (`radius`, `phase`) laden als Ellipse ohne Exzentrizität
-/// und Neigung.
+/// gegen den Uhrzeigersinn); über 90° läuft sie rückwärts.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BodyOrbit {
     pub parent: BodyId,
     /// Große Halbachse in m (beim Kreis der Radius).
-    #[serde(alias = "radius")]
     pub semi_major_axis: f64,
     /// Exzentrizität: 0 Kreis, bis unter 1 immer gestrecktere Ellipse.
-    #[serde(default)]
     pub eccentricity: f64,
     /// Neigung gegen die Äquatorebene (rad).
-    #[serde(default)]
     pub inclination: f64,
     /// Länge des aufsteigenden Knotens, von +X aus (rad).
-    #[serde(default)]
     pub ascending_node: f64,
     /// Argument der Periapsis, vom aufsteigenden Knoten aus in Bahnrichtung
     /// (rad).
-    #[serde(default)]
     pub argument_of_periapsis: f64,
     /// Mittlere Anomalie zum Zeitpunkt 0 (rad): wie weit der Körper seit der
     /// Periapsis gleichmäßig vorangekommen ist (beim Kreis der Winkel).
-    #[serde(alias = "phase")]
     pub mean_anomaly: f64,
 }
 
@@ -166,13 +158,13 @@ impl BodyOrbit {
         self.orientation() * DVec3::new(a * (cos - e), a * (1.0 - e * e).sqrt() * sin, 0.0)
     }
 
-    /// Lage und Geschwindigkeit relativ zum Mutterkörper (mit `gm`) zum
-    /// Zeitpunkt `t`. Die mittlere Anomalie wächst gleichmäßig, über den Rest
-    /// der Umlaufzeit gerechnet (genau auch nach Jahren); die exzentrische
-    /// folgt aus der Kepler-Gleichung M = E − e·sin E (Newton-Verfahren).
-    pub fn state(&self, gm: f64, t: f64) -> StateVector {
-        let (a, e) = (self.semi_major_axis, self.eccentricity);
-        let period = circular_period(gm, a);
+    /// Exzentrische Anomalie zum Zeitpunkt `t` (Mutterkörper mit `gm`). Die
+    /// mittlere Anomalie wächst gleichmäßig, über den Rest der Umlaufzeit
+    /// gerechnet (genau auch nach Jahren); die exzentrische folgt aus der
+    /// Kepler-Gleichung M = E − e·sin E (Newton-Verfahren).
+    pub fn eccentric_anomaly(&self, gm: f64, t: f64) -> f64 {
+        let e = self.eccentricity;
+        let period = circular_period(gm, self.semi_major_axis);
         let mean = self.mean_anomaly + t.rem_euclid(period) / period * TAU;
         let mut anomaly = if e > 0.8 { std::f64::consts::PI } else { mean };
         for _ in 0..50 {
@@ -182,7 +174,15 @@ impl BodyOrbit {
                 break;
             }
         }
-        let (sin, cos) = anomaly.sin_cos();
+        anomaly
+    }
+
+    /// Lage und Geschwindigkeit relativ zum Mutterkörper (mit `gm`) zum
+    /// Zeitpunkt `t`.
+    pub fn state(&self, gm: f64, t: f64) -> StateVector {
+        let (a, e) = (self.semi_major_axis, self.eccentricity);
+        let period = circular_period(gm, a);
+        let (sin, cos) = self.eccentric_anomaly(gm, t).sin_cos();
         let factor = (1.0 - e * e).sqrt();
         // Bahngeschwindigkeit beim Kreis; d E / d t = n / (1 − e·cos E).
         let speed = a * TAU / period / (1.0 - e * cos);
@@ -204,14 +204,8 @@ pub struct Body {
     /// Siderische Rotationsdauer in s (gegenüber den Sternen, nicht der Sonne).
     pub rotation_period: f64,
     pub atmosphere: Atmosphere,
-    /// Bahn um den Mutterkörper; `None` beim Körper im Ursprung.
-    #[serde(default)]
+    /// Bahn um den Mutterkörper; `None` bei der Sonne im Ursprung.
     pub orbit: Option<BodyOrbit>,
-    /// Nur beim Körper im Ursprung: Radius seiner Einflusssphäre, also der
-    /// Rand des Heimatsystems (aus Masse und Abstand der noch nicht
-    /// simulierten Sonne). `None`: unbegrenzt.
-    #[serde(default)]
-    pub soi_radius: Option<f64>,
 }
 
 /// Umlaufzeit einer Kreisbahn mit Radius `radius` um einen Körper mit `gm`;
@@ -231,8 +225,30 @@ pub fn orbital_period(bodies: &[Body], body: BodyId) -> Option<f64> {
     ))
 }
 
-/// Lage und Geschwindigkeit eines Körpers zum Zeitpunkt `t`, relativ zum
-/// Körper im Ursprung.
+/// Tag eines Körpers gegenüber seinem Mutterkörper (beim Planeten der
+/// Sonnentag): bis derselbe Ort wieder zu ihm zeigt, aus Drehung und Umlauf.
+/// Ohne Bahn, oder wenn er ihm immer dieselbe Seite zeigt: die Drehung.
+pub fn day_length(bodies: &[Body], body: BodyId) -> f64 {
+    let rotation = bodies[body].rotation_period;
+    let (Some(orbit), Some(year)) = (&bodies[body].orbit, orbital_period(bodies, body)) else {
+        return rotation;
+    };
+    // Rückwärts umlaufend kommt der Mutterkörper früher wieder.
+    let sign = if orbit.inclination > std::f64::consts::FRAC_PI_2 {
+        -1.0
+    } else {
+        1.0
+    };
+    let rate = 1.0 / rotation - sign / year;
+    if rate.abs() * rotation < 1e-9 {
+        rotation
+    } else {
+        1.0 / rate.abs()
+    }
+}
+
+/// Lage und Geschwindigkeit eines Körpers zum Zeitpunkt `t`, relativ zur
+/// Sonne im Ursprung.
 pub fn body_state(bodies: &[Body], body: BodyId, t: f64) -> StateVector {
     let Some(orbit) = &bodies[body].orbit else {
         return StateVector {
@@ -249,17 +265,14 @@ pub fn body_state(bodies: &[Body], body: BodyId, t: f64) -> StateVector {
 }
 
 /// Radius der Einflusssphäre nach Laplace: große Halbachse · (m/M)^0,4
-/// (wie in KSP, auch bei Ellipsen immer gleich groß). Darin
-/// zählt für ein Schiff nur die Schwerkraft dieses Körpers. Beim Körper im
-/// Ursprung ist er fest vorgegeben (`soi_radius`), sonst unendlich.
+/// (wie in KSP, auch bei Ellipsen immer gleich groß). Darin zählt für ein
+/// Schiff nur die Schwerkraft dieses Körpers. Die Sonne (ohne Bahn) reicht
+/// unendlich weit.
 pub fn sphere_of_influence(bodies: &[Body], body: BodyId) -> f64 {
-    laplace_radius(bodies, body).unwrap_or_else(|| bodies[body].soi_radius.unwrap_or(f64::INFINITY))
-}
-
-/// Laplace-Radius für einen Körper auf einer Bahn: a · (m/M)^0,4.
-fn laplace_radius(bodies: &[Body], body: BodyId) -> Option<f64> {
-    let orbit = bodies[body].orbit.as_ref()?;
-    Some(orbit.semi_major_axis * (bodies[body].gm / bodies[orbit.parent].gm).powf(0.4))
+    let Some(orbit) = &bodies[body].orbit else {
+        return f64::INFINITY;
+    };
+    orbit.semi_major_axis * (bodies[body].gm / bodies[orbit.parent].gm).powf(0.4)
 }
 
 impl Body {
