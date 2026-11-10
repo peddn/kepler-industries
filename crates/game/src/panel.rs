@@ -93,17 +93,25 @@ pub enum Param {
     StartIn,
     Heading,
     Turn,
+    Kick,
     Apoapsis,
 }
 
 impl Param {
-    const ALL: [Param; 4] = [Param::StartIn, Param::Heading, Param::Turn, Param::Apoapsis];
+    const ALL: [Param; 5] = [
+        Param::StartIn,
+        Param::Heading,
+        Param::Turn,
+        Param::Kick,
+        Param::Apoapsis,
+    ];
 
     fn label(self) -> &'static str {
         match self {
             Param::StartIn => "Start in",
             Param::Heading => "Kurs",
             Param::Turn => "Wendebeginn",
+            Param::Kick => "Wendewinkel",
             Param::Apoapsis => "Ziel-Apoapsis",
         }
     }
@@ -117,6 +125,8 @@ impl Param {
             (Param::Heading, true) => 1.0,
             (Param::Turn, false) => 500.0,
             (Param::Turn, true) => 100.0,
+            (Param::Kick, false) => 5.0,
+            (Param::Kick, true) => 1.0,
             (Param::Apoapsis, false) => 10_000.0,
             (Param::Apoapsis, true) => 1_000.0,
         }
@@ -128,6 +138,7 @@ impl Param {
             Param::StartIn => format_span((launch.time - now).max(0.0), day),
             Param::Heading => format!("{:.0}°", p.heading),
             Param::Turn => km(p.turn_altitude),
+            Param::Kick => format!("{:.0}°", p.kick),
             Param::Apoapsis => km(p.target_apoapsis),
         }
     }
@@ -686,6 +697,8 @@ fn adjust(world: &mut World, i: usize, param: Param, delta: f64) -> Result<(), P
         Param::Heading => p.heading = (p.heading + delta).rem_euclid(360.0),
         Param::Apoapsis => p.target_apoapsis = (p.target_apoapsis + delta).clamp(1_000.0, 5e6),
         Param::Turn => p.turn_altitude = (p.turn_altitude + delta).max(0.0),
+        // Ganz senkrecht wendete es nie, ganz waagerecht stiege es nicht.
+        Param::Kick => p.kick = (p.kick + delta).clamp(1.0, 89.0),
     }
     p.turn_altitude = p.turn_altitude.min(0.5 * p.target_apoapsis);
     world.set_launch(i, launch)
@@ -755,9 +768,11 @@ pub fn buttons(
         failure = if planned {
             world.clear_launch(i).err()
         } else {
+            // Voreinstellung nach dem Körper (mit oder ohne Luft).
+            let body = &world.bodies[world.vessel_state(i).0];
             let launch = Launch {
                 time: world.time + DEFAULT_COUNTDOWN,
-                profile: LaunchProfile::default(),
+                profile: LaunchProfile::for_body(body),
             };
             // Vorerst ist jede Kette sofort scharf.
             world

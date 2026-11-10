@@ -453,11 +453,13 @@ fn log_entry(
                     point: *point,
                     zone: None,
                     reason,
+                    body: done.body(),
                 }
             } else {
                 LogKind::Landed {
                     point: *point,
                     zone: None,
+                    body: done.body(),
                 }
             }
         }

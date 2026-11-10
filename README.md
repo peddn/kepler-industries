@@ -17,9 +17,12 @@ mit einem Manöver. „Fähre-3" steht an der Startbasis und kann starten.
 „Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator, bereit für
 den Flug zum Mond.
 
-Gestartet wird mit einem Startprofil aus drei Werten: Kurs, Wendebeginn und
-Ziel-Apoapsis. Eingestellt wird es in der Karte „Start“ der Seitenleiste
-rechts, die erscheint, sobald ein gelandetes Schiff gewählt ist. Die Vorschau zeigt den ganzen
+Gestartet wird mit einem Startprofil aus vier Werten: Kurs, Wendebeginn,
+Wendewinkel (so weit neigt sich das Schiff beim Wendebeginn aus der
+Senkrechten) und Ziel-Apoapsis. Eingestellt wird es in der Karte „Start“ der Seitenleiste
+rechts, die erscheint, sobald ein gelandetes Schiff gewählt ist. Die
+Voreinstellung hängt vom Körper ab: mit Luft (Zorb) Wende ab 1,5 km mit 10°,
+Ziel 100 km; ohne Luft (Zoon) ab 100 m mit 70°, Ziel 30 km. Die Vorschau zeigt den ganzen
 Aufstieg (gelb) und die Bahn danach. Den Node zum Zirkularisieren an der
 Apoapsis kann man schon vor dem Abheben setzen.
 
@@ -82,7 +85,12 @@ nächste Begegnung („Begegnung: Zoon in 05:07:05, Periapsis 194 km“), im Flu
 Nahansicht liegt der Mond unten. Zum Ausprobieren: Mondfähre-4 mit 836 m/s
 prograd nach 10 Minuten (`--node 3,600,836,0,0`) fliegt in etwa 200 km Höhe
 am Mond vorbei; mit einem Brennen gegen die Flugrichtung an der Periapsis
-bleibt sie bei ihm. Wer mehr als etwa 84.000 km vom Planeten wegfliegt,
+bleibt sie bei ihm. Gelandet wird auf Zoon wie auf Zorb über einen Node, nur
+ohne Luftbremsung und Fallschirm: Die ganze Geschwindigkeit wird beim
+Aufsetzen abgebremst, aus einer niedrigen Bahn etwa 600 m/s. Zielgebiete gibt
+es auf der Nahseite (Zorb im Zenit) und der Fernseite. Zurück geht es mit
+einem Start von Zoon (Voreinstellung siehe oben, die 30-km-Bahn kostet etwa
+670 m/s). Wer mehr als etwa 84.000 km vom Planeten wegfliegt,
 verlässt das Heimatsystem: Danach ist das Schiff im Sonnenorbit und wird
 (noch) nicht weiter simuliert.
 
@@ -157,6 +165,13 @@ den Geistermond mit Ein- und Austritt, danach die neue Bahn um den Planeten.*
 
 *Im Vorbeiflug (`--node 3,600,836,0,0 --time 20000 --select 3 --focus 3
 --camera 120,70,7000`): Bahn um den Mond, Periapsis 194 km.*
+
+![Start von Zoon](docs/screenshots/start-zoon.png)
+
+*Mondfähre-4 nach der Landung auf Zoon, Start geplant mit der Voreinstellung
+ohne Luft (Wende ab 100 m mit 70°, Ziel 30 km). Nachspielen mit
+`--node 3,600,836,0,0 --node 3,24740,-380,0,0 --time 26500 --select 3
+--focus 3 --near --camera 20,25,60` und „Start planen“.*
 
 ![Mond](docs/screenshots/mond.png)
 
@@ -245,7 +260,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Linksklick auf den Mond | Mond wählen (eine Bahn davor geht vor: Node setzen) |
 | `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten |
 | `N` | Nahansicht an/aus (Planet unten, Zoom bis 10 m; nur mit einem Objekt im Fokus) |
-| Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
+| Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Wendewinkel, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
@@ -277,8 +292,9 @@ cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,
 - `--near`: Nahansicht (mit `--focus` oder `--focus-zone`)
 - `--dock SCHIFF`: Andocken an das Ziel einschalten (nach `--target`)
 - `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2, 2 = Fähre-3)
-- `--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM`: Start planen (Zeitpunkt des
-  Abhebens in s, Kurs in Grad), z. B. `--launch 2,120,90,2,100`
+- `--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM[,WENDEWINKEL]`: Start planen
+  (Zeitpunkt des Abhebens in s, Kurs und Wendewinkel in Grad; ohne
+  Wendewinkel die Voreinstellung des Körpers), z. B. `--launch 2,120,90,2,100`
 - `--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]`: Node setzen (Zeit in s,
   Δv in m/s), mehrfach für eine Kette; scharf wie im Spiel, `SCHARF` = 0 lässt
   die Kette zum Testen nicht scharf

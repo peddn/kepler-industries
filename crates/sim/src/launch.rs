@@ -1,4 +1,5 @@
-//! Start vom Boden mit wenigen Werten: Kurs, Wendebeginn, Ziel-Apoapsis.
+//! Start vom Boden mit wenigen Werten: Kurs, Wendebeginn, Wendewinkel,
+//! Ziel-Apoapsis. Die Voreinstellung hängt vom Körper ab (`for_body`).
 //!
 //! Der Aufstieg ist ein normales Brennen (`Burn`), nur mit Aufstiegssteuerung
 //! statt fester Schubrichtung. Damit gelten Vorschau = Ausführung, Brennpunkte
@@ -23,14 +24,61 @@ pub struct LaunchProfile {
     pub turn_altitude: f64,
     /// Ziel-Apoapsis als Höhe in m.
     pub target_apoapsis: f64,
+    /// Wendewinkel in Grad: so weit neigt sich das Schiff beim Wendebeginn
+    /// aus der Senkrechten, und steiler als so fliegt es danach nicht (alte
+    /// Spielstände: 10°).
+    #[serde(default = "default_kick")]
+    pub kick: f64,
 }
 
+fn default_kick() -> f64 {
+    KICK_DEGREES
+}
+
+/// Grad in Radiant, gerechnet wie `KICK`: 10° ergibt bitgenau `KICK`, ein
+/// Start mit der alten Voreinstellung also genau dasselbe wie früher.
+pub fn kick_radians(degrees: f64) -> f64 {
+    degrees * std::f64::consts::PI / 180.0
+}
+
+/// Ziel-Apoapsis der Voreinstellung: so hoch über der Luftgrenze (ohne Luft:
+/// über dem Boden).
+const ORBIT_MARGIN: f64 = 30_000.0;
+
 impl Default for LaunchProfile {
+    /// Wie auf Zorb (siehe `for_body`).
     fn default() -> Self {
         Self {
             heading: 90.0,
             turn_altitude: 1_500.0,
             target_apoapsis: 100_000.0,
+            kick: default_kick(),
+        }
+    }
+}
+
+impl LaunchProfile {
+    /// Voreinstellung für einen Start von `body`, nach Osten.
+    ///
+    /// Mit Luft: senkrecht bis 1,5 km, dann 10° (eine steilere Wende flöge
+    /// zu lange durch dichte Luft), Ziel 30 km über der Luftgrenze, auf Zorb
+    /// 100 km. Ohne Luft gibt es keinen Grund, senkrecht zu steigen: Wende ab
+    /// 100 m mit 70°, Ziel 30 km. Auf Zoon kostet die 30-km-Bahn so etwa
+    /// 670 m/s statt 820 m/s mit den Werten von Zorb.
+    pub fn for_body(body: &Body) -> Self {
+        let target_apoapsis = body.atmosphere.boundary_altitude() + ORBIT_MARGIN;
+        if body.atmosphere.exists() {
+            Self {
+                target_apoapsis,
+                ..Self::default()
+            }
+        } else {
+            Self {
+                heading: 90.0,
+                turn_altitude: 100.0,
+                target_apoapsis,
+                kick: 70.0,
+            }
         }
     }
 }
@@ -52,8 +100,9 @@ pub struct LaunchPlan {
 }
 
 /// Aufstiegssteuerung, eine Schwerkraftwende wie in KSP: senkrecht bis zum
-/// Wendebeginn, dort um `KICK` zur Seite geneigt, danach immer entlang der
-/// Bewegung relativ zur Luft (nie unter die Waagerechte). Die Schwerkraft
+/// Wendebeginn, dort um den Wendewinkel zur Seite geneigt, danach immer
+/// entlang der Bewegung relativ zur Luft (nie steiler als der Wendewinkel,
+/// nie unter die Waagerechte). Die Schwerkraft
 /// biegt die Bahn von selbst um. Schub entlang der Bewegung hebt die Apoapsis
 /// stetig, deshalb wird die Zielhöhe sicher erreicht, auch bei einem Hop.
 /// Die Schubrichtung bleibt in einer festen Ebene durch den Startplatz
@@ -66,10 +115,18 @@ pub struct Ascent {
     pub turn_radius: f64,
     /// Drehung des Körpers (für die Bewegung relativ zur Luft).
     pub spin: DVec3,
+    /// Wendewinkel in Radiant (alte Spielstände: `KICK`).
+    #[serde(default = "default_kick_radians")]
+    pub kick: f64,
 }
 
-/// Anfängliche Neigung aus der Senkrechten beim Wendebeginn (10°).
-pub const KICK: f64 = 10.0 * std::f64::consts::PI / 180.0;
+fn default_kick_radians() -> f64 {
+    KICK
+}
+
+/// Wendewinkel wie bisher, auch für alte Spielstände (10°).
+const KICK_DEGREES: f64 = 10.0;
+pub const KICK: f64 = KICK_DEGREES * std::f64::consts::PI / 180.0;
 
 impl Ascent {
     /// Schubrichtung (Einheitsvektor) im Zustand `state`.
@@ -82,7 +139,10 @@ impl Ascent {
         let forward = self.plane_normal.cross(up).normalize();
         let air = state.velocity - self.spin.cross(state.position);
         // Neigung der Bewegung aus der Senkrechten, in der Aufstiegsebene.
-        let pitch = air.dot(forward).atan2(air.dot(up)).clamp(KICK, FRAC_PI_2);
+        let pitch = air
+            .dot(forward)
+            .atan2(air.dot(up))
+            .clamp(self.kick, FRAC_PI_2);
         up * pitch.cos() + forward * pitch.sin()
     }
 }
@@ -144,6 +204,7 @@ pub fn plan(
             plane_normal: up.cross(forward).normalize(),
             turn_radius,
             spin: body.spin(),
+            kick: kick_radians(launch.profile.kick),
         }),
     };
 

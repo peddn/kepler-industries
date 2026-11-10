@@ -551,8 +551,12 @@ pub fn update(
     if let Some(k) = zone.0 {
         let z = &world.zones[k];
         lines.push(String::new());
+        let on = match z.body {
+            0 => String::new(),
+            b => format!(" auf {}", world.bodies[b].name),
+        };
         lines.push(format!(
-            "Zielgebiet {}: {}, Radius {}",
+            "Zielgebiet {}{on}: {}, Radius {}",
             z.name,
             place(&z.center),
             km(z.radius)

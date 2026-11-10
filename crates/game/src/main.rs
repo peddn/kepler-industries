@@ -53,7 +53,8 @@ struct Options {
     /// Kette; sie ist scharf, wenn keiner "nicht scharf" verlangt.
     nodes: Vec<(usize, f64, [f64; 3], bool)>,
     /// Start: Schiff, Zeitpunkt (s), Kurs (°), Wendebeginn (km), Ziel-Apoapsis (km).
-    launch: Option<(usize, sim::Launch)>,
+    /// Start; der Wendewinkel `None`: Voreinstellung des Körpers.
+    launch: Option<(usize, sim::Launch, Option<f64>)>,
     /// Ziel: Schiff, Zielschiff.
     targets: Vec<(usize, usize)>,
     /// Andocken einschalten (Schiff mit Ziel).
@@ -101,11 +102,12 @@ fn parse_options() -> Options {
                     .push((p[0] as usize, p[1], [p[2], p[3], p[4]], armed));
             }
             ("--launch", Some(l)) => {
-                let p = numbers(&l, "--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM");
+                let p = numbers(&l, "--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM[,WENDEWINKEL]");
                 let profile = sim::LaunchProfile {
                     heading: p[2],
                     turn_altitude: p[3] * 1000.0,
                     target_apoapsis: p[4] * 1000.0,
+                    ..sim::LaunchProfile::default()
                 };
                 options.launch = Some((
                     p[0] as usize,
@@ -113,6 +115,7 @@ fn parse_options() -> Options {
                         time: p[1],
                         profile,
                     },
+                    p.get(5).copied(),
                 ));
             }
             ("--focus", Some(v)) => {
@@ -162,7 +165,9 @@ fn main() {
     let mut world = sim::scenario::demo();
     let mut selection = node_ui::Selection(options.select);
     // Zuerst der Start, damit Nodes danach auf seiner Bahn liegen können.
-    if let Some((vessel, launch)) = options.launch {
+    if let Some((vessel, mut launch, kick)) = options.launch {
+        let body = &world.bodies[world.vessel_state(vessel).0];
+        launch.profile.kick = kick.unwrap_or(sim::LaunchProfile::for_body(body).kick);
         if let Err(e) = world
             .set_launch(vessel, launch)
             .and_then(|()| world.set_armed(vessel, true))

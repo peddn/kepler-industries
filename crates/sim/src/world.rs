@@ -406,11 +406,12 @@ impl World {
         entries.sort_by(|a, b| a.time.total_cmp(&b.time).then(a.vessel.cmp(&b.vessel)));
         for entry in &mut entries {
             // Zielgebiete trägt erst die Welt ein (die Zeitleiste kennt sie nicht).
-            if let LogKind::Landed { point, zone } | LogKind::Crashed { point, zone, .. } =
-                &mut entry.kind
+            if let LogKind::Landed { point, zone, body }
+            | LogKind::Crashed {
+                point, zone, body, ..
+            } = &mut entry.kind
             {
-                let body = self.vessels[entry.vessel].trajectory.current().body();
-                *zone = self.zone_at(body, point);
+                *zone = self.zone_at(*body, point);
             }
         }
         self.push_log(entries);

@@ -282,3 +282,102 @@ fn save_and_load_with_launch() {
     let loaded: World = serde_json::from_str(&json).unwrap();
     assert_eq!(world, loaded);
 }
+
+/// Voreinstellung nach dem Körper: mit Luft wie bisher (Ziel 30 km über der
+/// Luftgrenze), ohne Luft früh und kräftig wenden, Ziel 30 km.
+#[test]
+fn profile_defaults_follow_the_body() {
+    let planet = home_planet();
+    let moon = sim::scenario::moon(&planet);
+    assert_eq!(LaunchProfile::for_body(&planet), LaunchProfile::default());
+    assert_eq!(LaunchProfile::default().kick, 10.0);
+    assert_eq!(LaunchProfile::default().target_apoapsis, 100_000.0);
+    let airless = LaunchProfile::for_body(&moon);
+    assert_eq!(
+        (airless.turn_altitude, airless.kick, airless.target_apoapsis),
+        (100.0, 70.0, 30_000.0)
+    );
+}
+
+/// 10° ergibt bitgenau den alten Wendewinkel: Starts mit der alten
+/// Voreinstellung rechnen genau wie früher.
+#[test]
+fn ten_degrees_is_the_old_kick() {
+    assert_eq!(sim::launch::kick_radians(10.0), sim::launch::KICK);
+    let mut world = landed(FERRY, 4_000.0);
+    world.set_launch(0, launch_at(60.0)).unwrap();
+    let ascent = world.vessels[0].trajectory.launch().unwrap().burn.ascent;
+    assert_eq!(ascent.unwrap().kick, sim::launch::KICK);
+}
+
+/// Aufstieg plus Zirkularisieren an der Apoapsis, in m/s.
+fn orbit_cost(world: &World, vessel: usize) -> f64 {
+    let plan = world.vessels[vessel].trajectory.launch().unwrap();
+    let burn = plan.burn;
+    let ascent = FERRY.exhaust_velocity * (burn.start_mass / burn.end_mass()).ln();
+    let (_, state) = coast_after_ascent_of(world, vessel);
+    let gm = world.bodies[1].gm;
+    let info = kepler::orbit_info(gm, &state);
+    let apoapsis = info.apoapsis.unwrap();
+    let at_apoapsis = state.position.cross(state.velocity).length() / apoapsis;
+    ascent + (gm / apoapsis).sqrt() - at_apoapsis
+}
+
+/// Start von Zoon (ohne Luft): Mit der Voreinstellung kostet die
+/// 30-km-Bahn höchstens 680 m/s, mit den Werten von Zorb über 800 m/s.
+#[test]
+fn launch_from_the_moon() {
+    let planet = home_planet();
+    let moon = sim::scenario::moon(&planet);
+    let mut world = World::new(vec![planet, moon.clone()]);
+    world.spawn_landed(
+        "Fähre",
+        FERRY,
+        4_000.0,
+        1,
+        SurfacePoint::from_degrees(0.0, 0.0),
+    );
+    let start = |profile| Launch {
+        time: 60.0,
+        profile,
+    };
+
+    let mut good = world.clone();
+    good.set_launch(0, start(LaunchProfile::for_body(&moon)))
+        .unwrap();
+    let (_, state) = coast_after_ascent_of(&good, 0);
+    let apoapsis = kepler::orbit_info(moon.gm, &state).apoapsis.unwrap() - moon.radius;
+    assert!((apoapsis - 30_000.0).abs() < 1.0, "{apoapsis}");
+    let cost = orbit_cost(&good, 0);
+    assert!(cost < 680.0, "{cost}");
+
+    let zorb_like = LaunchProfile {
+        target_apoapsis: 30_000.0,
+        ..LaunchProfile::default()
+    };
+    world.set_launch(0, start(zorb_like)).unwrap();
+    assert!(orbit_cost(&world, 0) > 800.0);
+}
+
+/// Alte Spielstände ohne Wendewinkel: 10°, wie früher.
+#[test]
+fn old_profiles_get_ten_degrees() {
+    let mut json = serde_json::to_value(LaunchProfile::default()).unwrap();
+    json.as_object_mut().unwrap().remove("kick");
+    let profile: LaunchProfile = serde_json::from_value(json).unwrap();
+    assert_eq!(profile.kick, 10.0);
+
+    let mut world = landed(FERRY, 4_000.0);
+    world.set_launch(0, launch_at(60.0)).unwrap();
+    let ascent = world.vessels[0]
+        .trajectory
+        .launch()
+        .unwrap()
+        .burn
+        .ascent
+        .unwrap();
+    let mut json = serde_json::to_value(ascent).unwrap();
+    json.as_object_mut().unwrap().remove("kick");
+    let loaded: sim::launch::Ascent = serde_json::from_value(json).unwrap();
+    assert_eq!(loaded, ascent);
+}
