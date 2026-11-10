@@ -12,6 +12,7 @@ use crate::log::{LOG_LIMIT, LogEntry, LogKind};
 use crate::maneuver::{self, Burn, ManeuverNode, PlanError};
 use crate::rendezvous::{self, Approach, PlaneCrossing};
 use crate::trajectory::{Event, Segment, Trajectory};
+use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
@@ -110,6 +111,9 @@ pub struct Vessel {
     /// Spielständen: keins.
     #[serde(default)]
     pub target: Option<usize>,
+    /// Ziel für einen Flug: ein Himmelskörper. Höchstens eines der beiden
+    /// Ziele ist gesetzt (`World::set_target`, `World::set_target_body`).
+    pub target_body: Option<BodyId>,
     /// Angedockt an dieses Schiff (das Hauptschiff des Verbunds). Dann zählen
     /// Lage und Kette des Hauptschiffs, die eigenen Werte gehen in dessen
     /// wirksame Werte ein (`World::params`). Fehlt in älteren Spielständen:
@@ -293,6 +297,7 @@ impl World {
             trajectory: Trajectory::new_landed(body, self.time, point, mass),
             halt_warp_at_burn: false,
             target: None,
+            target_body: None,
             docked_to: None,
         });
         self.vessels.len() - 1
@@ -362,6 +367,7 @@ impl World {
             trajectory,
             halt_warp_at_burn: false,
             target: None,
+            target_body: None,
             docked_to: None,
         });
         self.vessels.len() - 1
@@ -778,6 +784,9 @@ impl World {
             "ungültiges Ziel {target:?} für Schiff {vessel}"
         );
         self.vessels[vessel].target = target;
+        if target.is_some() {
+            self.vessels[vessel].target_body = None;
+        }
         let trajectory = &self.vessels[vessel].trajectory;
         if trajectory
             .docking()
@@ -790,6 +799,34 @@ impl World {
                 .set_docking(&self.bodies, &params, self.time, None);
             self.refresh_dockings();
         }
+    }
+
+    /// Setzt einen Himmelskörper als Ziel eines Schiffs (oder keinen); ein
+    /// Schiff als Ziel entfällt dann.
+    pub fn set_target_body(&mut self, vessel: usize, target: Option<BodyId>) {
+        assert!(
+            target.is_none_or(|b| b < self.bodies.len()),
+            "ungültiger Zielkörper {target:?}"
+        );
+        if target.is_some() {
+            self.set_target(vessel, None);
+        }
+        self.vessels[vessel].target_body = target;
+    }
+
+    /// Startfenster zum Zielkörper eines Schiffs (siehe `transfer::window`).
+    pub fn transfer_window(&self, vessel: usize) -> Option<Window> {
+        let target = self.vessels[vessel].target_body?;
+        let own = &self.vessels[self.host(vessel)].trajectory;
+        transfer::window(&self.bodies, self.time, own, target)
+    }
+
+    /// Engste Annäherung an den Zielkörper eines Schiffs (siehe
+    /// `transfer::approach`).
+    pub fn body_approach(&self, vessel: usize) -> Option<BodyApproach> {
+        let target = self.vessels[vessel].target_body?;
+        let own = &self.vessels[self.host(vessel)].trajectory;
+        transfer::approach(&self.bodies, self.time, own, target)
     }
 
     /// Engste Annäherung eines Schiffs an sein Ziel (siehe

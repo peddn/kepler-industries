@@ -18,6 +18,7 @@ pub mod rendezvous;
 pub mod scenario;
 pub mod soi;
 pub mod trajectory;
+pub mod transfer;
 pub mod world;
 
 pub use body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint};
@@ -29,6 +30,7 @@ pub use log::{LOG_LIMIT, LogEntry, LogKind};
 pub use maneuver::{Burn, ManeuverNode, Plan, PlanError};
 pub use rendezvous::{Approach, PlaneCrossing};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
+pub use transfer::{BodyApproach, Window};
 pub use world::{
     Base, BudgetItem, DeltaVBudget, LandingBurn, Touchdown, Vessel, VesselParams, VesselStatus,
     World,
