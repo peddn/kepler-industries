@@ -458,6 +458,8 @@ fn screen_length(camera: &Camera, view: &GlobalTransform, points: &[Vec3]) -> f3
 /// Gestrichelter Linienzug: Strich und Lücke werden entlang seiner
 /// Projektion auf dem Bildschirm abgemessen, so sind sie bei jedem Zoom und
 /// auch bei schräger Sicht gleich lang. Stücke hinter der Kamera fehlen.
+/// Gestrichelt wird nur, was im Bild liegt: Nahe an der Kamera wird ein
+/// Stück auf dem Bildschirm beliebig lang.
 fn draw_dashed(
     gizmos: &mut Gizmos,
     camera: &Camera,
@@ -465,6 +467,9 @@ fn draw_dashed(
     points: &[Vec3],
     color: Color,
 ) {
+    let Some(size) = camera.logical_viewport_size() else {
+        return;
+    };
     let period = SOI_DASH + SOI_GAP;
     let mut phase = 0.0f32;
     let screen: Vec<Option<Vec2>> = points
@@ -475,20 +480,22 @@ fn draw_dashed(
         let (Some(a), Some(b)) = (w[0], w[1]) else {
             continue;
         };
+        let Some((start, end)) = clip_to_screen(a, b, size) else {
+            continue;
+        };
         let (from, to) = (points[i], points[i + 1]);
-        let length = a.distance(b);
+        // Im Bild liegt der Anteil start..end des Stücks, `length` Pixel lang.
+        let length = a.distance(b) * (end - start);
+        let at = |done: f32| from.lerp(to, start + (end - start) * done / length);
         let mut done = 0.0;
         while done < length {
             // `phase` bleibt in [0, period): klein und damit genau.
             let on = phase < SOI_DASH;
             let left = if on { SOI_DASH - phase } else { period - phase };
-            let step = left.min(length - done);
+            // Mindestens ein Stückchen weiter, damit die Schleife sicher endet.
+            let step = left.min(length - done).max(1e-3);
             if on {
-                gizmos.line(
-                    from.lerp(to, done / length),
-                    from.lerp(to, (done + step) / length),
-                    color,
-                );
+                gizmos.line(at(done), at((done + step).min(length)), color);
             }
             done += step;
             phase += step;
@@ -497,6 +504,34 @@ fn draw_dashed(
             }
         }
     }
+}
+
+/// Der Teil der Strecke `a`–`b`, der im Bild der Größe `size` liegt, als
+/// Anteile (0 bei `a`, 1 bei `b`); `None`, wenn nichts davon im Bild liegt
+/// oder die Punkte keine endlichen Zahlen sind (Liang-Barsky).
+fn clip_to_screen(a: Vec2, b: Vec2, size: Vec2) -> Option<(f32, f32)> {
+    if !a.is_finite() || !b.is_finite() {
+        return None;
+    }
+    let d = b - a;
+    let (mut start, mut end) = (0.0f32, 1.0f32);
+    for (p, q) in [
+        (-d.x, a.x),
+        (d.x, size.x - a.x),
+        (-d.y, a.y),
+        (d.y, size.y - a.y),
+    ] {
+        if p == 0.0 {
+            if q < 0.0 {
+                return None;
+            }
+        } else if p < 0.0 {
+            start = start.max(q / p);
+        } else {
+            end = end.min(q / p);
+        }
+    }
+    (start < end).then_some((start, end))
 }
 
 /// Umlaufzeit eines Keplerabschnitts; bei offenen Bahnen bis zum Wechsel der
@@ -892,5 +927,36 @@ pub fn draw_zones(
         gizmos
             .circle(Isometry3d::new(center, rotation), distance * 0.01, color)
             .resolution(4);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Nur der Teil im Bild bleibt; riesige oder unendliche Strecken (nahe
+    /// an der Kamera) machen keine Arbeit mehr.
+    #[test]
+    fn clipping_keeps_only_the_visible_part() {
+        let size = Vec2::new(1000.0, 500.0);
+        let inside = clip_to_screen(Vec2::new(100.0, 100.0), Vec2::new(200.0, 300.0), size);
+        assert_eq!(inside, Some((0.0, 1.0)));
+        let (s, e) =
+            clip_to_screen(Vec2::new(-1000.0, 250.0), Vec2::new(3000.0, 250.0), size).unwrap();
+        assert!((s - 0.25).abs() < 1e-6 && (e - 0.5).abs() < 1e-6);
+        let huge = clip_to_screen(Vec2::new(-1e7, 250.0), Vec2::new(1e7, 250.0), size).unwrap();
+        assert!((huge.1 - huge.0) * 2e7 < 1_010.0);
+        assert_eq!(
+            clip_to_screen(Vec2::new(-10.0, -10.0), Vec2::new(-5.0, 900.0), size),
+            None
+        );
+        assert_eq!(
+            clip_to_screen(Vec2::new(f32::INFINITY, 0.0), Vec2::ZERO, size),
+            None
+        );
+        assert_eq!(
+            clip_to_screen(Vec2::new(f32::NAN, 0.0), Vec2::ZERO, size),
+            None
+        );
     }
 }
