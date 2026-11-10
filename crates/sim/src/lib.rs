@@ -20,7 +20,7 @@ pub mod trajectory;
 pub mod world;
 
 pub use body::{Atmosphere, Body, BodyId, SurfacePoint};
-pub use docking::{DockError, DockPlan, DockRequest, Docking};
+pub use docking::{DockError, DockPlan, DockRequest, Docking, UndockError, UndockFuel};
 pub use kepler::StateVector;
 pub use landing::{Crash, LandingZone};
 pub use launch::{Launch, LaunchPlan, LaunchProfile};

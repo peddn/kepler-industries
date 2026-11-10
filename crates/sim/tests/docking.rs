@@ -1,11 +1,12 @@
 //! Tests fürs Andocken: Angleichen, Anflug, Kontakt, Verbund.
 
 use glam::DVec3;
-use sim::docking::{CONTACT_SPEED, DOCKING_RANGE, angular_velocity};
+use sim::docking::{CONTACT_SPEED, DOCKING_RANGE, SEPARATION_SPEED, angular_velocity};
+use sim::kepler;
 use sim::scenario::{FERRY, SATELLITE, demo};
 use sim::{
-    BudgetItem, DockError, Launch, LaunchProfile, LogKind, ManeuverNode, Segment, VesselStatus,
-    World,
+    BudgetItem, DockError, Launch, LaunchProfile, LogKind, ManeuverNode, Segment, UndockError,
+    VesselStatus, World,
 };
 
 const RELAIS: usize = 0;
@@ -256,4 +257,133 @@ fn docking_is_saved() {
     round_trip(&world);
     world.advance_to(plan(&world).contact + 10.0);
     round_trip(&world);
+}
+
+/// Der Verbund aus dem Rendezvous, kurz nach dem Kontakt.
+fn verbund() -> World {
+    let mut world = docking();
+    let contact = plan(&world).contact;
+    world.advance_to(contact + 10.0);
+    world
+}
+
+fn gap(world: &World) -> f64 {
+    let (_, a) = world.vessel_state(FERRY_ID);
+    let (_, b) = world.vessel_state(RELAIS);
+    a.position.distance(b.position)
+}
+
+/// Abdocken: Der Treibstoff wird aufgeteilt (Vorschlag nach Tankgröße), die
+/// Masse bleibt erhalten, beide haben wieder ihre eigenen Werte, das
+/// abgedockte Schiff hat das Hauptschiff als Ziel und entfernt sich stetig.
+#[test]
+fn undock_splits_fuel_and_separates() {
+    let mut world = verbund();
+    let total = world.vessel_mass(RELAIS);
+    let range = world.undock_fuel(FERRY_ID).unwrap();
+    let share = range.pool * FERRY.fuel_capacity / (FERRY.fuel_capacity + SATELLITE.fuel_capacity);
+    assert!((range.suggested - share).abs() < 1e-9);
+    assert_eq!(range.max, FERRY.fuel_capacity.min(range.pool));
+    assert_eq!(range.min, 0.0);
+    let fuel = range.suggested;
+    let (ferry_dv, relais_dv) = world.undock_delta_v(FERRY_ID, fuel);
+
+    world.undock(FERRY_ID, fuel).unwrap();
+    assert!((world.vessel_mass(FERRY_ID) + world.vessel_mass(RELAIS) - total).abs() < 1e-9);
+    assert!((world.vessel_fuel(FERRY_ID) - fuel).abs() < 1e-9);
+    assert_eq!(world.params(RELAIS), SATELLITE);
+    assert_eq!(world.params(FERRY_ID), FERRY);
+    assert!((world.vessel_delta_v(FERRY_ID) - ferry_dv).abs() < 1e-9);
+    assert!((world.vessel_delta_v(RELAIS) - relais_dv).abs() < 1e-9);
+    assert_eq!(world.vessels[FERRY_ID].target, Some(RELAIS));
+    assert_eq!(
+        world.log.last().unwrap().kind,
+        LogKind::Undocked { host: RELAIS, fuel }
+    );
+
+    // Trennstoß gegen die Flugrichtung; danach wächst der Abstand stetig.
+    let (_, a) = world.vessel_state(FERRY_ID);
+    let (_, b) = world.vessel_state(RELAIS);
+    let push = b.velocity - a.velocity;
+    assert!((push.length() - SEPARATION_SPEED).abs() < 1e-9);
+    assert!(push.dot(b.velocity) > 0.0, "gegen die Flugrichtung");
+    // Beide bleiben in derselben Ebene: keine Knoten AN/DN.
+    let plane = world.plane_to_target(FERRY_ID).unwrap();
+    assert!(plane.coplanar && plane.ascending.is_none(), "{plane:?}");
+    let period = kepler::period(world.bodies[0].gm, &b).unwrap();
+    let now = world.time;
+    world.advance_to(now + 0.5 * period);
+    let half = gap(&world);
+    world.advance_to(now + 2.0 * period);
+    let two = gap(&world);
+    assert!(
+        half > 500.0 && two > 2.0 * half && two > 8_000.0,
+        "{half} {two}"
+    );
+    assert!(world.plane_to_target(FERRY_ID).unwrap().coplanar);
+
+    // Spielstand nach dem Abdocken.
+    let json = serde_json::to_string(&world).unwrap();
+    let loaded: World = serde_json::from_str(&json).unwrap();
+    assert_eq!(loaded, world);
+}
+
+/// Geplante Nodes des Verbunds bleiben und brennen danach mit den Werten des
+/// Hauptschiffs allein.
+#[test]
+fn undock_keeps_the_hosts_chain() {
+    let mut world = verbund();
+    let node = ManeuverNode {
+        time: world.time + 600.0,
+        delta_v: DVec3::new(20.0, 0.0, 0.0),
+    };
+    world.add_node(RELAIS, node).unwrap();
+    let before = world.vessels[RELAIS]
+        .trajectory
+        .plans()
+        .next()
+        .unwrap()
+        .burn;
+    assert_eq!(before.thrust, FERRY.thrust + SATELLITE.thrust);
+    let fuel = world.undock_fuel(FERRY_ID).unwrap().suggested;
+    world.undock(FERRY_ID, fuel).unwrap();
+    let after = world.vessels[RELAIS]
+        .trajectory
+        .plans()
+        .next()
+        .unwrap()
+        .burn;
+    assert_eq!(after.thrust, SATELLITE.thrust);
+    assert!((after.delta_v() - 20.0).abs() < 1e-6);
+    assert!(world.vessels[FERRY_ID].trajectory.nodes().is_empty());
+}
+
+/// Ohne Verbund, mit zu viel Treibstoff oder während des Brennens geht es
+/// nicht.
+#[test]
+fn undock_refuses() {
+    let mut world = verbund();
+    assert_eq!(world.undock(RELAIS, 0.0), Err(UndockError::NotDocked));
+    let range = world.undock_fuel(FERRY_ID).unwrap();
+    assert!(matches!(
+        world.undock(FERRY_ID, range.max + 1.0),
+        Err(UndockError::FuelOutOfRange { .. })
+    ));
+    let node = ManeuverNode {
+        time: world.time + 600.0,
+        delta_v: DVec3::new(20.0, 0.0, 0.0),
+    };
+    world.add_node(RELAIS, node).unwrap();
+    world.set_armed(RELAIS, true).unwrap();
+    let burn = world.vessels[RELAIS]
+        .trajectory
+        .plans()
+        .next()
+        .unwrap()
+        .burn;
+    world.advance_to(0.5 * (burn.start + burn.end));
+    assert_eq!(
+        world.undock(FERRY_ID, range.suggested),
+        Err(UndockError::Busy)
+    );
 }

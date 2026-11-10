@@ -50,4 +50,6 @@ pub enum LogKind {
     },
     /// Angedockt: jetzt Teil des Verbunds um das Hauptschiff `host`.
     Docked { host: usize },
+    /// Vom Verbund um das Hauptschiff `host` abgedockt, mit `fuel` kg.
+    Undocked { host: usize, fuel: f64 },
 }

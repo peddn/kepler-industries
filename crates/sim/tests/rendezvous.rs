@@ -191,3 +191,61 @@ fn target_is_saved() {
     assert_eq!(loaded.vessels[0].target, Some(1));
     assert_eq!(loaded, world);
 }
+
+/// Zwei Schiffe auf geneigten Bahnen in 100 und 200 km Höhe; das Ziel ist um
+/// `extra` (rad) stärker geneigt, gleicher aufsteigender Knoten.
+fn two_planes(extra: f64) -> World {
+    let mut world = World::new(vec![home_planet()]);
+    let a = circular(&world, ALTITUDE, 0.3, 1.0, 0.0);
+    let b = circular(&world, 200_000.0, 0.3 + extra, 1.0, 2.0);
+    world.spawn_vessel("A", SATELLITE, 100.0, 0, a);
+    world.spawn_vessel("B", SATELLITE, 100.0, 0, b);
+    world.set_target(0, Some(1));
+    world
+}
+
+/// Dieselbe Ebene (wie nach dem Abdocken): keine Knoten, statt Knoten, die im
+/// Rundungsrauschen umherspringen.
+#[test]
+fn same_plane_has_no_nodes() {
+    let mut world = two_planes(0.0);
+    for _ in 0..5 {
+        let plane = world.plane_to_target(0).unwrap();
+        assert!(plane.coplanar, "{plane:?}");
+        assert_eq!((plane.ascending, plane.descending), (None, None));
+        assert!(plane.inclination < 1e-12, "{plane:?}");
+        world.advance_to(world.time + 1.0);
+    }
+}
+
+/// Eine kleine, echte Neigung (0,01°): Die Knoten liegen auf der Zielebene
+/// und bleiben an ihrer Stelle, während die Zeit vergeht.
+#[test]
+fn small_inclination_has_steady_nodes() {
+    let mut world = two_planes(0.01f64.to_radians());
+    let at = |world: &World, t: f64| {
+        world.vessels[0]
+            .trajectory
+            .predicted_state(&world.bodies, t)
+            .unwrap()
+            .1
+            .position
+    };
+    let (_, b) = world.vessel_state(1);
+    let normal = b.position.cross(b.velocity).normalize();
+    let first = world.plane_to_target(0).unwrap();
+    assert!(!first.coplanar);
+    assert!((first.inclination.to_degrees() - 0.01).abs() < 1e-9);
+    let (asc, desc) = (first.ascending.unwrap(), first.descending.unwrap());
+    for t in [asc, desc] {
+        assert!(at(&world, t).dot(normal).abs() < 1e-3, "auf der Zielebene");
+    }
+    for _ in 0..10 {
+        world.advance_to(world.time + 1.0);
+        let plane = world.plane_to_target(0).unwrap();
+        let moved = at(&world, plane.ascending.unwrap()).distance(at(&world, asc));
+        assert!(moved < 1e-3, "AN um {moved} m gesprungen");
+        let moved = at(&world, plane.descending.unwrap()).distance(at(&world, desc));
+        assert!(moved < 1e-3, "DN um {moved} m gesprungen");
+    }
+}

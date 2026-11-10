@@ -119,6 +119,13 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             format!("angedockt an {}", world.vessels[*host].name),
             LANDED_COLOR,
         ),
+        LogKind::Undocked { host, fuel } => (
+            format!(
+                "abgedockt von {} ({fuel:.0} kg Treibstoff)",
+                world.vessels[*host].name
+            ),
+            TEXT_COLOR,
+        ),
     };
     Line {
         time: entry.time,

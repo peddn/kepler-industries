@@ -26,12 +26,12 @@ pub const PANEL_WIDTH: f32 = 330.0;
 const DEFAULT_COUNTDOWN: f64 = 120.0;
 
 const PANEL_COLOR: Color = Color::srgba(0.03, 0.04, 0.07, 0.88);
-const CARD_COLOR: Color = Color::srgb(0.07, 0.08, 0.12);
-const BORDER_COLOR: Color = Color::srgb(0.25, 0.3, 0.4);
-const BUTTON_COLOR: Color = Color::srgb(0.12, 0.14, 0.2);
+pub(crate) const CARD_COLOR: Color = Color::srgb(0.07, 0.08, 0.12);
+pub(crate) const BORDER_COLOR: Color = Color::srgb(0.25, 0.3, 0.4);
+pub(crate) const BUTTON_COLOR: Color = Color::srgb(0.12, 0.14, 0.2);
 const BUTTON_HOVER: Color = Color::srgb(0.2, 0.24, 0.33);
 const BUTTON_PRESSED: Color = Color::srgb(0.35, 0.4, 0.55);
-const HINT_COLOR: Color = Color::srgb(0.6, 0.65, 0.75);
+pub(crate) const HINT_COLOR: Color = Color::srgb(0.6, 0.65, 0.75);
 
 /// Ist die Leiste gerade zu sehen?
 #[derive(Resource, Default)]
@@ -148,7 +148,7 @@ pub struct Adjust {
     sign: f64,
 }
 
-fn text(font: &UiFont, value: &str, size: f32) -> (Text, TextFont) {
+pub(crate) fn text(font: &UiFont, value: &str, size: f32) -> (Text, TextFont) {
     (
         Text::new(value),
         TextFont {
@@ -159,7 +159,7 @@ fn text(font: &UiFont, value: &str, size: f32) -> (Text, TextFont) {
     )
 }
 
-fn button_node(width: Val) -> Node {
+pub(crate) fn button_node(width: Val) -> Node {
     Node {
         width,
         height: px(24),
@@ -426,6 +426,9 @@ fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
             "Neigung",
             format!("{:.1}°", plane.inclination.to_degrees()),
         ));
+        if plane.coplanar {
+            lines.push(row("", "gleiche Ebene".into()));
+        }
         for (name, time) in [("  AN in", plane.ascending), ("  DN in", plane.descending)] {
             if let Some(t) = time {
                 lines.push(row(name, format_span((t - world.time).max(0.0))));
@@ -468,7 +471,7 @@ fn launch_result(world: &World, i: usize) -> String {
         );
     };
     let burn = &plan.burn;
-    let params = &world.vessels[i].params;
+    let params = world.params(i);
     let ascent = trajectory.segments().find(|s| s.is_burn());
     let altitude = ascent.map_or(0.0, |s| {
         s.state_at(&world.bodies, burn.end).position.length() - world.bodies[s.body()].radius
@@ -677,7 +680,7 @@ fn adjust(world: &mut World, i: usize, param: Param, delta: f64) -> Result<(), P
 }
 
 /// Mauszeiger in physischen Pixeln (wie die Lage der UI-Knoten).
-fn physical_cursor(window: &Window) -> Option<Vec2> {
+pub(crate) fn physical_cursor(window: &Window) -> Option<Vec2> {
     window.physical_cursor_position()
 }
 

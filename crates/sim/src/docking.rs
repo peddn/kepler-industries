@@ -90,6 +90,54 @@ impl fmt::Display for DockError {
     }
 }
 
+/// Beim Abdocken bekommt das abgedockte Schiff diesen Stoß gegen die
+/// Flugrichtung (m/s): Es sinkt minimal, läuft langsam voraus, und die Schiffe
+/// entfernen sich stetig (etwa 6 km pro Umlauf in 100 km Höhe).
+pub const SEPARATION_SPEED: f64 = 1.0;
+
+/// Warum das Abdocken nicht geht.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum UndockError {
+    NotDocked,
+    /// Der Verbund brennt gerade oder dockt selbst an.
+    Busy,
+    /// Am Boden wird nicht abgedockt.
+    OnGround,
+    /// Mitgenommener Treibstoff außerhalb des Bereichs (kg).
+    FuelOutOfRange {
+        min: f64,
+        max: f64,
+    },
+}
+
+impl fmt::Display for UndockError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UndockError::NotDocked => write!(f, "nicht angedockt"),
+            UndockError::Busy => write!(f, "Verbund brennt gerade oder dockt an"),
+            UndockError::OnGround => write!(f, "am Boden wird nicht abgedockt"),
+            UndockError::FuelOutOfRange { min, max } => {
+                write!(
+                    f,
+                    "Treibstoff muss zwischen {min:.0} und {max:.0} kg liegen"
+                )
+            }
+        }
+    }
+}
+
+/// Wie viel Treibstoff (kg) ein abdockendes Schiff mitnehmen kann: höchstens
+/// so viel, wie sein Tank fasst, mindestens so viel, dass der Rest in die
+/// übrigen Tanks passt; vorgeschlagen ist eine Aufteilung nach Tankgröße.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UndockFuel {
+    pub min: f64,
+    pub max: f64,
+    pub suggested: f64,
+    /// Gemeinsamer Vorrat des Verbunds.
+    pub pool: f64,
+}
+
 /// Was `World` für das Andocken ausrechnet und der Zeitleiste übergibt: der
 /// automatische Node und die Bahn des Ziels.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]

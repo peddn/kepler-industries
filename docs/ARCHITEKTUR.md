@@ -224,7 +224,11 @@ Minimum mit dem Goldenen Schnitt genau gesucht. Nimmt der Abstand nur ab, ist
 das Ende des Zeitraums die engste Stelle (wichtig fürs Aufholen auf fast
 derselben Bahn). Bahnebene: Winkel zwischen den Drehimpulsen der eigenen Bahn
 nach dem letzten Brennen und der Zielbahn; die Knoten (AN/DN) sind die
-Vorzeichenwechsel des Abstands zur Zielebene, per Bisektion. Weniger als 1 ms
+Vorzeichenwechsel des Abstands zur Zielebene, per Bisektion. Schwingt das
+Schiff höchstens 1 m über und unter der Zielebene (`COPLANAR_HEIGHT`, bei
+700 km Bahnradius etwa 0,0001°), gilt das als gleiche Ebene: keine Knoten,
+sonst sprängen sie im Rundungsrauschen umher (etwa nach dem Abdocken, wo
+beide Bahnen exakt in einer Ebene liegen). Weniger als 1 ms
 pro Bild, deshalb ohne Zwischenspeicher. Das Ziel gehört zum Schiff und zum
 Spielstand (`Vessel::target`).
 
@@ -252,6 +256,17 @@ nichts mehr (sein Keplerabschnitt hat kein Ende). Nur dann hängt seine Bahn
 nicht von der Masse ab, und Vorschau = Ausführung bleibt exakt. Weil das
 Andocken von zwei Schiffen abhängt, rechnet `World` es nach jedem Befehl an
 irgendeiner Kette neu (`refresh_dockings`).
+
+**Abdocken** (`World::undock`): ein Befehl für jetzt, im Flug und nicht
+während eines Brennens. Das Teil nimmt einen einstellbaren Teil des
+gemeinsamen Treibstoffs mit (höchstens sein Tank, mindestens so viel, dass der
+Rest in die übrigen Tanks passt; `World::undock_fuel`). Die Masse bleibt
+erhalten. Das Teil bekommt `SEPARATION_SPEED` (1 m/s) gegen die
+Flugrichtung: Es sinkt minimal und läuft voraus, pro Umlauf etwa
+3 · Umlaufzeit · Stoß (in 100 km Höhe 5,9 km). Beide Zeitleisten beginnen
+neu; das Hauptschiff behält seine Kette, die mit den neuen Werten neu
+berechnet wird (ungültig gewordene Nodes bleiben), das Teil fängt ohne Kette
+an, mit dem Hauptschiff als Ziel.
 
 **Zeitleiste eines Schiffs:** Folge von Abschnitten
 - `Kepler`: Freiflug ohne Luft, analytisch (universelle Variablen: eine Formel
@@ -383,8 +398,10 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Griffe. Das Ziel wird Hauptschiff, der Verbund kann normal brennen (so
   lassen sich größere Schiffe im Orbit zusammensetzen). In der Liste steht er
   als „Relais-1 + Fähre-3“, angedockte Schiffe sind nicht einzeln wählbar.
-- **Abdocken (nächster Schritt):** jetzt, mit kleinem Trennstoß und einem
-  Regler, wie viel Treibstoff das abdockende Schiff mitnimmt.
+- **Abdocken** in der Karte „Verbund“: Teil wählen, Treibstoff zum
+  Mitnehmen mit − / + (Vorschlag nach Tankgröße), Vorschau beider Schiffe,
+  „Abdocken“. Planbares Abdocken als Schritt der Kette kommt mit den
+  automatischen Routen.
 - **Basis-Schiff:** Rohbau im Orbit, Transporter liefern „Bauteile" per
   Andocken, voll → Vorlage wechselt zum Basis-Schiff. Landet einmalig und
   gründet die Basis dort, wo es aufsetzt.
@@ -478,6 +495,6 @@ nichts verloren geht.
 6. Rendezvous ✓ (Ziel, engste Annäherung, Neigung und Knoten, Startfenster
    von Hand), Nahansicht ✓ (Kamera auf jedes gewählte Objekt, `N`),
    Statusleiste mit Protokoll ✓, Andocken ✓ (Angleichen, Anflug, Verbund),
-   Abdocken
+   Abdocken ✓
 7. Mond, Wechsel der Einflusssphäre
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft
