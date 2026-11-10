@@ -379,7 +379,7 @@ fn coast_path(world: &World, trajectory: &Trajectory, from: f64, points: usize) 
 fn nearest_on_path(
     projector: &Projector,
     path: &Path,
-    rig: &CameraRig,
+    focus: DVec3,
     now: f64,
     cursor: Vec2,
 ) -> Option<(f32, f64)> {
@@ -394,15 +394,13 @@ fn nearest_on_path(
             if t1 <= now {
                 continue;
             }
-            let (a, b) = (to_view(p0, rig.focus), to_view(p1, rig.focus));
+            let (a, b) = (to_view(p0, focus), to_view(p1, focus));
             let u = closest_on_segment(&ray, a, b);
             let t = t0 + (t1 - t0) * u as f64;
-            let point = a + (b - a) * u;
-            // Ausgeblendete Stücke (Nahansicht) lassen sich nicht anklicken.
-            if t <= now || rig.fade(point) == 0.0 {
+            if t <= now {
                 continue;
             }
-            let Some(screen) = projector.project(point) else {
+            let Some(screen) = projector.project(a + (b - a) * u) else {
                 continue;
             };
             let distance = screen.distance(cursor);
@@ -645,7 +643,7 @@ pub fn input(
                     // Noch ein Klick: nur gewählt.
                 } else if let Some(chain_node) = chain_node
                     && let Some((_, time)) =
-                        nearest_on_path(&projector, path, &rig, world.time, cursor)
+                        nearest_on_path(&projector, path, rig.focus, world.time, cursor)
                 {
                     let node = ManeuverNode {
                         time,
@@ -687,7 +685,8 @@ pub fn input(
                 &mut selected,
                 &mut zone,
                 &projector,
-                &rig,
+                rig.focus,
+                orbit_points(rig.near),
                 cursor,
             )
             .err();
@@ -719,10 +718,10 @@ fn click(
     selected: &mut SelectedNode,
     zone: &mut SelectedZone,
     projector: &Projector,
-    rig: &CameraRig,
+    focus: DVec3,
+    points: usize,
     cursor: Vec2,
 ) -> Result<(), PlanError> {
-    let (focus, points) = (rig.focus, orbit_points(rig.near));
     let vessel_hit = (0..world.vessels.len())
         .filter_map(|i| {
             let position = to_view(world.vessel_state(i).1.position, focus);
@@ -757,7 +756,7 @@ fn click(
 
     if let Some(i) = selection.0 {
         let path = coast_path(world, &world.vessels[i].trajectory, world.time, points);
-        if let Some((distance, time)) = nearest_on_path(projector, &path, rig, world.time, cursor)
+        if let Some((distance, time)) = nearest_on_path(projector, &path, focus, world.time, cursor)
             && distance < PICK_RADIUS
         {
             let node = ManeuverNode {

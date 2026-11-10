@@ -66,10 +66,7 @@ Node oder Zielgebiet (Raute in der Kreismitte anklicken). Sie folgt ihm, auch
 wenn man danach etwas anderes wählt; so kann man ein Zielgebiet im Blick
 behalten und dabei den Brems-Node des Schiffs einstellen. Mit `N` geht es in
 die Nahansicht: Der Planet liegt unten, man kommt bis auf 10 m heran, zum
-Beispiel an zwei Schiffe beim Rendezvous. Bahnlinien laufen dort mit der
-Entfernung aus: Aus der Nähe sähe man den Rest des Umlaufs fast genau von der
-Kante, als Linie mit scharfem Knick (perspektivisch richtig, aber verwirrend).
-Zoomt man heraus, kommt die ganze Bahn zurück.
+Beispiel an zwei Schiffe beim Rendezvous.
 
 Ganz unten steht in der Statusleiste die letzte Meldung: Start, Brennbeginn
 und Brennschluss (mit der Bahn danach), Eintritt in die Atmosphäre (mit der
