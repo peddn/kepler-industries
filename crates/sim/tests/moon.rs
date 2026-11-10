@@ -1,9 +1,11 @@
-//! Tests für den Mond: Bahn auf Schienen, Einflusssphäre, gebundene Rotation.
+//! Tests für die Monde: Bahn auf Schienen (Kreis und geneigte Ellipse),
+//! Einflusssphäre, gebundene Rotation.
 
 use glam::DVec3;
-use sim::World;
 use sim::body::{body_state, orbital_period, sphere_of_influence};
 use sim::scenario::{demo, home_planet};
+use sim::{BodyOrbit, Event, StateVector, World, kepler};
+use std::f64::consts::PI;
 
 const MOON: usize = 1;
 
@@ -83,4 +85,105 @@ fn moon_is_saved() {
     old.as_object_mut().unwrap().remove("orbit");
     let planet: sim::Body = serde_json::from_value(old).unwrap();
     assert_eq!(planet, home_planet());
+}
+
+const OUTER: usize = 2;
+
+/// Zimm läuft auf einer geneigten Ellipse: Seine Lage stimmt mit einer
+/// unabhängigen Keplerbahn aus seinem Anfangszustand überein, Abstände,
+/// Neigung, Knoten und Umlauf passen zu den Bahnelementen.
+#[test]
+fn outer_moon_follows_its_ellipse() {
+    let world = demo();
+    let bodies = &world.bodies;
+    assert_eq!(bodies[OUTER].name, "Zimm");
+    let orbit = bodies[OUTER].orbit.clone().unwrap();
+    let gm = bodies[0].gm;
+    let start = body_state(bodies, OUTER, 0.0);
+    let period = orbital_period(bodies, OUTER).unwrap();
+    assert!((period / 1_077_311.0 - 1.0).abs() < 1e-5, "{period}");
+
+    let (mut nearest, mut farthest) = (f64::INFINITY, 0.0f64);
+    for i in 0..=1_000 {
+        let t = period * i as f64 / 1_000.0 + 12_345.0;
+        let s = body_state(bodies, OUTER, t);
+        let kepler = kepler::propagate(gm, start, t);
+        assert!(s.position.distance(kepler.position) < 1.0, "{t}");
+        assert!(s.velocity.distance(kepler.velocity) < 1e-4, "{t}");
+        nearest = nearest.min(s.position.length());
+        farthest = farthest.max(s.position.length());
+    }
+    assert!(
+        (nearest / orbit.periapsis() - 1.0).abs() < 1e-4,
+        "{nearest}"
+    );
+    assert!(
+        (farthest / orbit.apoapsis() - 1.0).abs() < 1e-4,
+        "{farthest}"
+    );
+    assert!((orbit.periapsis() - 42_300_000.0).abs() < 1e-3);
+    assert!((orbit.apoapsis() - 51_700_000.0).abs() < 1e-3);
+
+    // Bahnebene: Neigung 6°, aufsteigender Knoten bei 78°.
+    let h = start.position.cross(start.velocity);
+    assert!(((h.z / h.length()).acos().to_degrees() - 6.0).abs() < 1e-9);
+    let node = DVec3::Z.cross(h);
+    assert!((node.y.atan2(node.x).to_degrees() - 78.0).abs() < 1e-9);
+
+    // Nach einem Umlauf wieder am selben Ort, auch nach Jahren.
+    for t in [0.0, 3.0e7] {
+        let s = body_state(bodies, OUTER, t);
+        let again = body_state(bodies, OUTER, t + period);
+        assert!(again.position.distance(s.position) < 1e-2, "{t}");
+    }
+    // Geschwindigkeit = Ableitung der Lage.
+    let t = 500_000.0;
+    let before = body_state(bodies, OUTER, t - 1.0).position;
+    let after = body_state(bodies, OUTER, t + 1.0).position;
+    let slope = (after - before) / 2.0;
+    assert!(slope.distance(body_state(bodies, OUTER, t).velocity) < 1e-3);
+
+    // Einflusssphäre aus der großen Halbachse, wie bei Minmus.
+    let soi = sphere_of_influence(bodies, OUTER);
+    assert!((soi / 2_247_000.0 - 1.0).abs() < 1e-3, "{soi}");
+}
+
+/// Alte Spielstände mit Kreisbahnen (Radius und Winkel) laden als Ellipse
+/// ohne Exzentrizität und Neigung.
+#[test]
+fn circular_orbit_from_old_saves() {
+    let old = serde_json::json!({ "parent": 0, "radius": 12_000_000.0, "phase": PI });
+    let orbit: BodyOrbit = serde_json::from_value(old).unwrap();
+    assert_eq!(orbit, BodyOrbit::circular(0, 12_000_000.0, PI));
+    let world = demo();
+    assert_eq!(world.bodies[MOON].orbit, Some(orbit));
+}
+
+/// Ein Schiff, das auf Zimm zufliegt, tritt genau am Rand seiner Sphäre ein,
+/// fliegt um ihn herum und verlässt sie wieder zum Planeten.
+#[test]
+fn flyby_of_the_outer_moon() {
+    let mut world = World::new(demo().bodies);
+    let moon = body_state(&world.bodies, OUTER, 0.0);
+    let soi = sphere_of_influence(&world.bodies, OUTER);
+    let toward = -moon.velocity.normalize();
+    let aside = toward.cross(DVec3::Z).normalize();
+    let state = StateVector {
+        position: moon.position - toward * 1.3 * soi + aside * 0.2 * soi,
+        velocity: moon.velocity + toward * 300.0,
+    };
+    world.spawn_vessel("Sonde", sim::scenario::SATELLITE, 100.0, 0, state);
+    let segments: Vec<_> = world.vessels[0].trajectory.segments().cloned().collect();
+    assert_eq!(segments[0].end_event(), Some(Event::SoiEntry(OUTER)));
+    let entry = segments[0].end();
+    let ship = segments[0].state_at(&world.bodies, entry).position;
+    let center = body_state(&world.bodies, OUTER, entry).position;
+    assert!(
+        (ship.distance(center) - soi).abs() < 1.0,
+        "{}",
+        ship.distance(center)
+    );
+    assert_eq!(segments[1].body(), OUTER);
+    assert_eq!(segments[1].end_event(), Some(Event::SoiExit));
+    assert_eq!(segments[2].body(), 0);
 }

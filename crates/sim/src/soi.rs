@@ -6,8 +6,8 @@
 //! - **Austritt** (Abstand zum eigenen Körper wird größer als der Radius der
 //!   Sphäre): analytisch auf der Keplerbahn (`kepler::time_to_radius_outbound`).
 //!   Aus dem Planeten heraus heißt das: Das Schiff verlässt das Heimatsystem.
-//! - **Eintritt** in die Sphäre eines Monds: Der Mond bewegt sich, deshalb
-//!   wird gesucht. Der Abstand zum Mond wird so fein abgetastet, dass beide
+//! - **Eintritt** in die Sphäre eines Monds: Der Mond bewegt sich (auch auf
+//!   einer geneigten Ellipse), deshalb wird gesucht. Der Abstand zum Mond wird so fein abgetastet, dass beide
 //!   sich pro Schritt höchstens um ein Viertel des Radius gegeneinander
 //!   bewegen; ein Vorzeichenwechsel wird per Bisektion genau eingegrenzt,
 //!   ein tiefer Punkt dazwischen per Goldenem Schnitt (für knappe
@@ -87,16 +87,20 @@ pub fn exit_time(bodies: &[Body], body: BodyId, t0: f64, state: &StateVector) ->
 }
 
 /// Kann die Bahn die Sphäre eines Monds von `body` überhaupt erreichen? Nur
-/// dann wird gesucht: Ihr Abstand zum Körper muss in den Ring um die
-/// Mondbahn fallen.
+/// dann wird gesucht: Ihr Abstand zum Körper muss in den Bereich fallen, den
+/// der Mond mit seiner Sphäre überstreicht (von Periapsis bis Apoapsis).
 pub fn reaches_moon(bodies: &[Body], body: BodyId, state: &StateVector) -> bool {
     let info = kepler::orbit_info(bodies[body].gm, state);
-    children(bodies, body).any(|c| {
-        let orbit = bodies[c].orbit.as_ref().expect("Mond");
-        let soi = sphere_of_influence(bodies, c);
-        info.periapsis <= orbit.radius + soi
-            && info.apoapsis.is_none_or(|ra| ra >= orbit.radius - soi)
-    })
+    children(bodies, body).any(|c| overlaps(bodies, c, &info))
+}
+
+/// Überschneiden sich die Abstände der Bahn (`info`) zum Mutterkörper mit
+/// denen des Monds `child` samt seiner Sphäre?
+fn overlaps(bodies: &[Body], child: BodyId, info: &kepler::OrbitInfo) -> bool {
+    let orbit = bodies[child].orbit.as_ref().expect("Mond");
+    let soi = sphere_of_influence(bodies, child);
+    info.periapsis <= orbit.apoapsis() + soi
+        && info.apoapsis.is_none_or(|ra| ra >= orbit.periapsis() - soi)
 }
 
 /// Ende des Suchfensters ab `t0`: ein Umlauf, höchstens bis zum Verlassen
@@ -136,16 +140,16 @@ fn entry_into(
     let orbit = bodies[child].orbit.as_ref().expect("Mond");
     let radius = sphere_of_influence(bodies, child);
     let info = kepler::orbit_info(gm, state);
-    if info.periapsis > orbit.radius + radius
-        || info.apoapsis.is_some_and(|ra| ra < orbit.radius - radius)
-    {
+    if !overlaps(bodies, child, &info) {
         return None;
     }
-    // Höchste Geschwindigkeit auf der Bahn (in der Periapsis, Vis-Viva) plus
-    // die des Monds: So weit bewegen sie sich höchstens gegeneinander.
+    // Höchste Geschwindigkeit auf der Bahn und auf der des Monds (jeweils in
+    // der Periapsis, Vis-Viva): So schnell bewegen sie sich höchstens
+    // gegeneinander.
     let alpha = 2.0 / state.position.length() - state.velocity.length_squared() / gm;
     let fastest = (gm * (2.0 / info.periapsis - alpha)).sqrt();
-    let moon_speed = (gm / orbit.radius).sqrt();
+    let e = orbit.eccentricity;
+    let moon_speed = (gm / orbit.semi_major_axis * (1.0 + e) / (1.0 - e)).sqrt();
     let step = SCAN_FRACTION * radius / (fastest + moon_speed);
     let n = ((until - t0) / step).ceil().max(1.0) as usize;
 

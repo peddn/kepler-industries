@@ -4,9 +4,11 @@
 //! Mittelpunkt des Körpers, +Z zeigt zum Nordpol. Die Rotation des Körpers
 //! steckt ausschließlich in den Umrechnungen Oberfläche ↔ Raum in dieser Datei.
 //!
-//! Monde laufen auf Schienen: eine Kreisbahn um den Mutterkörper, für jeden
-//! Zeitpunkt direkt berechnet (`body_state`). Der erste Körper (`bodies[0]`)
-//! ruht im Ursprung.
+//! Monde laufen auf Schienen (wie in KSP): eine feste Keplerbahn um den
+//! Mutterkörper aus sechs Bahnelementen, für jeden Zeitpunkt direkt berechnet
+//! (`body_state`). Der erste Körper (`bodies[0]`) ruht im Ursprung. Alle
+//! Körper drehen sich um +Z (keine Achsneigung, wie in KSP); die Neigung einer
+//! Bahn gilt gegenüber dieser gemeinsamen Äquatorebene.
 
 use crate::kepler::StateVector;
 use glam::{DMat3, DVec3};
@@ -89,16 +91,107 @@ impl SurfacePoint {
     }
 }
 
-/// Bahn eines Körpers um seinen Mutterkörper: ein Kreis in dessen
-/// Äquatorebene, im Drehsinn der Rotation (von Norden aus gegen den
-/// Uhrzeigersinn).
+/// Bahn eines Körpers um seinen Mutterkörper: eine Ellipse (oder ein Kreis),
+/// beschrieben durch die sechs Bahnelemente zum Zeitpunkt 0. Mit Neigung 0
+/// läuft sie in der Äquatorebene im Drehsinn der Rotation (von Norden aus
+/// gegen den Uhrzeigersinn); über 90° läuft sie rückwärts. Alte Spielstände
+/// mit Kreisbahnen (`radius`, `phase`) laden als Ellipse ohne Exzentrizität
+/// und Neigung.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BodyOrbit {
     pub parent: BodyId,
-    /// Bahnradius in m.
-    pub radius: f64,
-    /// Winkel (rad) zum Zeitpunkt 0, von +X aus.
-    pub phase: f64,
+    /// Große Halbachse in m (beim Kreis der Radius).
+    #[serde(alias = "radius")]
+    pub semi_major_axis: f64,
+    /// Exzentrizität: 0 Kreis, bis unter 1 immer gestrecktere Ellipse.
+    #[serde(default)]
+    pub eccentricity: f64,
+    /// Neigung gegen die Äquatorebene (rad).
+    #[serde(default)]
+    pub inclination: f64,
+    /// Länge des aufsteigenden Knotens, von +X aus (rad).
+    #[serde(default)]
+    pub ascending_node: f64,
+    /// Argument der Periapsis, vom aufsteigenden Knoten aus in Bahnrichtung
+    /// (rad).
+    #[serde(default)]
+    pub argument_of_periapsis: f64,
+    /// Mittlere Anomalie zum Zeitpunkt 0 (rad): wie weit der Körper seit der
+    /// Periapsis gleichmäßig vorangekommen ist (beim Kreis der Winkel).
+    #[serde(alias = "phase")]
+    pub mean_anomaly: f64,
+}
+
+/// Genauigkeit der exzentrischen Anomalie (rad).
+const ANOMALY_TOLERANCE: f64 = 1e-15;
+
+impl BodyOrbit {
+    /// Kreisbahn in der Äquatorebene mit Radius `radius`, zum Zeitpunkt 0 beim
+    /// Winkel `angle` (rad, von +X aus).
+    pub fn circular(parent: BodyId, radius: f64, angle: f64) -> Self {
+        Self {
+            parent,
+            semi_major_axis: radius,
+            eccentricity: 0.0,
+            inclination: 0.0,
+            ascending_node: 0.0,
+            argument_of_periapsis: 0.0,
+            mean_anomaly: angle,
+        }
+    }
+
+    /// Kleinster Abstand zum Mutterkörper (m).
+    pub fn periapsis(&self) -> f64 {
+        self.semi_major_axis * (1.0 - self.eccentricity)
+    }
+
+    /// Größter Abstand zum Mutterkörper (m).
+    pub fn apoapsis(&self) -> f64 {
+        self.semi_major_axis * (1.0 + self.eccentricity)
+    }
+
+    /// Drehung aus der Bahnebene (Periapsis auf +X, Bahnrichtung +Y) ins
+    /// System des Mutterkörpers.
+    pub fn orientation(&self) -> DMat3 {
+        DMat3::from_rotation_z(self.ascending_node)
+            * DMat3::from_rotation_x(self.inclination)
+            * DMat3::from_rotation_z(self.argument_of_periapsis)
+    }
+
+    /// Lage auf der Bahn bei der exzentrischen Anomalie `e_anomaly`, relativ
+    /// zum Mutterkörper (zum Zeichnen der ganzen Bahn).
+    pub fn point_at(&self, e_anomaly: f64) -> DVec3 {
+        let (a, e) = (self.semi_major_axis, self.eccentricity);
+        let (sin, cos) = e_anomaly.sin_cos();
+        self.orientation() * DVec3::new(a * (cos - e), a * (1.0 - e * e).sqrt() * sin, 0.0)
+    }
+
+    /// Lage und Geschwindigkeit relativ zum Mutterkörper (mit `gm`) zum
+    /// Zeitpunkt `t`. Die mittlere Anomalie wächst gleichmäßig, über den Rest
+    /// der Umlaufzeit gerechnet (genau auch nach Jahren); die exzentrische
+    /// folgt aus der Kepler-Gleichung M = E − e·sin E (Newton-Verfahren).
+    pub fn state(&self, gm: f64, t: f64) -> StateVector {
+        let (a, e) = (self.semi_major_axis, self.eccentricity);
+        let period = circular_period(gm, a);
+        let mean = self.mean_anomaly + t.rem_euclid(period) / period * TAU;
+        let mut anomaly = if e > 0.8 { std::f64::consts::PI } else { mean };
+        for _ in 0..50 {
+            let step = (anomaly - e * anomaly.sin() - mean) / (1.0 - e * anomaly.cos());
+            anomaly -= step;
+            if step.abs() <= ANOMALY_TOLERANCE {
+                break;
+            }
+        }
+        let (sin, cos) = anomaly.sin_cos();
+        let factor = (1.0 - e * e).sqrt();
+        // Bahngeschwindigkeit beim Kreis; d E / d t = n / (1 − e·cos E).
+        let speed = a * TAU / period / (1.0 - e * cos);
+        let rotation = self.orientation();
+        StateVector {
+            position: rotation * DVec3::new(a * (cos - e), a * factor * sin, 0.0),
+            velocity: rotation * DVec3::new(-sin * speed, factor * cos * speed, 0.0),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -121,7 +214,9 @@ pub struct Body {
     pub soi_radius: Option<f64>,
 }
 
-/// Umlaufzeit einer Kreisbahn mit Radius `radius` um einen Körper mit `gm`.
+/// Umlaufzeit einer Kreisbahn mit Radius `radius` um einen Körper mit `gm`;
+/// ebenso die einer Ellipse mit dieser großen Halbachse (drittes
+/// Keplergesetz).
 pub fn circular_period(gm: f64, radius: f64) -> f64 {
     TAU * (radius.powi(3) / gm).sqrt()
 }
@@ -130,7 +225,10 @@ pub fn circular_period(gm: f64, radius: f64) -> f64 {
 /// Ursprung.
 pub fn orbital_period(bodies: &[Body], body: BodyId) -> Option<f64> {
     let orbit = bodies[body].orbit.as_ref()?;
-    Some(circular_period(bodies[orbit.parent].gm, orbit.radius))
+    Some(circular_period(
+        bodies[orbit.parent].gm,
+        orbit.semi_major_axis,
+    ))
 }
 
 /// Lage und Geschwindigkeit eines Körpers zum Zeitpunkt `t`, relativ zum
@@ -143,18 +241,15 @@ pub fn body_state(bodies: &[Body], body: BodyId, t: f64) -> StateVector {
         };
     };
     let parent = body_state(bodies, orbit.parent, t);
-    let period = circular_period(bodies[orbit.parent].gm, orbit.radius);
-    // Über den Rest der Umlaufzeit (wie die Rotation): genau auch nach Jahren.
-    let angle = orbit.phase + t.rem_euclid(period) / period * TAU;
-    let (sin, cos) = angle.sin_cos();
-    let speed = orbit.radius * TAU / period;
+    let own = orbit.state(bodies[orbit.parent].gm, t);
     StateVector {
-        position: parent.position + DVec3::new(cos, sin, 0.0) * orbit.radius,
-        velocity: parent.velocity + DVec3::new(-sin, cos, 0.0) * speed,
+        position: parent.position + own.position,
+        velocity: parent.velocity + own.velocity,
     }
 }
 
-/// Radius der Einflusssphäre nach Laplace: Bahnradius · (m/M)^0,4. Darin
+/// Radius der Einflusssphäre nach Laplace: große Halbachse · (m/M)^0,4
+/// (wie in KSP, auch bei Ellipsen immer gleich groß). Darin
 /// zählt für ein Schiff nur die Schwerkraft dieses Körpers. Beim Körper im
 /// Ursprung ist er fest vorgegeben (`soi_radius`), sonst unendlich.
 pub fn sphere_of_influence(bodies: &[Body], body: BodyId) -> f64 {
@@ -164,7 +259,7 @@ pub fn sphere_of_influence(bodies: &[Body], body: BodyId) -> f64 {
 /// Laplace-Radius für einen Körper auf einer Bahn: a · (m/M)^0,4.
 fn laplace_radius(bodies: &[Body], body: BodyId) -> Option<f64> {
     let orbit = bodies[body].orbit.as_ref()?;
-    Some(orbit.radius * (bodies[body].gm / bodies[orbit.parent].gm).powf(0.4))
+    Some(orbit.semi_major_axis * (bodies[body].gm / bodies[orbit.parent].gm).powf(0.4))
 }
 
 impl Body {

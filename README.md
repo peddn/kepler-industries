@@ -8,8 +8,8 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 
 ## Stand
 
-Der Planet Zorb, Heimat der Zorbels, mit Atmosphäre, sein Mond Zoon (die
-Sonne Zunn ist bisher nur Licht), eine Startbasis, zwei Satelliten mit
+Der Planet Zorb, Heimat der Zorbels, mit Atmosphäre, seine Monde Zoon und
+Zimm (die Sonne Zunn ist bisher nur Licht), eine Startbasis, zwei Satelliten mit
 Triebwerk, eine Fähre am Boden und eine im Orbit. „Relais-1" kreist stabil oberhalb der Atmosphäre.
 „Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang durch die Luft
 abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
@@ -98,6 +98,18 @@ einem Start von Zoon (Voreinstellung siehe oben, die 30-km-Bahn kostet etwa
 670 m/s). Wer mehr als etwa 84.000 km vom Planeten wegfliegt,
 verlässt das Heimatsystem: Danach ist das Schiff im Sonnenorbit und wird
 (noch) nicht weiter simuliert.
+
+Weiter draußen kreist der kleine Mond Zimm, ähnlich Minmus in KSP: 60 km
+Radius, Schwerkraft 0,49 m/s², keine Luft, auf einer leicht elliptischen,
+um 6° geneigten Bahn (42.300 bis 51.700 km vom Planeten, Umlauf knapp 50
+Tage, Einflusssphäre etwa 2.250 km). Monde laufen wie in KSP auf festen
+Keplerbahnen aus sechs Bahnelementen (große Halbachse, Exzentrizität,
+Neigung, aufsteigender Knoten, Argument der Periapsis, mittlere Anomalie);
+die Karte zeigt die Ellipse, die Mondkarte Abstand und Neigung. Weil Zimms
+Bahn geneigt ist, trifft man ihn aus der Äquatorebene nur in der Nähe der
+Knoten: Mondfähre-4 mit 924 m/s prograd nach 122.100 s
+(`--node 3,122100,924,0,0`) fliegt in etwa 570 km Höhe an ihm vorbei. Zum
+Ansehen der ganzen Bahn lässt sich jetzt weiter herauszoomen.
 
 Die Uhr oben links zählt Tage des Planeten: Ein Tag ist eine Umdrehung
 (6 h, die Stunden laufen von 0 bis 5), abgeleitet aus seiner Rotation. Diese

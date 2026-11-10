@@ -153,6 +153,14 @@ fn body_details(world: &World, b: usize) -> Vec<String> {
             km(distance),
             format_span(period, day(world))
         ));
+        if orbit.eccentricity > 0.0 || orbit.inclination != 0.0 {
+            lines.push(format!(
+                "Abstand {} bis {}, Neigung {:.1}°",
+                km(orbit.periapsis()),
+                km(orbit.apoapsis()),
+                orbit.inclination.to_degrees()
+            ));
+        }
         lines.push(format!(
             "Einflusssphäre {}",
             km(sphere_of_influence(&world.bodies, b))
