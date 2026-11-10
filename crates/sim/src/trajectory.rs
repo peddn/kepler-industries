@@ -15,6 +15,10 @@
 //! Geplante Manöver bilden eine Kette. Jeder Node schneidet die Zeitleiste an
 //! seinem Brennbeginn ab; dort folgt ein `Integrated`-Abschnitt mit Schub. Die
 //! Vorschau ist einfach die vorausberechnete Zeitleiste.
+//!
+//! An der Grenze einer Einflusssphäre (siehe `soi`) endet ein Abschnitt; der
+//! nächste läuft um den anderen Körper weiter, ein Brennen ebenso. Jeder
+//! Abschnitt rechnet relativ zu seinem Körper.
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::docking::{self, DockError, DockPlan, DockRequest, Docking};
@@ -24,6 +28,7 @@ use crate::landing;
 use crate::launch::{self, Launch, LaunchPlan};
 use crate::log::LogKind;
 use crate::maneuver::{self, Burn, ManeuverNode, Plan, PlanError};
+use crate::soi;
 use crate::world::VesselParams;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -53,6 +58,26 @@ pub enum Event {
     Liftoff,
     /// Kontakt beim Andocken: Das Schiff wird Teil eines Verbunds.
     Docking,
+    /// Eintritt in die Einflusssphäre des Monds: weiter um ihn.
+    SoiEntry(BodyId),
+    /// Verlassen der Einflusssphäre eines Monds: weiter um den Mutterkörper.
+    SoiExit,
+    /// Verlassen der Einflusssphäre des Planeten: Das Schiff verlässt das
+    /// Heimatsystem, die Zeitleiste endet (Sonnenorbit, nicht simuliert).
+    LeavesSystem,
+}
+
+impl Event {
+    /// Derselbe Flug geht im nächsten Abschnitt weiter, ein Brennen ebenso:
+    /// nur ein neues Stück oder ein anderer Körper.
+    pub fn continues(self) -> bool {
+        matches!(self, Event::Continue | Event::SoiEntry(_) | Event::SoiExit)
+    }
+
+    /// Die Bahn führt in die Luft oder auf den Boden.
+    pub fn is_descent(self) -> bool {
+        matches!(self, Event::AtmosphereEntry | Event::GroundContact)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -224,10 +249,22 @@ impl Segment {
                 Segment::Integrated {
                     burn: Some(burn), ..
                 } => integrated(bodies, params, body, t, state, mass, Some(*burn), None),
+                Segment::Kepler { .. } => kepler_segment(bodies, body, t, state, mass, pending),
                 _ => integrated(bodies, params, body, t, state, mass, None, pending),
             },
-            // Danach geht es im Verbund weiter (siehe `World`).
-            Event::Docking => return None,
+            Event::SoiEntry(_) | Event::SoiExit => {
+                let to = soi::next_body(bodies, body, event).expect("Wechsel");
+                let state = soi::convert(bodies, body, to, t, state);
+                match self {
+                    Segment::Integrated {
+                        burn: Some(burn), ..
+                    } => integrated(bodies, params, to, t, state, mass, Some(*burn), None),
+                    _ => coast(bodies, params, to, t, state, mass, pending),
+                }
+            }
+            // Danach geht es im Verbund weiter (siehe `World`); aus dem
+            // Heimatsystem hinaus wird nicht mehr simuliert.
+            Event::Docking | Event::LeavesSystem => return None,
         })
     }
 }
@@ -237,7 +274,10 @@ fn burn_start_after(pending: Option<&Burn>, t: f64) -> Option<f64> {
     pending.map(|b| b.start).filter(|&s| s >= t)
 }
 
-/// Keplerabschnitt ab `t`, inklusive seines Endereignisses.
+/// Keplerabschnitt ab `t`, inklusive seines Endereignisses: Luft oder Boden,
+/// Verlassen der Einflusssphäre, Brennbeginn; kann die Bahn die Sphäre eines
+/// Monds erreichen, außerdem deren Eintritt (gesucht bis zum Ende des
+/// Suchfensters, sonst endet der Abschnitt dort mit `Continue`).
 fn kepler_segment(
     bodies: &[Body],
     body_id: BodyId,
@@ -254,11 +294,23 @@ fn kepler_segment(
     };
     let natural = kepler::time_to_radius_inbound(body.gm, &state, body.boundary_radius())
         .map(|dt| (t + dt, natural_event));
-    let end = match (natural, burn_start_after(pending, t)) {
-        (Some((t_natural, event)), Some(t_burn)) if t_natural <= t_burn => Some((t_natural, event)),
-        (_, Some(t_burn)) => Some((t_burn, Event::BurnStart)),
-        (natural, None) => natural,
-    };
+    let exit = soi::exit_time(bodies, body_id, t, &state)
+        .map(|t_exit| (t_exit, soi::exit_event(bodies, body_id)));
+    let burn = burn_start_after(pending, t).map(|t_burn| (t_burn, Event::BurnStart));
+    // Bei Gleichstand gewinnt das erste: Luft oder Boden vor allem anderen.
+    let mut end = [natural, exit, burn]
+        .into_iter()
+        .flatten()
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    if soi::reaches_moon(bodies, body_id, &state) {
+        let window = soi::window_end(bodies, body_id, t, &state);
+        let until = end.map_or(window, |(t_end, _)| t_end.min(window));
+        if let Some((t_entry, moon)) = soi::entry_time(bodies, body_id, t, &state, until) {
+            end = Some((t_entry, Event::SoiEntry(moon)));
+        } else if end.is_none_or(|(t_end, _)| window < t_end) {
+            end = Some((window, Event::Continue));
+        }
+    }
     Segment::Kepler {
         body: body_id,
         start: t,
@@ -292,7 +344,9 @@ fn integrated(
         Some(b) => Some((b.end, Event::BurnEnd)),
         None => burn_start_after(pending, t).map(|s| (s, Event::BurnStart)),
     };
-    let (samples, end_event) = integrator::integrate_arc(&forces, Sample { time: t, state }, stop);
+    let watch = soi::Watch::new(bodies, body_id);
+    let (samples, end_event) =
+        integrator::integrate_arc(&forces, Sample { time: t, state }, stop, &watch);
     Segment::Integrated {
         body: body_id,
         samples,
@@ -323,17 +377,42 @@ fn coast(
 
 /// Derselbe Plan einen Umlauf später. `segment` ist der Keplerabschnitt, in
 /// dem der Node liegt. Nur möglich, wenn die Bahn geschlossen ist und bis zum
-/// Ende des verschobenen Brennens weder Luft noch Boden berührt.
+/// Ende des verschobenen Brennens weder Luft noch Boden berührt und keine
+/// Einflusssphäre wechselt.
 fn next_orbit(bodies: &[Body], segment: &Segment, plan: &Plan) -> Option<Plan> {
     let Segment::Kepler { start, state, .. } = segment else {
         return None;
     };
-    let body = &bodies[segment.body()];
-    let period = kepler::period(body.gm, state)?;
-    let natural_end = kepler::time_to_radius_inbound(body.gm, state, body.boundary_radius())
-        .map_or(f64::INFINITY, |dt| start + dt);
+    let period = kepler::period(bodies[segment.body()].gm, state)?;
     let later = plan.one_orbit_later(period);
-    (later.burn.end <= natural_end).then_some(later)
+    let end = orbit_end(bodies, segment.body(), *start, state, later.burn.end);
+    (later.burn.end <= end).then_some(later)
+}
+
+/// Wann die Keplerbahn (Zustand `state` bei `t0`) endet, ohne geplante
+/// Brennen: Luft oder Boden, Verlassen der Einflusssphäre oder Eintritt in
+/// die eines Monds. Gesucht wird in denselben Fenstern wie in der
+/// Zeitleiste, aber höchstens bis `until`.
+fn orbit_end(bodies: &[Body], body_id: BodyId, t0: f64, state: &StateVector, until: f64) -> f64 {
+    let body = &bodies[body_id];
+    let mut end = kepler::time_to_radius_inbound(body.gm, state, body.boundary_radius())
+        .map_or(f64::INFINITY, |dt| t0 + dt);
+    if let Some(exit) = soi::exit_time(bodies, body_id, t0, state) {
+        end = end.min(exit);
+    }
+    if !soi::reaches_moon(bodies, body_id, state) {
+        return end;
+    }
+    let (mut t, mut s) = (t0, *state);
+    while t < end.min(until) {
+        let window = soi::window_end(bodies, body_id, t, &s);
+        if let Some((entry, _)) = soi::entry_time(bodies, body_id, t, &s, window.min(end)) {
+            return entry;
+        }
+        s = kepler::propagate(body.gm, s, window - t);
+        t = window;
+    }
+    end
 }
 
 /// Protokolleintrag für das Ende des Abschnitts `done` (auf ihn folgt `next`).
@@ -382,6 +461,16 @@ fn log_entry(
                 }
             }
         }
+        Event::SoiEntry(moon) => {
+            let moon_body = &bodies[moon];
+            let info = kepler::orbit_info(moon_body.gm, &next.state_at(bodies, at));
+            LogKind::SoiEntry {
+                body: moon,
+                periapsis: info.periapsis - moon_body.radius,
+            }
+        }
+        Event::SoiExit => LogKind::SoiExit { body: done.body() },
+        Event::LeavesSystem => LogKind::LeavesSystem,
         // Andocken trägt `World` ein (sie kennt das Hauptschiff).
         Event::AtmosphereExit | Event::Continue | Event::Docking => return None,
     })
@@ -561,7 +650,10 @@ fn locate(
         }
     } else {
         leg.find(|s| s.start() <= node.time && node.time < s.end())
-            .ok_or(PlanError::BeyondPrediction)?
+            .ok_or(match segments.back().and_then(Segment::end_event) {
+                Some(Event::LeavesSystem) => PlanError::LeftSystem,
+                _ => PlanError::BeyondPrediction,
+            })?
     };
     if matches!(segment, Segment::Surface { .. }) {
         return Err(PlanError::OnGround);
@@ -921,7 +1013,7 @@ impl Trajectory {
                 self.launch = None;
                 self.nodes.clear();
                 self.docking = None;
-            } else if done.is_burn() && done.end_event() != Some(Event::Continue) {
+            } else if done.is_burn() && !done.end_event().is_some_and(Event::continues) {
                 // Ausgeführt: zuerst der Aufstieg, dann die Nodes der Reihe
                 // nach. Das Angleichen bleibt stehen, bis angedockt ist.
                 if self.launch.is_some() {

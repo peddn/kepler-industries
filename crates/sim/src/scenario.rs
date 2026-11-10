@@ -11,9 +11,10 @@ use std::f64::consts::PI;
 pub fn home_planet() -> Body {
     let radius = 600_000.0;
     let surface_gravity = 9.81;
+    let gm = surface_gravity * radius * radius;
     Body {
         name: "Heimat".into(),
-        gm: surface_gravity * radius * radius,
+        gm,
         radius,
         rotation_period: 6.0 * 3600.0,
         atmosphere: Atmosphere {
@@ -22,7 +23,17 @@ pub fn home_planet() -> Body {
             top_altitude: 70_000.0,
         },
         orbit: None,
+        soi_radius: Some(home_system_radius(gm)),
     }
+}
+
+/// Rand des Heimatsystems: die Einflusssphäre des Planeten gegenüber der
+/// Sonne (Laplace, a · (m/M)^0,4), mit Masse und Abstand wie bei Kerbin und
+/// Kerbol. Etwa 84.159 km. Die Sonne selbst wird noch nicht simuliert.
+fn home_system_radius(gm: f64) -> f64 {
+    const SUN_GM: f64 = 1.172_332_8e18;
+    const DISTANCE: f64 = 13_599_840_256.0;
+    DISTANCE * (gm / SUN_GM).powf(0.4)
 }
 
 /// Mond wie der Mun in KSP: 200 km Radius, g = 1,63 m/s², ohne Luft, auf
@@ -44,6 +55,7 @@ pub fn moon(planet: &Body) -> Body {
             radius: distance,
             phase: PI,
         }),
+        soi_radius: None,
     }
 }
 
@@ -77,7 +89,8 @@ pub const FERRY: VesselParams = VesselParams {
 /// Ein Planet mit Mond, eine Startbasis, zwei Satelliten: einer stabil oberhalb der
 /// Atmosphäre, einer zu tief abgesetzt. Ohne Eingriff bremst die Luft ihn bei
 /// jedem Durchgang ab, bis er abstürzt. Mit einem Manöver an der Apoapsis
-/// lässt er sich retten. Dazu eine Fähre an der Startbasis, die starten kann.
+/// lässt er sich retten. Dazu eine Fähre an der Startbasis, die starten kann,
+/// und eine vollgetankte Fähre im Orbit für den Flug zum Mond.
 pub fn demo() -> World {
     let planet = home_planet();
     let moon = moon(&planet);
@@ -116,6 +129,19 @@ pub fn demo() -> World {
     world.spawn_vessel("Sonde-2", SATELLITE, 200.0, 0, too_low);
 
     world.spawn_landed("Fähre-3", FERRY, 4_000.0, 0, pad);
+
+    // Vollgetankt in 100 km Höhe über dem Äquator, so gestellt, dass ein
+    // Transfer nach 10 Minuten (836 m/s prograd) knapp am Mond vorbeiführt.
+    let parked = state_from_apsides(
+        gm,
+        r + 100_000.0,
+        r + 100_000.0,
+        0.0,
+        0.0,
+        314f64.to_radians(),
+        false,
+    );
+    world.spawn_vessel("Mondfähre-4", FERRY, 4_000.0, 0, parked);
 
     // Zielgebiete: an der Startbasis, eines etwa 60 km östlich zum Üben eines
     // Hops (Kurs 90°, Ziel-Apoapsis rund 27 km) und eines weit weg im Osten,

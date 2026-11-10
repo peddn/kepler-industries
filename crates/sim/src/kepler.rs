@@ -190,6 +190,50 @@ pub fn time_to_radius_inbound(gm: f64, s: &StateVector, radius: f64) -> Option<f
     }
 }
 
+/// Zeit bis die Bahn als Nächstes den Radius `radius` von innen nach außen
+/// kreuzt (Verlassen einer Einflusssphäre). `None`, wenn sie nie so weit
+/// hinausreicht. Liegt der Zustand schon außerhalb und entfernt sich, 0.
+///
+/// Wie `time_to_radius_inbound` analytisch, nur auf dem Ast nach der
+/// Periapsis.
+pub fn time_to_radius_outbound(gm: f64, s: &StateVector, radius: f64) -> Option<f64> {
+    let r = s.position.length();
+    let rv = s.position.dot(s.velocity);
+    if r >= radius && rv >= 0.0 {
+        return Some(0.0);
+    }
+    let info = orbit_info(gm, s);
+    let alpha = alpha(gm, s);
+    let e = info.eccentricity;
+
+    if alpha > 0.0 {
+        // Ellipse
+        if info.apoapsis.is_none_or(|ra| ra <= radius) {
+            return None; // bleibt ganz innerhalb
+        }
+        let a = 1.0 / alpha;
+        let n = (gm * alpha * alpha * alpha).sqrt();
+        let e_sin_e0 = rv / (gm * a).sqrt();
+        let e_cos_e0 = 1.0 - r / a;
+        let e0 = e_sin_e0.atan2(e_cos_e0);
+        let m0 = e0 - e_sin_e0;
+        // Ausflug: nach der Periapsis, also exzentrische Anomalie positiv.
+        let e_out = ((1.0 - radius / a) / e).clamp(-1.0, 1.0).acos();
+        let m_out = e_out - e * e_out.sin();
+        Some((m_out - m0).rem_euclid(TAU) / n)
+    } else {
+        // Hyperbel
+        let a = 1.0 / alpha;
+        let n = (gm * -alpha * -alpha * -alpha).sqrt();
+        let e_sinh_h0 = rv / (-gm * a).sqrt();
+        let h0 = (e_sinh_h0 / e).asinh();
+        let m0 = e_sinh_h0 - h0;
+        let h_out = ((1.0 - radius / a) / e).max(1.0).acosh();
+        let m_out = e * h_out.sinh() - h_out;
+        Some(((m_out - m0) / n).max(0.0))
+    }
+}
+
 /// Zeit bis zur nächsten Apoapsis (nur bei Ellipsen), in [0, Umlaufzeit).
 pub fn time_to_apoapsis(gm: f64, s: &StateVector) -> Option<f64> {
     let alpha = alpha(gm, s);

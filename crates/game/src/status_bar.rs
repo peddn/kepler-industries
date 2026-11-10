@@ -126,6 +126,26 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             ),
             TEXT_COLOR,
         ),
+        LogKind::SoiEntry { body, periapsis } => (
+            format!(
+                "erreicht die Einflusssphäre von {} (Pe {}{})",
+                world.bodies[*body].name,
+                km(*periapsis),
+                if *periapsis < 0.0 { ", Aufschlag" } else { "" }
+            ),
+            TEXT_COLOR,
+        ),
+        LogKind::SoiExit { body } => (
+            format!(
+                "verlässt die Einflusssphäre von {}",
+                world.bodies[*body].name
+            ),
+            TEXT_COLOR,
+        ),
+        LogKind::LeavesSystem => (
+            "verlässt das Heimatsystem (Sonnenorbit, nicht simuliert)".into(),
+            ATMOSPHERE_COLOR,
+        ),
     };
     Line {
         time: entry.time,

@@ -6,7 +6,7 @@
 //! Deshalb ist das Protokoll unabhängig davon, in wie vielen Schritten die Zeit
 //! vorrückt.
 
-use crate::body::SurfacePoint;
+use crate::body::{BodyId, SurfacePoint};
 use crate::landing::Crash;
 use serde::{Deserialize, Serialize};
 
@@ -52,4 +52,10 @@ pub enum LogKind {
     Docked { host: usize },
     /// Vom Verbund um das Hauptschiff `host` abgedockt, mit `fuel` kg.
     Undocked { host: usize, fuel: f64 },
+    /// In die Einflusssphäre des Monds `body` eingetreten; Periapsis über ihm.
+    SoiEntry { body: BodyId, periapsis: f64 },
+    /// Die Einflusssphäre des Monds `body` verlassen (zurück zum Planeten).
+    SoiExit { body: BodyId },
+    /// Das Heimatsystem verlassen: Sonnenorbit, nicht simuliert.
+    LeavesSystem,
 }

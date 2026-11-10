@@ -77,6 +77,43 @@ pub(crate) fn format_time(seconds: f64) -> String {
     )
 }
 
+/// " auf dem Mond", wenn das Schiff nicht beim Planeten ist.
+fn on_body(world: &World, i: usize) -> String {
+    match world.vessel_state(i).0 {
+        0 => String::new(),
+        b => format!(" auf {}", world.bodies[b].name),
+    }
+}
+
+/// Nächster Wechsel der Einflusssphäre auf der vorausberechneten Bahn.
+fn next_sphere_change(world: &World, trajectory: &sim::Trajectory) -> Option<String> {
+    let segments: Vec<&Segment> = trajectory.segments().collect();
+    segments.iter().enumerate().find_map(|(k, segment)| {
+        let t = segment.end();
+        if t <= world.time {
+            return None;
+        }
+        let when = format_span(t - world.time);
+        let name = |b: usize| &world.bodies[b].name;
+        Some(match segment.end_event()? {
+            Event::SoiEntry(moon) => {
+                let body = &world.bodies[moon];
+                let state = segments.get(k + 1)?.state_at(&world.bodies, t);
+                let periapsis = kepler::orbit_info(body.gm, &state).periapsis - body.radius;
+                let low = if periapsis < 0.0 {
+                    format!("{} (Aufschlag)", km(periapsis))
+                } else {
+                    km(periapsis)
+                };
+                format!("Begegnung: {} in {when}, Periapsis {low}", name(moon))
+            }
+            Event::SoiExit => format!("Verlässt {} in {when}", name(segment.body())),
+            Event::LeavesSystem => format!("Verlässt das Heimatsystem in {when}!"),
+            _ => return None,
+        })
+    })
+}
+
 /// Angaben zu einem gewählten Mond.
 fn body_details(world: &World, b: usize) -> Vec<String> {
     let body = &world.bodies[b];
@@ -165,9 +202,12 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
             }
         ),
     ];
+    lines.extend(next_sphere_change(world, trajectory));
     // Nodes gehen im Flug und am Boden mit geplantem Start (danach).
     let launch = trajectory.launch();
-    let can_plan = launch.is_some() || !matches!(trajectory.current(), Segment::Surface { .. });
+    let can_plan = launch.is_some()
+        || !(matches!(trajectory.current(), Segment::Surface { .. })
+            || world.vessel_status(i) == VesselStatus::Escaped);
     if let Some(plan) = launch
         && plan.burn.start > world.time
     {
@@ -348,17 +388,25 @@ fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
         ));
     }
     match vessel.trajectory.segment_after(burn) {
-        Some(Segment::Kepler { state, end, .. }) => {
-            let body = &world.bodies[plan.body];
+        Some(after @ Segment::Kepler { state, end, .. }) => {
+            // Der Körper der Bahn danach (das Brennen kann die Sphäre wechseln).
+            let body = &world.bodies[after.body()];
             let info = kepler::orbit_info(body.gm, state);
+            let around = if after.body() == 0 {
+                String::new()
+            } else {
+                format!(" um {}", body.name)
+            };
             lines.push(format!(
-                "Danach: Ap {}  Pe {}{}",
+                "Danach{around}: Ap {}  Pe {}{}",
                 info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
                 km(info.periapsis - body.radius),
-                if end.is_some_and(|(_, e)| e != Event::BurnStart) {
-                    "  – führt in die Atmosphäre!"
-                } else {
-                    ""
+                match end {
+                    Some((_, e)) if e.is_descent() && body.atmosphere.exists() => {
+                        "  – führt in die Atmosphäre!"
+                    }
+                    Some((_, e)) if e.is_descent() => "  – führt auf den Boden!",
+                    _ => "",
                 }
             ));
         }
@@ -399,16 +447,24 @@ pub fn update(
                 periapsis_altitude,
                 apoapsis_altitude,
                 descending,
-            } => format!(
-                "Orbit  Ap {}  Pe {}{}",
-                apoapsis_altitude.map_or("–".into(), km),
-                km(periapsis_altitude),
-                if descending {
-                    "  – Bahn führt in die Atmosphäre!"
+            } => {
+                let body = &world.bodies[world.vessel_state(i).0];
+                let around = if world.vessel_state(i).0 == 0 {
+                    String::new()
                 } else {
-                    ""
-                }
-            ),
+                    format!(" um {}", body.name)
+                };
+                let warning = match (descending, body.atmosphere.exists()) {
+                    (false, _) => "",
+                    (true, true) => "  – Bahn führt in die Atmosphäre!",
+                    (true, false) => "  – Bahn führt auf den Boden!",
+                };
+                format!(
+                    "Orbit{around}  Ap {}  Pe {}{warning}",
+                    apoapsis_altitude.map_or("–".into(), km),
+                    km(periapsis_altitude),
+                )
+            }
             VesselStatus::Atmosphere { altitude } => {
                 format!("In der Atmosphäre, Höhe {}", km(altitude))
             }
@@ -423,14 +479,21 @@ pub fn update(
                     km(info.periapsis - body.radius)
                 )
             }
-            VesselStatus::Landed { point } => match world.zone_at(0, &point) {
-                Some(k) => format!("Gelandet in {}", world.zones[k].name),
-                None => format!("Gelandet bei {} (außerhalb)", place(&point)),
-            },
-            VesselStatus::Wreck { point } => match world.zone_at(0, &point) {
+            VesselStatus::Landed { point } => {
+                match world.zone_at(world.vessel_state(i).0, &point) {
+                    Some(k) => format!("Gelandet in {}", world.zones[k].name),
+                    None => format!(
+                        "Gelandet bei {}{} (außerhalb)",
+                        place(&point),
+                        on_body(world, i)
+                    ),
+                }
+            }
+            VesselStatus::Wreck { point } => match world.zone_at(world.vessel_state(i).0, &point) {
                 Some(k) => format!("Wrack in {}", world.zones[k].name),
-                None => format!("Wrack bei {}", place(&point)),
+                None => format!("Wrack bei {}{}", place(&point), on_body(world, i)),
             },
+            VesselStatus::Escaped => "im Sonnenorbit (nicht simuliert)".into(),
             VesselStatus::Approaching { distance } => {
                 format!("Anflug zum Andocken, noch {}", distance_text(distance))
             }

@@ -164,6 +164,8 @@ pub enum PlanError {
     TooWeak,
     /// Das Schiff fliegt gerade zum Andocken an.
     Docking,
+    /// Das Schiff hat das Heimatsystem zu diesem Zeitpunkt schon verlassen.
+    LeftSystem,
 }
 
 impl fmt::Display for PlanError {
@@ -174,6 +176,7 @@ impl fmt::Display for PlanError {
             PlanError::NoEngine => "Schiff hat kein Triebwerk",
             PlanError::InPast => "Zeitpunkt liegt in der Vergangenheit",
             PlanError::BeyondPrediction => "Zeitpunkt liegt hinter der Vorausschau",
+            PlanError::LeftSystem => "Schiff hat das Heimatsystem dann schon verlassen",
             PlanError::TooLate => "Zu spät zum Brennen, und kein nächster Umlauf",
             PlanError::Overlaps => {
                 "Brennen begänne vor dem Ende des vorherigen, und kein nächster Umlauf"

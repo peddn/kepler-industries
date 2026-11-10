@@ -38,7 +38,9 @@ Positionen sind inkonsistent, Spieler vermuten Bahndrift in genau diesen Höhen.
 
 **Regel:** Jede Bahn ist im nicht rotierenden System ihres Körpers
 beschrieben (Ursprung im Mittelpunkt, +Z = Nordpol). Die Rotation steckt nur
-in den Umrechnungen Oberfläche ↔ Raum in `body.rs`.
+in den Umrechnungen Oberfläche ↔ Raum in `body.rs`. Die Systeme von Planet
+und Mond sind gegeneinander nur verschoben, nie gedreht; beim Wechsel der
+Einflusssphäre wird die Lage um die Lage des Monds verschoben (`soi::convert`).
 
 ### 3. Keine Bahndrift
 *KSP:* Bahnen werden bei Zeitraffer-, Fokus- und SOI-Wechseln neu berechnet und
@@ -144,6 +146,28 @@ des Monds (Patched Conics, ab dem Wechsel der Einflusssphäre). Der Mond im
 Spiel entspricht dem Mun in KSP (200 km, g = 1,63 m/s², 12.000 km Abstand,
 Umlauf 38,6 h, Einflusssphäre 2.430 km) und ist gebunden: Rotation und Umlauf
 haben dieselbe Dauer, Länge 0° zeigt immer zum Planeten.
+
+**Wechsel der Einflusssphäre** (`soi.rs`): An der Grenze endet ein Abschnitt
+(`SoiEntry`, `SoiExit`), der nächste läuft um den anderen Körper weiter, ein
+Brennen ebenso (es wird geteilt, Richtung, Schub und Massenstrom bleiben).
+Der Austritt ist auf der Keplerbahn analytisch
+(`kepler::time_to_radius_outbound`). Den Eintritt in die Sphäre des Monds
+muss man suchen, weil er sich bewegt: Der Abstand wird so fein abgetastet,
+dass sich Schiff und Mond pro Schritt höchstens um ein Viertel des Radius
+gegeneinander bewegen; ein Vorzeichenwechsel wird per Bisektion eingegrenzt
+(auf 1 µs), ein tiefer Punkt zwischen zwei Abtastpunkten per Goldenem Schnitt
+(knappe Streifschüsse). Gesucht wird nur, wenn der Abstand der Bahn zum
+Planeten überhaupt in den Ring um die Mondbahn fällt, und jeweils einen
+Umlauf weit; ohne Treffer endet der Keplerabschnitt dort mit `Continue`, und
+der nächste sucht weiter, wenn er an der Reihe ist. Bahnen in Planetennähe
+bleiben ein einziger offener Abschnitt wie bisher. Schrittweise berechnete
+Abschnitte prüfen beide Grenzen bei jedem Schritt, wie den Bodenkontakt.
+Alles hängt nur vom Anfangszustand ab (Regel 6). Das Heimatsystem endet an
+der Einflusssphäre des Planeten (84.159 km, wie Kerbin gegenüber Kerbol,
+`Body::soi_radius`): Dort endet die Zeitleiste (`LeavesSystem`), das Schiff
+ist im Sonnenorbit (`VesselStatus::Escaped`), nichts lässt sich mehr planen.
+Rendezvous, Bahnebene und Andocken zählen nur Zeiten, in denen beide Schiffe
+um denselben Körper fliegen.
 
 **Atmosphäre:** verschobene Exponentialfunktion
 
@@ -358,10 +382,22 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   anderes wählt (z. B. Zielgebiet im Blick, Brems-Node des Schiffs
   einstellen). Zielgebiete sind über eine Raute in der Mitte wählbar, der
   Mond per Klick auf die Kugel (erst nach der Bahn des gewählten Schiffs, die
-  oft davor liegt). Auf Planet und Mond gibt es keine Nahansicht; der
+  oft davor liegt). In der Nahansicht zeigt "oben" vom Körper weg, bei dem
+  das Objekt gerade ist (auch vom Mond). Auf Planet und Mond gibt es keine Nahansicht; der
   kleinste Abstand liegt knapp über der Oberfläche. Gibt es
   das Objekt nicht mehr, geht der Fokus auf sein Schiff, sonst den Planeten.
   Kollisionen der Kamera mit dem Planeten werden bewusst vernachlässigt.
+- **Bahnen um den Mond zeichnen** wie in KSP (`view::anchors`):
+  Aufeinanderfolgende Abschnitte um denselben Körper bilden ein Stück; es
+  liegt um die Stelle, an der der Körper zu Beginn des Stücks steht
+  (frühestens jetzt). So ist das Stück um den Mond eine echte
+  Kegelschnittbahn um ihn, Periapsis und Vorbeiflug sind ablesbar; dort
+  steht ein blasser Geistermond, kleine Ringe markieren Ein- und Austritt.
+  Beim Austritt klafft eine Lücke (der Mond ist weitergezogen). Die
+  Alternative, der echte Weg im System des Planeten, wäre durchgehend, um den
+  Mond aber eine verzerrte Schleife. Schiffe, Nodes, Klicks und Kamera
+  rechnen mit demselben Versatz; Oberflächenpunkte (Zielgebiete,
+  Aufsetzkreuz) liegen auf dem echten Körper.
 - **Nahansicht** (`N`, wie die Flugansicht in KSP): nur mit einem Objekt im
   Fokus; Zoom bis 10 m (in der Karte bis 20 km), "oben" zeigt vom Planeten
   weg. Bahnen werden dann mit 4096 statt 256 Punkten pro Umlauf gezeichnet
@@ -478,9 +514,9 @@ und Modulen.
   für Planet und Mond mit Patched Conics wird sie nicht gebraucht. Bis dahin
   gibt es sie nur als Licht in der Darstellung. Das Heimatsystem endet an der
   Einflusssphäre des Planeten (etwa 84.000 km, aus Masse und Abstand der
-  Sonne wie bei Kerbin): Ab dem Wechsel der Einflusssphäre endet dort die
-  Zeitleiste eines Schiffs („verlässt das Heimatsystem“, danach im
-  Sonnenorbit, nicht simuliert), statt es falsch weiterzurechnen.
+  Sonne wie bei Kerbin): Dort endet die Zeitleiste eines Schiffs („verlässt
+  das Heimatsystem“, danach im Sonnenorbit, nicht simuliert), statt es falsch
+  weiterzurechnen.
 - **Gestrichen:** Technikalterung, Lagrange-Punkte (mit Patched Conics nicht möglich)
 
 ## UI-Ideen (nach dem Grundgerüst)
@@ -516,6 +552,6 @@ nichts verloren geht.
    Statusleiste mit Protokoll ✓, Andocken ✓ (Angleichen, Anflug, Verbund),
    Abdocken ✓
 7. Mond: auf Schienen ✓ (Kreisbahn, Einflusssphäre, wählen, Kamera), Wechsel
-   der Einflusssphäre (mit Rand des Heimatsystems), Ziel Mond (Annäherung,
-   Landung)
+   der Einflusssphäre ✓ (mit Rand des Heimatsystems, Zeichnung wie KSP), Ziel
+   Mond (Annäherung, Landung)
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft
