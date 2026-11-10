@@ -453,6 +453,10 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Umdrehung und Umlauf um die Sonne berechnet (`body::day_length`); wie
   Kerbin dreht sich Zorb dafür in 5:59:09, damit der Sonnentag genau 6 h
   dauert.
+- **Einflusssphären gestrichelt** (`view::draw_dashed`), damit sie nicht wie
+  Bahnen aussehen: Strich 10 px, Lücke 7 px, abgemessen entlang der
+  Projektion auf dem Bildschirm, also bei jedem Zoom und schräger Sicht
+  gleich. Beim Zoomen ändert sich deshalb die Zahl der Striche.
 - **Bahnen um den Mond zeichnen** wie in KSP (`view::anchors`):
   Aufeinanderfolgende Abschnitte um denselben Körper bilden ein Stück; es
   liegt um die Stelle, an der der Körper zu Beginn des Stücks steht

@@ -43,6 +43,14 @@ const SOI_CHANGE_COLOR: Color = Color::srgb(0.85, 0.85, 0.9);
 const GHOST_COLOR: Color = Color::srgba(0.8, 0.8, 0.85, 0.3);
 /// Stützpunkte für Mondbahn und Einflusssphäre.
 const BODY_ORBIT_POINTS: usize = 720;
+/// Einflusssphären gestrichelt: Strich und Lücke in Bildschirmpixeln, gleich
+/// bei jedem Zoom.
+const SOI_DASH: f32 = 10.0;
+const SOI_GAP: f32 = 7.0;
+/// Abtastung der gestrichelten Kreise: höchstens so viele Pixel pro Schritt,
+/// mindestens und höchstens so viele Punkte.
+const SOI_STEP: f32 = 3.0;
+const SOI_POINTS: (usize, usize) = (64, 8_192);
 /// Größe der Markierungen relativ zum Abstand zur Kamera (bleibt auf dem
 /// Bildschirm gleich groß, egal wie weit man herauszoomt).
 const MARKER_SCALE: f32 = 0.007;
@@ -385,14 +393,17 @@ pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) 
 
 /// Bahnen der Planeten und Monde um ihren Mutterkörper (Ellipsen in ihrer
 /// Bahnebene) und ihre Einflusssphären. Die Einflusssphäre ist eine Kugel;
-/// gezeichnet wird ihr Umriss in der Bahnebene, beim gewählten Körper in
-/// dessen Farbe.
+/// gezeichnet wird ihr Umriss in der Bahnebene, gestrichelt (damit er nicht
+/// wie eine Bahn aussieht), beim gewählten Körper in dessen Farbe.
 pub fn draw_body_orbits(
     sim: Res<Sim>,
     rig: Res<CameraRig>,
     chosen: Res<SelectedBody>,
+    camera: Single<(&Camera, &Transform), With<MainCamera>>,
     mut gizmos: Gizmos,
 ) {
+    let (camera, transform) = *camera;
+    let view = GlobalTransform::from(*transform);
     let world = &sim.0;
     let angles = |from: f64| {
         (0..=BODY_ORBIT_POINTS)
@@ -415,14 +426,112 @@ pub fn draw_body_orbits(
             SOI_COLOR
         };
         let (plane, soi) = (orbit.orientation(), sphere_of_influence(&world.bodies, b));
-        gizmos.linestrip(
-            angles(0.0).map(|angle| {
-                let (sin, cos) = angle.sin_cos();
-                to_view(center + plane * DVec3::new(cos, sin, 0.0) * soi, rig.focus)
-            }),
-            color,
-        );
+        let circle = |n: usize| -> Vec<Vec3> {
+            (0..=n)
+                .map(|i| {
+                    let (sin, cos) = (std::f64::consts::TAU * i as f64 / n as f64).sin_cos();
+                    to_view(center + plane * DVec3::new(cos, sin, 0.0) * soi, rig.focus)
+                })
+                .collect()
+        };
+        // Erst grob: wie lang ist der Kreis auf dem Bildschirm? Danach so
+        // fein, dass die Striche sauber sitzen.
+        let length = screen_length(camera, &view, &circle(SOI_POINTS.0));
+        let n = ((length / SOI_STEP) as usize).clamp(SOI_POINTS.0, SOI_POINTS.1);
+        draw_dashed(&mut gizmos, camera, &view, &circle(n), color);
     }
+}
+
+/// Länge eines Linienzugs auf dem Bildschirm (Pixel), ohne Stücke hinter der
+/// Kamera.
+fn screen_length(camera: &Camera, view: &GlobalTransform, points: &[Vec3]) -> f32 {
+    let screen: Vec<Option<Vec2>> = points
+        .iter()
+        .map(|&p| camera.world_to_viewport(view, p).ok())
+        .collect();
+    screen
+        .windows(2)
+        .filter_map(|w| Some(w[0]?.distance(w[1]?)))
+        .sum()
+}
+
+/// Gestrichelter Linienzug: Strich und Lücke werden entlang seiner
+/// Projektion auf dem Bildschirm abgemessen, so sind sie bei jedem Zoom und
+/// auch bei schräger Sicht gleich lang. Stücke hinter der Kamera fehlen.
+/// Gestrichelt wird nur, was im Bild liegt: Nahe an der Kamera wird ein
+/// Stück auf dem Bildschirm beliebig lang.
+fn draw_dashed(
+    gizmos: &mut Gizmos,
+    camera: &Camera,
+    view: &GlobalTransform,
+    points: &[Vec3],
+    color: Color,
+) {
+    let Some(size) = camera.logical_viewport_size() else {
+        return;
+    };
+    let period = SOI_DASH + SOI_GAP;
+    let mut phase = 0.0f32;
+    let screen: Vec<Option<Vec2>> = points
+        .iter()
+        .map(|&p| camera.world_to_viewport(view, p).ok())
+        .collect();
+    for (i, w) in screen.windows(2).enumerate() {
+        let (Some(a), Some(b)) = (w[0], w[1]) else {
+            continue;
+        };
+        let Some((start, end)) = clip_to_screen(a, b, size) else {
+            continue;
+        };
+        let (from, to) = (points[i], points[i + 1]);
+        // Im Bild liegt der Anteil start..end des Stücks, `length` Pixel lang.
+        let length = a.distance(b) * (end - start);
+        let at = |done: f32| from.lerp(to, start + (end - start) * done / length);
+        let mut done = 0.0;
+        while done < length {
+            // `phase` bleibt in [0, period): klein und damit genau.
+            let on = phase < SOI_DASH;
+            let left = if on { SOI_DASH - phase } else { period - phase };
+            // Mindestens ein Stückchen weiter, damit die Schleife sicher endet.
+            let step = left.min(length - done).max(1e-3);
+            if on {
+                gizmos.line(at(done), at((done + step).min(length)), color);
+            }
+            done += step;
+            phase += step;
+            if phase >= period - 1e-4 {
+                phase = 0.0;
+            }
+        }
+    }
+}
+
+/// Der Teil der Strecke `a`–`b`, der im Bild der Größe `size` liegt, als
+/// Anteile (0 bei `a`, 1 bei `b`); `None`, wenn nichts davon im Bild liegt
+/// oder die Punkte keine endlichen Zahlen sind (Liang-Barsky).
+fn clip_to_screen(a: Vec2, b: Vec2, size: Vec2) -> Option<(f32, f32)> {
+    if !a.is_finite() || !b.is_finite() {
+        return None;
+    }
+    let d = b - a;
+    let (mut start, mut end) = (0.0f32, 1.0f32);
+    for (p, q) in [
+        (-d.x, a.x),
+        (d.x, size.x - a.x),
+        (-d.y, a.y),
+        (d.y, size.y - a.y),
+    ] {
+        if p == 0.0 {
+            if q < 0.0 {
+                return None;
+            }
+        } else if p < 0.0 {
+            start = start.max(q / p);
+        } else {
+            end = end.min(q / p);
+        }
+    }
+    (start < end).then_some((start, end))
 }
 
 /// Umlaufzeit eines Keplerabschnitts; bei offenen Bahnen bis zum Wechsel der
@@ -818,5 +927,36 @@ pub fn draw_zones(
         gizmos
             .circle(Isometry3d::new(center, rotation), distance * 0.01, color)
             .resolution(4);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Nur der Teil im Bild bleibt; riesige oder unendliche Strecken (nahe
+    /// an der Kamera) machen keine Arbeit mehr.
+    #[test]
+    fn clipping_keeps_only_the_visible_part() {
+        let size = Vec2::new(1000.0, 500.0);
+        let inside = clip_to_screen(Vec2::new(100.0, 100.0), Vec2::new(200.0, 300.0), size);
+        assert_eq!(inside, Some((0.0, 1.0)));
+        let (s, e) =
+            clip_to_screen(Vec2::new(-1000.0, 250.0), Vec2::new(3000.0, 250.0), size).unwrap();
+        assert!((s - 0.25).abs() < 1e-6 && (e - 0.5).abs() < 1e-6);
+        let huge = clip_to_screen(Vec2::new(-1e7, 250.0), Vec2::new(1e7, 250.0), size).unwrap();
+        assert!((huge.1 - huge.0) * 2e7 < 1_010.0);
+        assert_eq!(
+            clip_to_screen(Vec2::new(-10.0, -10.0), Vec2::new(-5.0, 900.0), size),
+            None
+        );
+        assert_eq!(
+            clip_to_screen(Vec2::new(f32::INFINITY, 0.0), Vec2::ZERO, size),
+            None
+        );
+        assert_eq!(
+            clip_to_screen(Vec2::new(f32::NAN, 0.0), Vec2::ZERO, size),
+            None
+        );
     }
 }

@@ -73,7 +73,7 @@ Beispiel ein Satellit betanken.
 Der Mond Zoon ist wie der Mun in KSP: 200 km Radius, Schwerkraft 1,63 m/s², keine
 Luft. Er kreist in 12.000 km Abstand über dem Äquator (Umlauf etwa 38,6 h) und
 zeigt dem Planeten immer dieselbe Seite. Um ihn liegt seine Einflusssphäre
-(etwa 2.430 km, dünner Kreis): Darin zählt nur seine Schwerkraft, außerhalb
+(etwa 2.430 km, gestrichelter Kreis): Darin zählt nur seine Schwerkraft, außerhalb
 nur die des Planeten (Patched Conics wie in KSP). Ein Klick auf den Mond wählt
 ihn (Angaben links, Einflusssphäre gelb), `F` richtet die Kamera auf ihn.
 
