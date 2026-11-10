@@ -43,6 +43,14 @@ const SOI_CHANGE_COLOR: Color = Color::srgb(0.85, 0.85, 0.9);
 const GHOST_COLOR: Color = Color::srgba(0.8, 0.8, 0.85, 0.3);
 /// Stützpunkte für Mondbahn und Einflusssphäre.
 const BODY_ORBIT_POINTS: usize = 720;
+/// Einflusssphären gestrichelt: Strich und Lücke in Bildschirmpixeln, gleich
+/// bei jedem Zoom.
+const SOI_DASH: f32 = 10.0;
+const SOI_GAP: f32 = 7.0;
+/// Abtastung der gestrichelten Kreise: höchstens so viele Pixel pro Schritt,
+/// mindestens und höchstens so viele Punkte.
+const SOI_STEP: f32 = 3.0;
+const SOI_POINTS: (usize, usize) = (64, 8_192);
 /// Größe der Markierungen relativ zum Abstand zur Kamera (bleibt auf dem
 /// Bildschirm gleich groß, egal wie weit man herauszoomt).
 const MARKER_SCALE: f32 = 0.007;
@@ -385,14 +393,17 @@ pub fn draw_planet_grid(sim: Res<Sim>, rig: Res<CameraRig>, mut gizmos: Gizmos) 
 
 /// Bahnen der Planeten und Monde um ihren Mutterkörper (Ellipsen in ihrer
 /// Bahnebene) und ihre Einflusssphären. Die Einflusssphäre ist eine Kugel;
-/// gezeichnet wird ihr Umriss in der Bahnebene, beim gewählten Körper in
-/// dessen Farbe.
+/// gezeichnet wird ihr Umriss in der Bahnebene, gestrichelt (damit er nicht
+/// wie eine Bahn aussieht), beim gewählten Körper in dessen Farbe.
 pub fn draw_body_orbits(
     sim: Res<Sim>,
     rig: Res<CameraRig>,
     chosen: Res<SelectedBody>,
+    camera: Single<(&Camera, &Transform), With<MainCamera>>,
     mut gizmos: Gizmos,
 ) {
+    let (camera, transform) = *camera;
+    let view = GlobalTransform::from(*transform);
     let world = &sim.0;
     let angles = |from: f64| {
         (0..=BODY_ORBIT_POINTS)
@@ -415,13 +426,76 @@ pub fn draw_body_orbits(
             SOI_COLOR
         };
         let (plane, soi) = (orbit.orientation(), sphere_of_influence(&world.bodies, b));
-        gizmos.linestrip(
-            angles(0.0).map(|angle| {
-                let (sin, cos) = angle.sin_cos();
-                to_view(center + plane * DVec3::new(cos, sin, 0.0) * soi, rig.focus)
-            }),
-            color,
-        );
+        let circle = |n: usize| -> Vec<Vec3> {
+            (0..=n)
+                .map(|i| {
+                    let (sin, cos) = (std::f64::consts::TAU * i as f64 / n as f64).sin_cos();
+                    to_view(center + plane * DVec3::new(cos, sin, 0.0) * soi, rig.focus)
+                })
+                .collect()
+        };
+        // Erst grob: wie lang ist der Kreis auf dem Bildschirm? Danach so
+        // fein, dass die Striche sauber sitzen.
+        let length = screen_length(camera, &view, &circle(SOI_POINTS.0));
+        let n = ((length / SOI_STEP) as usize).clamp(SOI_POINTS.0, SOI_POINTS.1);
+        draw_dashed(&mut gizmos, camera, &view, &circle(n), color);
+    }
+}
+
+/// Länge eines Linienzugs auf dem Bildschirm (Pixel), ohne Stücke hinter der
+/// Kamera.
+fn screen_length(camera: &Camera, view: &GlobalTransform, points: &[Vec3]) -> f32 {
+    let screen: Vec<Option<Vec2>> = points
+        .iter()
+        .map(|&p| camera.world_to_viewport(view, p).ok())
+        .collect();
+    screen
+        .windows(2)
+        .filter_map(|w| Some(w[0]?.distance(w[1]?)))
+        .sum()
+}
+
+/// Gestrichelter Linienzug: Strich und Lücke werden entlang seiner
+/// Projektion auf dem Bildschirm abgemessen, so sind sie bei jedem Zoom und
+/// auch bei schräger Sicht gleich lang. Stücke hinter der Kamera fehlen.
+fn draw_dashed(
+    gizmos: &mut Gizmos,
+    camera: &Camera,
+    view: &GlobalTransform,
+    points: &[Vec3],
+    color: Color,
+) {
+    let period = SOI_DASH + SOI_GAP;
+    let mut phase = 0.0f32;
+    let screen: Vec<Option<Vec2>> = points
+        .iter()
+        .map(|&p| camera.world_to_viewport(view, p).ok())
+        .collect();
+    for (i, w) in screen.windows(2).enumerate() {
+        let (Some(a), Some(b)) = (w[0], w[1]) else {
+            continue;
+        };
+        let (from, to) = (points[i], points[i + 1]);
+        let length = a.distance(b);
+        let mut done = 0.0;
+        while done < length {
+            // `phase` bleibt in [0, period): klein und damit genau.
+            let on = phase < SOI_DASH;
+            let left = if on { SOI_DASH - phase } else { period - phase };
+            let step = left.min(length - done);
+            if on {
+                gizmos.line(
+                    from.lerp(to, done / length),
+                    from.lerp(to, (done + step) / length),
+                    color,
+                );
+            }
+            done += step;
+            phase += step;
+            if phase >= period - 1e-4 {
+                phase = 0.0;
+            }
+        }
     }
 }
 
