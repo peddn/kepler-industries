@@ -146,14 +146,17 @@ pub fn demo() -> World {
     // Zielgebiete: an der Startbasis, eines etwa 60 km östlich zum Üben eines
     // Hops (Kurs 90°, Ziel-Apoapsis rund 27 km) und eines weit weg im Osten,
     // zum Anfliegen aus dem Orbit.
-    for (name, point) in [
-        ("Startbasis", pad),
-        ("Übungsfeld", SurfacePoint::from_degrees(4.94, -14.2)),
-        ("Messfeld Ost", SurfacePoint::from_degrees(2.0, 60.0)),
+    // Auf Zoon: die Nahseite (Zorb im Zenit) und die Fernseite.
+    for (name, body, point) in [
+        ("Startbasis", 0, pad),
+        ("Übungsfeld", 0, SurfacePoint::from_degrees(4.94, -14.2)),
+        ("Messfeld Ost", 0, SurfacePoint::from_degrees(2.0, 60.0)),
+        ("Nahseite", 1, SurfacePoint::from_degrees(0.0, 0.0)),
+        ("Fernseite", 1, SurfacePoint::from_degrees(0.0, 180.0)),
     ] {
         world.zones.push(LandingZone {
             name: name.into(),
-            body: 0,
+            body,
             center: point,
             radius: ZONE_RADIUS,
         });

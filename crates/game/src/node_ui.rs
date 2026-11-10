@@ -733,10 +733,12 @@ pub fn input(
 pub fn zone_center(world: &World, k: usize) -> DVec3 {
     let zone = &world.zones[k];
     let body = &world.bodies[zone.body];
-    body.body_fixed_to_inertial(
-        zone.center.body_fixed_direction() * (body.radius + crate::view::SURFACE_LIFT),
-        world.time,
-    )
+    // Auf dem echten Körper, wie gezeichnet (auch auf dem Mond).
+    body_state(&world.bodies, zone.body, world.time).position
+        + body.body_fixed_to_inertial(
+            zone.center.body_fixed_direction() * (body.radius + crate::view::SURFACE_LIFT),
+            world.time,
+        )
 }
 
 /// Klick: zuerst Schiffe, dann Zielgebiete, dann die Bahn des gewählten

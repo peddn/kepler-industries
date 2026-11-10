@@ -147,7 +147,8 @@ fn landing_names_the_zone() {
         entry.kind,
         LogKind::Landed {
             point: touchdown.point,
-            zone: Some(field)
+            zone: Some(field),
+            body: 0,
         }
     );
 }
@@ -216,4 +217,50 @@ fn log_is_saved() {
     value.as_object_mut().unwrap().remove("log");
     let old: World = serde_json::from_value(value).unwrap();
     assert!(old.log.is_empty());
+}
+
+/// Landung im Zielgebiet auf Zoon: Das Protokoll nennt Körper und Gebiet.
+#[test]
+fn landing_on_the_moon_is_logged_with_its_body() {
+    let mut world = sim::scenario::demo();
+    let moon = &world.bodies[1];
+    let (gm, r) = (moon.gm, moon.radius + 30_000.0);
+    let near_side = world
+        .zones
+        .iter()
+        .position(|z| z.name == "Nahseite")
+        .unwrap();
+    let orbit = sim::kepler::state_from_apsides(gm, r, r, 0.0, 0.0, 0.0, false);
+    world.spawn_vessel("Lander", sim::scenario::FERRY, 2_000.0, 1, orbit);
+    let lander = world.vessels.len() - 1;
+    // Absenken an verschiedenen Stellen, bis das Kreuz in der Nahseite liegt.
+    let world = (0..1_000)
+        .map(|k| {
+            let mut w = world.clone();
+            let node = sim::ManeuverNode {
+                time: 100.0 + 5.0 * k as f64,
+                delta_v: glam::DVec3::new(-60.0, 0.0, 0.0),
+            };
+            w.add_node(lander, node).unwrap();
+            w.set_armed(lander, true).unwrap();
+            w
+        })
+        .find(|w| {
+            w.touchdown(lander)
+                .is_some_and(|t| t.zone == Some(near_side))
+        })
+        .expect("eine Stelle trifft die Nahseite");
+    let mut world = world;
+    let touchdown = world.touchdown(lander).unwrap();
+    assert_eq!(touchdown.body, 1);
+    world.advance_to(touchdown.time + 1.0);
+    let entry = world.log.last().unwrap();
+    assert_eq!(
+        entry.kind,
+        LogKind::Landed {
+            point: touchdown.point,
+            zone: Some(near_side),
+            body: 1,
+        }
+    );
 }

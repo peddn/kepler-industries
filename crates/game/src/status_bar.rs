@@ -80,6 +80,11 @@ fn crash_reason(reason: &Crash) -> String {
 /// Text und Farbe zu einem Eintrag des Protokolls.
 fn entry_line(world: &World, entry: &LogEntry) -> Line {
     let name = &world.vessels[entry.vessel].name;
+    // Auf dem Heimatplaneten ohne Namen, sonst " auf Zoon".
+    let on = |body: usize| match body {
+        0 => String::new(),
+        b => format!(" auf {}", world.bodies[b].name),
+    };
     let zone = |zone: Option<usize>, point| match zone {
         Some(k) => format!("im Zielgebiet {}", world.zones[k].name),
         None => format!("bei {}", place(point)),
@@ -102,17 +107,27 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             format!("tritt in die Atmosphäre ein (Pe {})", km(*periapsis)),
             ATMOSPHERE_COLOR,
         ),
-        LogKind::Landed { point, zone: z } => {
+        LogKind::Landed {
+            point,
+            zone: z,
+            body,
+        } => {
             let at = zone(*z, point);
             let outside = if z.is_none() { " (außerhalb)" } else { "" };
-            (format!("gelandet {at}{outside}"), LANDED_COLOR)
+            (format!("gelandet{} {at}{outside}", on(*body)), LANDED_COLOR)
         }
         LogKind::Crashed {
             point,
             zone: z,
             reason,
+            body,
         } => (
-            format!("abgestürzt {}: {}", zone(*z, point), crash_reason(reason)),
+            format!(
+                "abgestürzt{} {}: {}",
+                on(*body),
+                zone(*z, point),
+                crash_reason(reason)
+            ),
             CRASH_COLOR,
         ),
         LogKind::Docked { host } => (

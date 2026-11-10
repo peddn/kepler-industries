@@ -214,10 +214,17 @@ wieder gültig.
 **Nicht scharfe Kette:** Erreicht sie ihren ersten Brennbeginn, rückt sie als
 Ganzes einen Umlauf weiter (nach derselben Regel) oder verfällt.
 
-**Start vom Boden (Startprofil):** drei Werte: Kurs (90° = Osten), Wendebeginn
-(Höhe), Ziel-Apoapsis. Eine Schwerkraftwende wie in KSP: senkrecht bis zum
-Wendebeginn, dort 10° zur Seite (`KICK`), danach immer entlang der Bewegung
-relativ zur Luft, nie unter die Waagerechte. Die Schwerkraft biegt die Bahn
+**Start vom Boden (Startprofil):** vier Werte: Kurs (90° = Osten), Wendebeginn
+(Höhe), Wendewinkel, Ziel-Apoapsis. Eine Schwerkraftwende wie in KSP: senkrecht bis zum
+Wendebeginn, dort um den Wendewinkel zur Seite, danach immer entlang der Bewegung
+relativ zur Luft, nie steiler als der Wendewinkel, nie unter die Waagerechte.
+Voreinstellung nach dem Körper (`LaunchProfile::for_body`): mit Luft 1,5 km
+und 10° (steiler wenden fliegt zu lange durch dichte Luft und stürzt ab),
+ohne Luft 100 m und 70° (auf Zoon mit Schub/Gewicht 12 stiege die Fähre mit
+10° fast senkrecht: 822 statt 666 m/s bis zur 30-km-Bahn; 85° spart noch
+25 m/s, lässt schwache Schiffe aber kaum steigen). Ziel-Apoapsis 30 km über
+der Luftgrenze bzw. dem Boden. 10° rechnet bitgenau wie der alte feste Winkel
+(`kick_radians`), alte Spielstände bleiben gleich. Die Schwerkraft biegt die Bahn
 von selbst um; früher wenden heißt flacher. Schub entlang der Bewegung hebt
 die Apoapsis stetig, deshalb wird die Zielhöhe sicher erreicht, auch bei einem
 Hop mit wenigen km. (Eine feste Neigung nach Höhe blieb bei einem Hop in der
@@ -246,7 +253,12 @@ Schiff auf; darüber muss es diese Geschwindigkeit als Δv abbremsen, mit genug
 Treibstoff an Bord und Schub größer als das Gewicht (Satelliten können das
 nicht). Der Treibstoff wird nach der Raketengleichung abgezogen. Sonst wird es
 zum Wrack. Das gehört zur Zeitleiste (Übergang beim Bodenkontakt), Vorschau =
-Ausführung gilt also auch hier. Ob das Schiff in einem **Zielgebiet** (Kreis,
+Ausführung gilt also auch hier. Derselbe Code für jeden Körper, die
+Unterschiede kommen nur aus seinen Daten: Auf Zorb endet die Keplerbahn an
+der Luftgrenze und der Rest wird mit Luftwiderstand und Fallschirm gerechnet;
+auf Zoon (ohne Luft) endet sie am Boden, der Fallschirm bremst ohne Luft
+nicht, das ganze Bremsen ist der letzte Schritt (aus niedriger Bahn etwa
+600 m/s). Ob das Schiff in einem **Zielgebiet** (Kreis,
 5 km Radius) aufsetzt, entscheidet nicht über heil oder kaputt; es zählt für
 Basis, Andocken und Aufträge. Außerhalb steht das Schiff „außerhalb“ und
 kommt mit einem Hop (Start mit niedriger Ziel-Apoapsis) ins Ziel. Nach dem
@@ -375,7 +387,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Brennbeginn an und schaltet auf 1×. Pro Schiff statt für alle, damit spätere
   automatische Routen den Zeitraffer nicht ständig bremsen. Die Markierung
   gehört zum Spielstand.
-- **Startprofil** mit wenigen Parametern (Kurs, Wendebeginn, Ziel-Apoapsis);
+- **Startprofil** mit wenigen Parametern (Kurs, Wendebeginn, Wendewinkel, Ziel-Apoapsis);
   das Schiff kommt mit nicht mehr vollen Tanks oben an. Zirkularisieren per
   Manöver-Node, auch schon vor dem Abheben geplant. Feste Startzeit mit
   Countdown (Vorgabe 2 min); verschieben verschiebt die ganze Kette.
@@ -545,6 +557,9 @@ nichts verloren geht.
 - **Startfenster automatisch:** Startzeit und Kurs suchen, bei denen die
   Bahnebene zum Ziel passt (von Hand geht es über die Neigung in der Karte
   „Ziel“).
+- **Annäherung an einen Mond beim Planen:** wie knapp ein Transfer die
+  Einflusssphäre verfehlt, bevor eine Begegnung zustande kommt (bewusst
+  weggelassen: Man zieht den Node, bis „Begegnung“ erscheint).
 
 ## Reihenfolge
 
@@ -562,6 +577,6 @@ nichts verloren geht.
    Statusleiste mit Protokoll ✓, Andocken ✓ (Angleichen, Anflug, Verbund),
    Abdocken ✓
 7. Mond: auf Schienen ✓ (Kreisbahn, Einflusssphäre, wählen, Kamera), Wechsel
-   der Einflusssphäre ✓ (mit Rand des Heimatsystems, Zeichnung wie KSP), Ziel
-   Mond (Annäherung, Landung)
+   der Einflusssphäre ✓ (mit Rand des Heimatsystems, Zeichnung wie KSP),
+   Landen und Starten auf Zoon ✓ (Wendewinkel, Zielgebiete)
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

@@ -37,16 +37,21 @@ pub enum LogKind {
     },
     /// Eintritt in die Atmosphäre.
     AtmosphereEntry { periapsis: f64 },
-    /// Heil aufgesetzt, im Zielgebiet `zone` oder außerhalb.
+    /// Heil aufgesetzt auf `body`, im Zielgebiet `zone` oder außerhalb.
     Landed {
         point: SurfacePoint,
         zone: Option<usize>,
+        /// Alte Einträge ohne Körper: Zorb.
+        #[serde(default)]
+        body: BodyId,
     },
     /// Abgestürzt und warum.
     Crashed {
         point: SurfacePoint,
         zone: Option<usize>,
         reason: Crash,
+        #[serde(default)]
+        body: BodyId,
     },
     /// Angedockt: jetzt Teil des Verbunds um das Hauptschiff `host`.
     Docked { host: usize },
