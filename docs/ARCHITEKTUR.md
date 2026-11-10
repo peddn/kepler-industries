@@ -133,6 +133,18 @@ bruchstückhaft.
 Ein Körper ohne Luft ist der Spezialfall Bodendichte 0, Freiflug der
 Spezialfall „kein Schub".
 
+**Monde auf Schienen:** Ein Mond läuft auf einer Kreisbahn in der
+Äquatorebene seines Mutterkörpers, im Drehsinn der Rotation (`BodyOrbit`),
+für jeden Zeitpunkt direkt berechnet (`body::body_state`, über den Rest der
+Umlaufzeit wie die Rotation, damit auch nach Jahren genau). Er wird nie
+integriert und spürt keine Schiffe. Der erste Körper ruht im Ursprung. Die
+Einflusssphäre folgt nach Laplace aus Bahnradius und Massen: a · (m/M)^0,4
+(`body::sphere_of_influence`); darin zählt für ein Schiff nur die Schwerkraft
+des Monds (Patched Conics, ab dem Wechsel der Einflusssphäre). Der Mond im
+Spiel entspricht dem Mun in KSP (200 km, g = 1,63 m/s², 12.000 km Abstand,
+Umlauf 38,6 h, Einflusssphäre 2.430 km) und ist gebunden: Rotation und Umlauf
+haben dieselbe Dauer, Länge 0° zeigt immer zum Planeten.
+
 **Atmosphäre:** verschobene Exponentialfunktion
 
     ρ(h) = ρ₀ · (e^(−h/H) − e^(−h_max/H)) / (1 − e^(−h_max/H))   für h < h_max, sonst 0
@@ -340,11 +352,14 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Manöver-Node, auch schon vor dem Abheben geplant. Feste Startzeit mit
   Countdown (Vorgabe 2 min); verschieben verschiebt die ganze Kette.
 - **Kamera:** `F` richtet sie auf das gewählte Objekt (gewählter Node, sonst
-  Schiff, sonst Zielgebiet, ohne Auswahl den Planeten), ein zweites `F` auf
+  Schiff, sonst Zielgebiet oder Mond, ohne Auswahl den Planeten), ein zweites `F` auf
   dasselbe zurück zum Planeten. Der Fokus ist unabhängig von der Auswahl: Die
   Kamera bleibt auf ihrem Objekt und folgt ihm, auch wenn man danach etwas
   anderes wählt (z. B. Zielgebiet im Blick, Brems-Node des Schiffs
-  einstellen). Zielgebiete sind über eine Raute in der Mitte wählbar. Gibt es
+  einstellen). Zielgebiete sind über eine Raute in der Mitte wählbar, der
+  Mond per Klick auf die Kugel (erst nach der Bahn des gewählten Schiffs, die
+  oft davor liegt). Auf Planet und Mond gibt es keine Nahansicht; der
+  kleinste Abstand liegt knapp über der Oberfläche. Gibt es
   das Objekt nicht mehr, geht der Fokus auf sein Schiff, sonst den Planeten.
   Kollisionen der Kamera mit dem Planeten werden bewusst vernachlässigt.
 - **Nahansicht** (`N`, wie die Flugansicht in KSP): nur mit einem Objekt im
@@ -458,10 +473,14 @@ und Modulen.
   leer, fallen zuerst nur Dienste aus (Funk, Scans, Aufträge); der Flug bleibt
   auf Schienen, Manöver laufen weiter. Ob ein Schiff ohne Strom auch nicht
   mehr steuern kann, wird später bewusst entschieden.
-- **Sonne** in der Simulation (spätestens mit Mond und Einflusssphären):
-  Richtung und Abstand, für Schatten, Solarertrag und
-  Gleichgewichtstemperatur. Bis dahin gibt es sie nur als Licht in der
-  Darstellung.
+- **Sonne** in der Simulation: erst für die Haushalte (Schatten, Solarertrag,
+  Gleichgewichtstemperatur) und für Schiffe, die das Heimatsystem verlassen;
+  für Planet und Mond mit Patched Conics wird sie nicht gebraucht. Bis dahin
+  gibt es sie nur als Licht in der Darstellung. Das Heimatsystem endet an der
+  Einflusssphäre des Planeten (etwa 84.000 km, aus Masse und Abstand der
+  Sonne wie bei Kerbin): Ab dem Wechsel der Einflusssphäre endet dort die
+  Zeitleiste eines Schiffs („verlässt das Heimatsystem“, danach im
+  Sonnenorbit, nicht simuliert), statt es falsch weiterzurechnen.
 - **Gestrichen:** Technikalterung, Lagrange-Punkte (mit Patched Conics nicht möglich)
 
 ## UI-Ideen (nach dem Grundgerüst)
@@ -496,5 +515,7 @@ nichts verloren geht.
    von Hand), Nahansicht ✓ (Kamera auf jedes gewählte Objekt, `N`),
    Statusleiste mit Protokoll ✓, Andocken ✓ (Angleichen, Anflug, Verbund),
    Abdocken ✓
-7. Mond, Wechsel der Einflusssphäre
+7. Mond: auf Schienen ✓ (Kreisbahn, Einflusssphäre, wählen, Kamera), Wechsel
+   der Einflusssphäre (mit Rand des Heimatsystems), Ziel Mond (Annäherung,
+   Landung)
 8. Fracht und Rohstoffe → Raumhafen und Booster → Rohbau und Basis-Schiff → Basen und Wirtschaft

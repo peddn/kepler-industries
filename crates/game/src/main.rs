@@ -120,6 +120,12 @@ fn parse_options() -> Options {
                     v.parse().expect("--focus erwartet eine Schiffsnummer"),
                 ))
             }
+            ("--focus-body", Some(v)) => {
+                options.focus = Some(camera::Focus::Body(
+                    v.parse()
+                        .expect("--focus-body erwartet die Nummer eines Himmelskörpers"),
+                ))
+            }
             ("--focus-zone", Some(v)) => {
                 options.focus = Some(camera::Focus::Zone(
                     v.parse()
@@ -139,7 +145,8 @@ fn parse_options() -> Options {
                     "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM\n\
                      \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]\n\
                      \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM  --target SCHIFF,ZIEL\n\
-                     \x20         --focus SCHIFF  --focus-zone ZIELGEBIET  --near  --dock SCHIFF"
+                     \x20         --focus SCHIFF  --focus-zone ZIELGEBIET  --focus-body KÖRPER\n\
+                     \x20         --near  --dock SCHIFF"
                 );
                 std::process::exit(2);
             }
@@ -195,7 +202,16 @@ fn main() {
     }
     world.advance_to(options.time);
 
-    let mut rig = camera::CameraRig::new(world.bodies[0].radius);
+    if let Some(camera::Focus::Body(b)) = options.focus
+        && b >= world.bodies.len()
+    {
+        eprintln!(
+            "--focus-body: es gibt nur {} Himmelskörper",
+            world.bodies.len()
+        );
+        std::process::exit(2);
+    }
+    let mut rig = camera::CameraRig::new(world.bodies.iter().map(|b| b.radius).collect());
     if let Some(focus) = options.focus {
         rig.set_target(focus);
         rig.set_near(options.near);
@@ -228,6 +244,7 @@ fn main() {
     .insert_resource(selection)
     .init_resource::<node_ui::SelectedNode>()
     .init_resource::<node_ui::SelectedZone>()
+    .init_resource::<node_ui::SelectedBody>()
     .init_resource::<panel::PanelShown>()
     .init_resource::<dv_bar::BarShown>()
     .init_resource::<rendezvous::Rendezvous>()
@@ -285,6 +302,7 @@ fn main() {
             panel::hover,
             dv_bar::sync,
             view::draw_planet_grid,
+            view::draw_body_orbits,
             view::draw_trajectories,
             view::draw_burn_points,
             view::draw_zones,

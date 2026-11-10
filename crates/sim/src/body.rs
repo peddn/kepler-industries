@@ -1,9 +1,14 @@
-//! Himmelskörper: Masse, Größe, Rotation und Atmosphäre.
+//! Himmelskörper: Masse, Größe, Rotation, Atmosphäre und Bahn (Monde).
 //!
 //! Bezugssystem (siehe `docs/ARCHITEKTUR.md`): nicht rotierend, Ursprung im
 //! Mittelpunkt des Körpers, +Z zeigt zum Nordpol. Die Rotation des Körpers
 //! steckt ausschließlich in den Umrechnungen Oberfläche ↔ Raum in dieser Datei.
+//!
+//! Monde laufen auf Schienen: eine Kreisbahn um den Mutterkörper, für jeden
+//! Zeitpunkt direkt berechnet (`body_state`). Der erste Körper (`bodies[0]`)
+//! ruht im Ursprung.
 
+use crate::kepler::StateVector;
 use glam::{DMat3, DVec3};
 use serde::{Deserialize, Serialize};
 use std::f64::consts::TAU;
@@ -84,6 +89,18 @@ impl SurfacePoint {
     }
 }
 
+/// Bahn eines Körpers um seinen Mutterkörper: ein Kreis in dessen
+/// Äquatorebene, im Drehsinn der Rotation (von Norden aus gegen den
+/// Uhrzeigersinn).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BodyOrbit {
+    pub parent: BodyId,
+    /// Bahnradius in m.
+    pub radius: f64,
+    /// Winkel (rad) zum Zeitpunkt 0, von +X aus.
+    pub phase: f64,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Body {
     pub name: String,
@@ -94,6 +111,52 @@ pub struct Body {
     /// Siderische Rotationsdauer in s (gegenüber den Sternen, nicht der Sonne).
     pub rotation_period: f64,
     pub atmosphere: Atmosphere,
+    /// Bahn um den Mutterkörper; `None` beim Körper im Ursprung.
+    #[serde(default)]
+    pub orbit: Option<BodyOrbit>,
+}
+
+/// Umlaufzeit einer Kreisbahn mit Radius `radius` um einen Körper mit `gm`.
+pub fn circular_period(gm: f64, radius: f64) -> f64 {
+    TAU * (radius.powi(3) / gm).sqrt()
+}
+
+/// Umlaufzeit eines Körpers um seinen Mutterkörper; `None` beim Körper im
+/// Ursprung.
+pub fn orbital_period(bodies: &[Body], body: BodyId) -> Option<f64> {
+    let orbit = bodies[body].orbit.as_ref()?;
+    Some(circular_period(bodies[orbit.parent].gm, orbit.radius))
+}
+
+/// Lage und Geschwindigkeit eines Körpers zum Zeitpunkt `t`, relativ zum
+/// Körper im Ursprung.
+pub fn body_state(bodies: &[Body], body: BodyId, t: f64) -> StateVector {
+    let Some(orbit) = &bodies[body].orbit else {
+        return StateVector {
+            position: DVec3::ZERO,
+            velocity: DVec3::ZERO,
+        };
+    };
+    let parent = body_state(bodies, orbit.parent, t);
+    let period = circular_period(bodies[orbit.parent].gm, orbit.radius);
+    // Über den Rest der Umlaufzeit (wie die Rotation): genau auch nach Jahren.
+    let angle = orbit.phase + t.rem_euclid(period) / period * TAU;
+    let (sin, cos) = angle.sin_cos();
+    let speed = orbit.radius * TAU / period;
+    StateVector {
+        position: parent.position + DVec3::new(cos, sin, 0.0) * orbit.radius,
+        velocity: parent.velocity + DVec3::new(-sin, cos, 0.0) * speed,
+    }
+}
+
+/// Radius der Einflusssphäre nach Laplace: Bahnradius · (m/M)^0,4. Darin
+/// zählt für ein Schiff nur die Schwerkraft dieses Körpers. Der Körper im
+/// Ursprung reicht vorerst unendlich weit (später bis zur Sonne).
+pub fn sphere_of_influence(bodies: &[Body], body: BodyId) -> f64 {
+    match &bodies[body].orbit {
+        Some(orbit) => orbit.radius * (bodies[body].gm / bodies[orbit.parent].gm).powf(0.4),
+        None => f64::INFINITY,
+    }
 }
 
 impl Body {

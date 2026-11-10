@@ -8,8 +8,8 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 
 ## Stand
 
-Ein Planet mit Atmosphäre, eine Startbasis, zwei Satelliten mit Triebwerk und
-eine Fähre am Boden. „Relais-1" kreist stabil oberhalb der Atmosphäre.
+Ein Planet mit Atmosphäre und ein Mond, eine Startbasis, zwei Satelliten mit
+Triebwerk und eine Fähre am Boden. „Relais-1" kreist stabil oberhalb der Atmosphäre.
 „Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang durch die Luft
 abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
 mit einem Manöver. „Fähre-3" steht an der Startbasis und kann starten.
@@ -61,8 +61,16 @@ Flugrichtung und entfernt sich stetig (in 100 km Höhe etwa 6 km pro Umlauf).
 Es hat danach das Hauptschiff als Ziel, zum Wiederandocken. So lässt sich zum
 Beispiel ein Satellit betanken.
 
+Der Mond ist wie der Mun in KSP: 200 km Radius, Schwerkraft 1,63 m/s², keine
+Luft. Er kreist in 12.000 km Abstand über dem Äquator (Umlauf etwa 38,6 h) und
+zeigt dem Planeten immer dieselbe Seite. Um ihn liegt seine Einflusssphäre
+(etwa 2.430 km, dünner Kreis), in der später nur seine Schwerkraft zählt. Noch
+zieht die Schiffe nur der Planet an; der Wechsel der Einflusssphäre kommt im
+nächsten Schritt. Ein Klick auf den Mond wählt ihn (Angaben links,
+Einflusssphäre gelb), `F` richtet die Kamera auf ihn.
+
 Die Kamera lässt sich mit `F` auf das gewählte Objekt richten: Schiff,
-Node oder Zielgebiet (Raute in der Kreismitte anklicken). Sie folgt ihm, auch
+Node, Zielgebiet (Raute in der Kreismitte anklicken) oder Mond. Sie folgt ihm, auch
 wenn man danach etwas anderes wählt; so kann man ein Zielgebiet im Blick
 behalten und dabei den Brems-Node des Schiffs einstellen. Mit `N` geht es in
 die Nahansicht: Der Planet liegt unten, man kommt bis auf 10 m heran, zum
@@ -116,6 +124,12 @@ hat danach noch 176 m/s.*
 
 *Im Anflug, aus der Nähe: Fähre-3 (gelb) ist noch 271 m von Relais-1 (rosa)
 entfernt, Kontakt in zweieinhalb Minuten.*
+
+![Mond](docs/screenshots/mond.png)
+
+*Der Mond ist gewählt: Bahn um den Planeten, Einflusssphäre gelb, links seine
+Angaben. Nachspielen mit `--time 22100 --camera 30,50,30000` und einem Klick
+auf den Mond.*
 
 ![Verbund](docs/screenshots/verbund.png)
 
@@ -195,7 +209,8 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | ▲ / ▼ rechts in der Statusleiste | Protokoll auf- und zuklappen (Scrollleiste ziehbar) |
 | Linksklick auf ein Schiff / `Tab` | Schiff wählen / nächstes Schiff |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
-| `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet; ohne Auswahl Planet); nochmal `F` zurück zum Planeten |
+| Linksklick auf den Mond | Mond wählen (eine Bahn davor geht vor: Node setzen) |
+| `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten |
 | `N` | Nahansicht an/aus (Planet unten, Zoom bis 10 m; nur mit einem Objekt im Fokus) |
 | Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
@@ -225,6 +240,7 @@ cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,
 - `--camera GIER,NEIGUNG,KM`: Blickwinkel in Grad, Abstand vom Fokus in km
 - `--focus SCHIFF` / `--focus-zone ZIELGEBIET`: Kamera auf ein Schiff bzw.
   Zielgebiet (0 = Startbasis, 1 = Übungsfeld, 2 = Messfeld Ost)
+- `--focus-body KÖRPER`: Kamera auf einen Himmelskörper (0 = Planet, 1 = Mond)
 - `--near`: Nahansicht (mit `--focus` oder `--focus-zone`)
 - `--dock SCHIFF`: Andocken an das Ziel einschalten (nach `--target`)
 - `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2, 2 = Fähre-3)
