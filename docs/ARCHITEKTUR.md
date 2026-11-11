@@ -140,7 +140,7 @@ Das Spiel lebt vom Zeitraffer (bis 1.000.000×, ein Flug nach Nura dauert
 weniger würde, wäre damit entweder geschenkt oder eine Strafe fürs Fliegen.
 
 **Regel:** Zeit allein erzeugt und vernichtet nichts. Alles in der Wirtschaft
-hängt am Durchsatz: Stoffe und Geld entstehen und vergehen nur, wenn
+hängt am Durchsatz: Stoffe und Daten entstehen und vergehen nur, wenn
 gearbeitet, geliefert oder gehandelt wird. Stillstand kostet nichts und
 bringt nichts. Erlaubt ist, was sich wiederholt, ohne sich aufzusummieren
 (eine Batterie im Tag-Nacht-Wechsel). Es gibt keinen Druck durch die Uhr; das
@@ -550,7 +550,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Fallschirm, …). Die Summe der Module ergibt die `VesselParams`; die
   Simulation bleibt dabei unverändert. Bis dahin sind die Demo-Satelliten
   bewusst nicht landefähig (Schub kleiner als das Gewicht, kein Fallschirm).
-- **Ein Auftragssystem** für Geld und Forschungspunkte.
+- **Ein Auftragssystem** für Daten (kein Geld, siehe „Wirtschaft“).
 
 ## Wirtschaft (Konzept, noch nicht gebaut)
 
@@ -569,17 +569,48 @@ neu berechnet. So gelten die Regeln 3, 5, 6 und 12 auch hier (keine Drift,
 gleich bei jedem Zeitraffer, unabhängig von der Schrittgröße, Vorschau =
 Ausführung).
 
-**Drei Währungen:**
+**Zwei Währungen, kein Geld:**
 
 | | entsteht durch | vergeht durch |
 |---|---|---|
 | Stoffe | Minen, Fabriken, Ernte | Bauen, Tanken, Arbeit (Verschleiß) |
-| Geld | versorgte Bewohner, Aufträge, Verkauf an Zorb | Bauen, Starts von Zorb, Einkauf, Betrieb pro Arbeit |
-| Forschungsdaten | Neues erreichen (erster Orbit, Vorbeiflug, Landung), Scans, Proben | Upgrades für bessere Module |
+| Daten | Entdeckungen, Scans, Proben; spät auch Labore | Tausch bei Zorb, Forschung |
 
-Geld und Stoffe fließen nur mit dem Durchsatz: Bewohner zahlen für das, was
-sie verbrauchen, Betriebskosten fallen pro hergestellter Menge an, nicht pro
-Tag. Pleite durch Abwarten gibt es nicht.
+Geld, Markt, Preise, Steuern und Unterhalt gibt es nicht (alle Fassungen
+davon liefen auf eine endlos wiederholbare Route hinaus oder auf etwas, das
+irgendwann wertlos wird). Das Unternehmen „Kepler Industries“ ist der
+Rahmen, ohne Bilanz.
+
+**Zorb und die Daten:**
+- Zorb ist nicht ausbaubar: Startplatz und Partner, der Aufbau findet im All
+  statt.
+- Zorb gibt eine Startausstattung (einmalig: erste Schiffe, Bauteile für die
+  erste Basis), beliebig viele Zorbels, und im Tausch gegen Daten alles, was
+  man noch nicht selbst herstellt (Bauteile, Ersatzteile, Treibstoff, Module).
+  Freien Nachschub gibt es nicht: Weil Warten nichts kostet, wäre er mit
+  genug Flügen unbegrenzt, und eigene Produktion hätte keinen Sinn. Für einen
+  Start betankt Zorb nur den Aufstieg (das Schiff kommt mit fester Füllung im
+  Orbit an, siehe Booster), keinen Tanker.
+- Zorb will Daten, in zwei Stufen: **gefunkte Daten** (Scans, Messungen;
+  sofort da, wenig wert, später abhängig vom Kommunikationsnetz) und
+  **Proben**, die man zurückbringen und heil landen muss (viel wert). So gibt
+  es Fracht in beide Richtungen.
+- Jede Entdeckung zählt nur einmal. Daten lassen sich also nicht durch
+  Wiederholen vermehren; die Karten ganzer Körper zu scannen liefert viele
+  kleine Portionen.
+- Die Entscheidung, die immer wiederkehrt: Daten gegen Nachschub tauschen
+  oder in die eigene Forschung stecken (Upgrades für bessere Module).
+- **Aufträge** geben Richtung und Bonus („scanne Nura: doppelt“). Es gibt
+  eine feste Zahl offener Aufträge; ein neuer erscheint, wenn einer erledigt
+  ist, nicht mit der Zeit. Ein Grundauftrag, der immer geht und Bauteile
+  bringt, verhindert, dass man festsitzt; dazu ein Vorschuss.
+- **Ziel ist die völlige Unabhängigkeit:** Am Ende stellt man alles selbst
+  her und braucht Zorb nur noch für Zorbels.
+- **Endlos danach:** Labore (spätes Gebäude) machen aus hochwertigen Gütern
+  Daten, pro Arbeit; damit wiederholbare Upgrades, jedes Mal teurer. Sie
+  dürfen nicht zu früh kommen, sonst entwerten sie das Erkunden. Als
+  Erweiterung: neue Ziele (Asteroiden, Kometen), die erscheinen, sobald eines
+  erkundet ist.
 
 **Rohstoffe und Landezonen:**
 - Pro Körper und Rohstoff eine Karte wie eine Höhenkarte, aus einem Startwert
@@ -606,12 +637,12 @@ davor still.
 - Überall sonst gibt es nur die, die man hinbringt: Sie reisen als Passagiere
   in einem Wohnmodul, in jede Richtung (auch umsiedeln). Sie vermehren sich
   nicht.
-- Sie arbeiten (Gebäude brauchen Bewohner), verbrauchen und zahlen dafür.
+- Sie arbeiten (Gebäude brauchen Bewohner) und verbrauchen dabei.
 - Bedürfnisse: **Strom** (Grundbedürfnis) und **Ersatzteile** (Verschleiß,
   pro Arbeit, nicht pro Tag). Nahrung, Wasser und Luft entfallen. Höhere
   Bedürfnisse („Upgrades“ mit seltenen Stoffen) erst später.
-- Fehlt die Versorgung, stehen sie still (mild): Sie arbeiten und zahlen
-  nicht, bleiben aber, und nichts geht kaputt.
+- Fehlt die Versorgung, stehen sie still (mild): Sie arbeiten nicht, bleiben
+  aber, und nichts geht kaputt.
 
 **Strom als Leistungsbilanz:** Erzeuger liefern Leistung (kW): Solarpanele
 nur im Licht und je nach Abstand zur Sonne, ein Reaktor immer (teuer im Bau,
@@ -631,14 +662,11 @@ Sonnenleistung. Dasselbe Modell gilt für Schiffe (Wohnmodule brauchen
 Leistung, keinen Vorrat für die Flugdauer); Energiezellen als Frachtgut gibt
 es deshalb vorerst nicht.
 
-**Erste Kette (auf Zorb):** Mine (Erz) → Fabrik (Bauteile, Ersatzteile),
-dazu eine Raffinerie (Treibstoff). Der teure Schritt ist der Aufstieg in den
-Orbit (Treibstoff und Startkosten, später der Booster des Raumhafens); das
-macht jede Tonne im Orbit wertvoll. Erster Ausbau: eine Basis auf Zoon, von
-wo der Weg in den Orbit viel billiger ist (etwa 670 statt 3.400 m/s), z. B.
-für Treibstoff. Zorb versorgt den Anfang, Zoon macht das Fliegen billig,
-Nura liefert das Seltene. Zorb ist zugleich der Händler: kauft Seltenes,
-verkauft Grundstoffe.
+**Erste Kette (im All):** Mit der Startausstattung entsteht die erste Basis,
+naheliegend auf Zoon: Mine (Erz) → Fabrik (Bauteile, Ersatzteile), dazu eine
+Raffinerie (Treibstoff). Von Zoon ist der Weg in den Orbit viel billiger als
+von Zorb (etwa 670 statt 3.400 m/s). Zorb gibt den Anfang, Zoon macht das
+Fliegen billig, Nura liefert das Seltene.
 
 **Schiffe aus Chassis und Modulen** (siehe „Vessel-Klassen“ oben): ein
 festes Set von Chassis mit Plätzen, darin Module (Triebwerk, Tank,
@@ -654,14 +682,12 @@ Verbund aus angedockten Schiffen bleibt daneben bestehen.
 Wärme eine Abwägung), Asteroiden als Körper, automatische Routen (früh
 nötig, sobald Bewohner laufend versorgt werden), Kommunikationsnetz.
 
-**Offen:**
-- Woher das erste Geld kommt und was die Startbasis begrenzt, wenn auf Zorb
-  alles vor Ort wächst.
-- Bauteile und Ersatzteile: ein Gut oder zwei?
-- Stoffliste und Raten im Einzelnen; Balance zwischen Flügen von Stunden
-  (Zoon) und Monaten (Nura).
-- Was ohne Zeitdruck antreibt (Aufträge, Forschung, der nächste Körper),
-  zeigt sich erst beim Spielen.
+**Offen (wird am ersten spielbaren Schritt entlang geklärt):**
+- Stoffliste und Raten im Einzelnen; Bauteile und Ersatzteile: ein Gut oder
+  zwei?
+- Tauschwerte bei Zorb und wie großzügig die ersten Entdeckungen sind (früh
+  braucht man Nachschub und Upgrades zugleich).
+- Auftragsarten und ihre Steigerung: Sie müssen ohne Zeitdruck antreiben.
 - Chassis, Plätze und Module im Einzelnen.
 
 **Erster spielbarer Schritt (Vorschlag):** Fracht im Schiff (zählt als
@@ -672,7 +698,7 @@ Anlieferung am Landepunkt entsteht.
 
 - Kommunikationsnetz (Verbindung, Reichweite)
 - Scans, automatisierte Routen, Ressourcen, Basen, Wirtschaft
-- Bergung von Wracks (über Geld/Punkte)
+- Bergung von Wracks (über Daten)
 - „Hop zum Ziel": Parameter automatisch suchen, falls Zielen per Hand zu fummelig ist
 - Modelle der Schiffe in der Nahansicht (Ausrichtung beim Anflug aus der
   Anfluglinie, Haltepunkt vor dem Andockstutzen)
