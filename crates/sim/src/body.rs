@@ -206,6 +206,9 @@ pub struct Body {
     pub atmosphere: Atmosphere,
     /// Bahn um den Mutterkörper; `None` bei der Sonne im Ursprung.
     pub orbit: Option<BodyOrbit>,
+    /// Häufigkeit von Zorit: so viel fasst das Lager einer Mine hier (kg),
+    /// so viel gibt es also höchstens pro Abholung (siehe `base`). 0: keins.
+    pub zorit: f64,
 }
 
 /// Umlaufzeit einer Kreisbahn mit Radius `radius` um einen Körper mit `gm`;

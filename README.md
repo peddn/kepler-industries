@@ -15,22 +15,39 @@ Triebwerk, eine Fähre am Boden und eine im Orbit. „Relais-1" kreist stabil ob
 abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
 mit einem Manöver. „Fähre-3" steht an der Startbasis und kann starten.
 „Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator, bereit für
-den Flug zum Mond. Dahinter auf derselben Bahn die Startausstattung für die
-erste Basis: „Basisschiff-5" und die Frachter „Frachter-6" und „Frachter-7"
-mit je 2 t Bauteilen.
+den Flug zum Mond.
 
-**Fracht und Basis (erster Schritt der Wirtschaft):** Das Basisschiff landet
-auf einem Körper außer Zorb; in der Karte „Fracht & Basis" gründet es dort
-eine Basis und wird ihr Fundament (es fliegt dann nicht mehr). Der Landepunkt
-wird zur Zone mit 5 km Radius, sichtbar wie jedes Zielgebiet, auch in der
-Vorschau der Landung. Die Baustelle braucht 4 t Bauteile: Frachter, die in
-der Zone landen, laden dort ab. Fracht zählt als Masse (weniger Δv, zu sehen
-am Δv-Balken). Ist alles da, ist die Basis fertig und stellt Treibstoff her
-(180 kg pro Stunde, bis das Lager mit 8 t voll ist); Schiffe in der Zone
-tanken dort. Zum Ausprobieren, alle drei direkt nach Zoon:
-`--node 5,614,845,0,0 --node 6,604,845,0,0 --node 4,598.3,845,0,0`; sie
-landen nach gut 7 Stunden nebeneinander bei 83,6° West (mit `--time 26200`
-stehen sie schon dort).
+**Fracht und Basen (der Kreislauf der Wirtschaft):** Es gibt drei Stoffe:
+Bauteile und Zorit (ein Erz, das es auf Zorb nicht gibt) sind Fracht und
+teilen sich den Frachtraum, Treibstoff liegt im Tank. Fracht zählt als Masse
+(weniger Δv, zu sehen am Δv-Balken). Alles läuft über die Karte „Fracht &
+Basis" der Seitenleiste.
+
+- **Startbasis:** Schiffe in ihrem Zielgebiet laden Bauteile, tanken und
+  laden Zorit ab (vorerst alles frei; das Zorit kommt in ihr Lager).
+- **Gründen:** Ein Basisschiff, das auf einem Körper außer Zorb gelandet ist,
+  gründet dort eine **Mine** oder eine **Tankstelle** und wird ihr Fundament
+  (es fliegt dann nicht mehr). Der Landepunkt wird zur Zone mit 5 km Radius,
+  sichtbar wie jedes Zielgebiet, auch in der Vorschau der Landung.
+- **Baustelle:** Sie braucht 4 t Bauteile; Frachter, die in der Zone landen,
+  laden dort ab.
+- **Tankstelle:** stellt Treibstoff her (180 kg pro Stunde, Lager 8 t);
+  Schiffe in der Zone tanken.
+- **Mine:** baut Zorit ab (100 kg pro Stunde); Frachter in der Zone laden es.
+  Wie viel ihr Lager fasst, hängt vom Körper ab (Zoon 1 t, Zimm 2 t, Nura
+  4 t): Das ist die Menge pro Abholung. Weil Vorspulen nichts kostet, zählt
+  der Ertrag pro Flug, nicht pro Stunde.
+
+Frachter (2 t Frachtraum) und Basisschiff starten voll beladen von Zorb und
+kommen bis Zoon; der Frachter kommt von dort ohne Tanken mit Zorit zurück
+(auf Zorb bremsen Luft und Fallschirm). Zum schnellen Ausprobieren kreist
+die Startausstattung schon um Zorb, hinter Mondfähre-4: „Basisschiff-5",
+„Basisschiff-6" und die Frachter „Frachter-7" und „Frachter-8" mit je 2 t
+Bauteilen. Alle vier direkt nach Zoon:
+`--node 5,600,845,0,0 --node 6,620,845,0,0 --node 7,610,845,0,0 --node 4,647.5,845,0,0`;
+Basisschiff-5 und beide Frachter landen nach knapp 8 Stunden nebeneinander
+bei 153° Ost, Basisschiff-6 bei 157° West (mit `--time 28300` stehen sie
+schon dort).
 
 Gestartet wird mit einem Startprofil aus vier Werten: Kurs, Wendebeginn,
 Wendewinkel (so weit neigt sich das Schiff beim Wendebeginn aus der
@@ -244,9 +261,10 @@ auf den Mond.*
 
 ![Basis](docs/screenshots/basis.png)
 
-*Zoon-Basis 1 ist fertig: Das Basisschiff ist das Fundament, beide Frachter
-haben abgeladen. Die Karte „Fracht & Basis“ zeigt das Treibstofflager und den
-Tank von Frachter-7; der grüne Kreis ist die Zone der Basis (5 km).*
+*Zoon-Mine 1 ist fertig: Basisschiff-5 ist das Fundament, beide Frachter
+haben abgeladen. Die Karte „Fracht & Basis“ zeigt das Lager der Mine; mit
+„Zorit laden“ nimmt Frachter-8 mit, was da ist. Der grüne Kreis ist die Zone
+der Basis (5 km).*
 
 ![Verbund](docs/screenshots/verbund.png)
 
@@ -333,7 +351,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
-| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Treibstofflager; je nach Lage „Basis gründen“, „Bauteile abladen“ oder „Tanken“ |
+| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; je nach Lage „Mine gründen“ / „Tankstelle gründen“, „Bauteile abladen“, „Tanken“, „Zorit laden“, an der Startbasis „Bauteile laden“, „Tanken“, „Zorit abladen“ |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |

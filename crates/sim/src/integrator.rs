@@ -139,11 +139,26 @@ pub fn integrate_arc(
             }
             _ => (STEP, None),
         };
+        // Im letzten Teilschritt eines Landebrennens bleibt die Schubrichtung
+        // fest: Gegen Ende des Schritts steht das Schiff fast, "gegen die
+        // Bewegung" hätte dort keine sinnvolle Richtung mehr und ließe bei
+        // starkem Schub einen Rest an Geschwindigkeit übrig.
+        let mut held = None;
         if let Some(dt) = time_to_stop(forces, t, &s)
             && dt < h
         {
             (h, timed) = (dt, Some(Event::BurnEnd));
+            held = forces.burn.map(|burn| Burn {
+                direction: burn.direction_at(&s),
+                descent: None,
+                ..*burn
+            });
         }
+        let stopping = held.as_ref().map(|burn| Forces {
+            burn: Some(burn),
+            ..*forces
+        });
+        let forces = stopping.as_ref().unwrap_or(forces);
         let next = rk4(forces, t, &s, h);
         let r0 = s.position.length();
         let r1 = next.position.length();
