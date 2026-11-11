@@ -40,6 +40,16 @@ niedriger Ziel-Apoapsis, zum Beispiel von der Startbasis zum Übungsfeld 60 km
 Satelliten ohne Fallschirm und mit weniger Schub als Gewicht: Sie stürzen beim
 Landen immer ab. Die Anzeige nennt dann Ort (auch das Zielgebiet) und Grund.
 
+Für den Flug zu einem Planeten oder Mond wählt man ihn in der Karte „Ziel“
+(mit ◄ ► nach den Schiffen). Sie zeigt den Phasenwinkel und wann das nächste
+Startfenster kommt (ein Richtwert aus der Hohmann-Formel, für Nura etwa 44°),
+dazu die engste Annäherung der geplanten Bahn an das Ziel, auch wenn sie
+seine Einflusssphäre noch verfehlt; in der Karte markieren zwei Ringe mit
+Linie die Stelle. So sieht man beim Ziehen am Node, ob es besser wird, bis
+aus „Annäherung“ eine „Begegnung“ mit Periapsis wird. Zum Ausprobieren:
+`--select 3 --target-body 3,4 --node 3,163400,1080,0,0 --focus-body 0
+--camera 30,60,55000000` verfehlt Nura um 126.000 km; mit 1.090 m/s trifft es.
+
 Für ein Rendezvous wählt man in der Karte „Ziel“ der Seitenleiste ein
 anderes Schiff (◄ ►). Dessen Bahn wird rosa. Die Karte zeigt den Abstand,
 die engste Annäherung (wann, wie nah, wie schnell relativ zueinander) und die
@@ -338,6 +348,8 @@ cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,
   Δv in m/s), mehrfach für eine Kette; scharf wie im Spiel, `SCHARF` = 0 lässt
   die Kette zum Testen nicht scharf
 - `--target SCHIFF,ZIEL`: Ziel für ein Rendezvous setzen
+- `--target-body SCHIFF,KÖRPER`: Himmelskörper als Ziel setzen (Nummern wie
+  bei `--focus-body`)
 - `--screenshot DATEI.png`: Bild speichern und beenden (Zeit steht dabei still)
 
 Rendezvous Fähre-3 → Relais-1 aus dem Bild oben (Start im Startfenster,

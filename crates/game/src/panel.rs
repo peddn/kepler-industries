@@ -12,7 +12,7 @@
 use crate::Sim;
 use crate::hud::{self, UiFont, format_span, km};
 use crate::node_ui::{Selection, UiMessage};
-use crate::rendezvous::{Rendezvous, TARGET_COLOR, TargetInfo, distance_text};
+use crate::rendezvous::{Rendezvous, TARGET_COLOR, TargetInfo, TransferInfo, distance_text};
 use crate::status_bar::{STATUS_HEIGHT, StatusBar, over_status};
 use bevy::prelude::*;
 use bevy::text::FontSize;
@@ -345,22 +345,104 @@ fn panel_vessel(world: &World, selection: &Selection) -> Option<usize> {
     .then_some(i)
 }
 
-/// Nächstes Ziel beim Blättern: kein Ziel, dann die anderen Schiffe.
-fn cycle_target(world: &World, vessel: usize, step: i32) -> Option<usize> {
-    let choices: Vec<Option<usize>> = std::iter::once(None)
-        .chain((0..world.vessels.len()).filter(|&k| k != vessel).map(Some))
+/// Ein Ziel in der Karte "Ziel".
+#[derive(Clone, Copy, PartialEq)]
+enum Target {
+    None,
+    Vessel(usize),
+    Body(usize),
+}
+
+/// Das Ziel eines Schiffs.
+fn target_of(world: &World, vessel: usize) -> Target {
+    let v = &world.vessels[vessel];
+    match (v.target, v.target_body) {
+        (Some(t), _) => Target::Vessel(t),
+        (None, Some(b)) => Target::Body(b),
+        (None, None) => Target::None,
+    }
+}
+
+/// Nächstes Ziel beim Blättern: kein Ziel, dann die anderen Schiffe, dann
+/// Planeten und Monde (alle Körper mit einer Bahn, also ohne die Sonne).
+fn cycle_target(world: &World, vessel: usize, step: i32) -> Target {
+    let vessels = (0..world.vessels.len())
+        .filter(|&k| k != vessel)
+        .map(Target::Vessel);
+    let bodies = (0..world.bodies.len())
+        .filter(|&b| world.bodies[b].orbit.is_some())
+        .map(Target::Body);
+    let choices: Vec<Target> = std::iter::once(Target::None)
+        .chain(vessels)
+        .chain(bodies)
         .collect();
-    let current = choices
-        .iter()
-        .position(|&c| c == world.vessels[vessel].target)
-        .unwrap_or(0);
+    let now = target_of(world, vessel);
+    let current = choices.iter().position(|&c| c == now).unwrap_or(0);
     choices[(current as i32 + step).rem_euclid(choices.len() as i32) as usize]
 }
 
+/// Werte zu einem Himmelskörper als Ziel: Abstand, Startfenster, Annäherung.
+fn transfer_result(world: &World, info: &TransferInfo) -> String {
+    let row = |label: &str, value: String| format!("{label:<14}{value}");
+    let day = hud::day(world);
+    let center = |b| sim::body::body_state(&world.bodies, b, world.time).position;
+    let (own_body, own) = world.vessel_state(info.vessel);
+    let distance = (center(own_body) + own.position).distance(center(info.body));
+    let mut lines = vec![row("Abstand", distance_text(distance))];
+    match &info.window {
+        Some(w) => {
+            lines.push(row(
+                "Phasenwinkel",
+                format!(
+                    "{:.1}° (nötig {:.1}°)",
+                    w.phase.to_degrees(),
+                    w.needed.to_degrees()
+                ),
+            ));
+            // Auf ein Grad genau ist "jetzt".
+            let off = (w.phase - w.needed).to_degrees().rem_euclid(360.0);
+            let when = if off.min(360.0 - off) < 1.0 {
+                "jetzt".into()
+            } else {
+                format!("in {}", format_span(w.wait, day))
+            };
+            lines.push(row("Startfenster", when));
+            if let Some(origin) = w.origin {
+                lines.push(row("", format!("von {} aus", world.bodies[origin].name)));
+            }
+        }
+        None => lines.push(row("Startfenster", "–".into())),
+    }
+    match &info.approach {
+        Some(a) => {
+            let when = format!("in {}", format_span((a.time - world.time).max(0.0), day));
+            if a.encounter {
+                lines.push(row("Begegnung", when));
+                lines.push(row(
+                    "  Periapsis",
+                    km(a.distance - world.bodies[info.body].radius),
+                ));
+            } else {
+                lines.push(row("Annäherung", when));
+                lines.push(row("  auf", distance_text(a.distance)));
+            }
+        }
+        None => lines.push(row("Annäherung", "–".into())),
+    }
+    lines.join("\n")
+}
+
 /// Werte zum Ziel als Textzeilen.
-fn target_result(world: &World, info: Option<&TargetInfo>) -> String {
+fn target_result(
+    world: &World,
+    info: Option<&TargetInfo>,
+    transfer: Option<&TransferInfo>,
+) -> String {
+    if let Some(transfer) = transfer {
+        return transfer_result(world, transfer);
+    }
     let Some(info) = info else {
-        return "Kein Ziel. Mit ◄ ► ein anderes Schiff wählen.".into();
+        return "Kein Ziel. Mit ◄ ► ein Schiff, einen Planeten oder Mond wählen.".into();
     };
     let row = |label: &str, value: String| format!("{label:<14}{value}");
     let (own, target) = (
@@ -614,15 +696,19 @@ pub fn sync(
     shown.0 = true;
     panel.display = Display::Flex;
 
-    let info = rendezvous.0.as_ref();
+    let info = rendezvous.target.as_ref();
     let trajectory = &world.vessels[vessel].trajectory;
     for (part, mut text, mut color) in &mut target_texts {
         let (value, wanted) = match part {
-            TargetText::Name => match world.vessels[vessel].target {
-                Some(t) => (world.vessels[t].name.clone(), TARGET_COLOR),
-                None => ("kein Ziel".into(), HINT_COLOR),
+            TargetText::Name => match target_of(world, vessel) {
+                Target::Vessel(t) => (world.vessels[t].name.clone(), TARGET_COLOR),
+                Target::Body(b) => (world.bodies[b].name.clone(), TARGET_COLOR),
+                Target::None => ("kein Ziel".into(), HINT_COLOR),
             },
-            TargetText::Result => (target_result(world, info), Color::WHITE),
+            TargetText::Result => (
+                target_result(world, info, rendezvous.transfer.as_ref()),
+                Color::WHITE,
+            ),
             TargetText::Dock => (
                 if trajectory.docking().is_some() {
                     "Andocken abbrechen"
@@ -744,8 +830,14 @@ pub fn buttons(
         node.contains_point(*transform, cursor)
     };
     if let Some((TargetButton(step), ..)) = targets.iter().find(|(_, n, t)| hit(n, t)) {
-        let target = cycle_target(world, vessel, *step);
-        world.set_target(vessel, target);
+        match cycle_target(world, vessel, *step) {
+            Target::Vessel(t) => world.set_target(vessel, Some(t)),
+            Target::Body(b) => world.set_target_body(vessel, Some(b)),
+            Target::None => {
+                world.set_target(vessel, None);
+                world.set_target_body(vessel, None);
+            }
+        }
         return;
     }
     if world.vessels[vessel].target.is_some() && hit(dock.0, dock.1) {

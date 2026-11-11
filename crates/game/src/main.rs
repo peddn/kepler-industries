@@ -67,6 +67,7 @@ struct Options {
     launch: Option<(usize, sim::Launch, Option<f64>)>,
     /// Ziel: Schiff, Zielschiff.
     targets: Vec<(usize, usize)>,
+    target_bodies: Vec<(usize, usize)>,
     /// Andocken einschalten (Schiff mit Ziel).
     dock: Vec<usize>,
     /// Kamera auf dieses Schiff bzw. Zielgebiet richten.
@@ -152,12 +153,17 @@ fn parse_options() -> Options {
                 let p = numbers(&t, "--target SCHIFF,ZIEL");
                 options.targets.push((p[0] as usize, p[1] as usize));
             }
+            ("--target-body", Some(t)) => {
+                let p = numbers(&t, "--target-body SCHIFF,KÖRPER");
+                options.target_bodies.push((p[0] as usize, p[1] as usize));
+            }
             (other, _) => {
                 eprintln!("Unbekannte Option: {other}");
                 eprintln!(
                     "Optionen: --screenshot DATEI.png  --time SEKUNDEN  --camera GIER,NEIGUNG,KM\n\
                      \x20         --select SCHIFF  --node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]\n\
                      \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM  --target SCHIFF,ZIEL\n\
+                     \x20         --target-body SCHIFF,KÖRPER\n\
                      \x20         --focus SCHIFF  --focus-zone ZIELGEBIET  --focus-body KÖRPER\n\
                      \x20         --near  --dock SCHIFF"
                 );
@@ -208,6 +214,9 @@ fn main() {
 
     for &(vessel, target) in &options.targets {
         world.set_target(vessel, Some(target));
+    }
+    for &(vessel, body) in &options.target_bodies {
+        world.set_target_body(vessel, Some(body));
     }
     for &vessel in &options.dock {
         if let Err(e) = world.set_docking(vessel, true) {

@@ -303,6 +303,22 @@ Basis, Andocken und Aufträge. Außerhalb steht das Schiff „außerhalb“ und
 kommt mit einem Hop (Start mit niedriger Ziel-Apoapsis) ins Ziel. Nach dem
 Aufsetzen ist die Kette erledigt.
 
+**Körper als Ziel** (`transfer.rs`): reine Auswertung wie das Rendezvous.
+Ein Schiff hat höchstens ein Ziel, ein Schiff oder einen Himmelskörper
+(`Vessel::target`, `Vessel::target_body`). *Startfenster:* Für einen
+Hohmann-Übergang muss das Ziel dem Ausgangspunkt um π·(1 − ((r₁+r₂)/(2r₂))^1,5)
+vorauslaufen, gesehen vom gemeinsamen Mutterkörper (Zorb → Nura: 44°).
+Ausgangspunkt ist der Körper, um den das Schiff kreist, oder das Schiff
+selbst, wenn es schon um den Mutterkörper des Ziels kreist (Flug zu einem
+Mond). Der Phasenwinkel ändert sich gleichmäßig, daraus folgt die Wartezeit.
+Die Formel nimmt Kreisbahnen in einer Ebene an: ein Richtwert (bei Nura auf
+wenige Tage). *Annäherung:* der kleinste Abstand der vorausberechneten Bahn
+zum Zielkörper nach dem letzten geplanten Brennen, einen Umlauf weit auf der
+Bahn, bei der die Zeitleiste ankommt (beim Flug zu einem Planeten der erste
+Umlauf um die Sonne); führt die Bahn in seine Einflusssphäre, zählen Eintritt
+und Periapsis. So zeigt die Karte beim Ziehen am Node, ob es besser wird,
+lange bevor eine Begegnung zustande kommt.
+
 **Rendezvous:** reine Auswertung der vorausberechneten Zeitleisten zweier
 Schiffe (`rendezvous.rs`), nichts wird verändert. Engste Annäherung: ab jetzt
 (am Boden ab dem Abheben, Zeit am Boden zählt nicht) bis vier Umläufe nach
@@ -602,9 +618,10 @@ nichts verloren geht.
 - **Startfenster automatisch:** Startzeit und Kurs suchen, bei denen die
   Bahnebene zum Ziel passt (von Hand geht es über die Neigung in der Karte
   „Ziel“).
-- **Annäherung an einen Mond beim Planen:** wie knapp ein Transfer die
-  Einflusssphäre verfehlt, bevor eine Begegnung zustande kommt (bewusst
-  weggelassen: Man zieht den Node, bis „Begegnung“ erscheint).
+- **Abflugwinkel und Transferplaner:** wo auf der Parkbahn man für einen
+  Flug zu einem anderen Planeten zünden muss, oder gleich ein fertiger Node
+  (bewusst weggelassen: Man schiebt den Node, bis die Annäherung an den
+  Zielkörper klein wird).
 
 ## Reihenfolge
 

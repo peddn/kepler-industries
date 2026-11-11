@@ -1,8 +1,10 @@
 //! Rendezvous-Anzeige: Ziel des gewählten Schiffs, nächste Annäherung und
-//! Knoten zur Bahnebene des Ziels.
+//! Knoten zur Bahnebene des Ziels. Ist das Ziel ein Himmelskörper: sein
+//! Startfenster und die engste Annäherung der geplanten Bahn an ihn.
 //!
 //! Gerechnet wird in der Simulation (`World::approach`,
-//! `World::plane_to_target`), einmal pro Bild in `update`. Die Karte "Ziel"
+//! `World::plane_to_target`, `World::transfer_window`,
+//! `World::body_approach`), einmal pro Bild in `update`. Die Karte "Ziel"
 //! in der Seitenleiste, die Marker und die Beschriftungen lesen nur das
 //! Ergebnis.
 
@@ -11,9 +13,10 @@ use crate::camera::{CameraRig, MainCamera, to_view};
 use crate::hud::{UiFont, km};
 use crate::node_ui::{Projector, Selection};
 use crate::view;
+use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy::text::FontSize;
-use sim::{Approach, PlaneCrossing};
+use sim::{Approach, BodyApproach, BodyId, PlaneCrossing, Window, World};
 
 /// Farbe des Ziels: Bahn, Markierung, Annäherung.
 pub const TARGET_COLOR: Color = Color::srgb(1.0, 0.45, 0.8);
@@ -34,8 +37,20 @@ pub struct TargetInfo {
     pub plane: Option<PlaneCrossing>,
 }
 
+/// Ergebnis für das gewählte Schiff mit einem Himmelskörper als Ziel.
+pub struct TransferInfo {
+    pub vessel: usize,
+    pub body: BodyId,
+    pub window: Option<Window>,
+    pub approach: Option<BodyApproach>,
+}
+
+/// Höchstens eines von beiden ist gesetzt (ein Schiff hat nur ein Ziel).
 #[derive(Resource, Default)]
-pub struct Rendezvous(pub Option<TargetInfo>);
+pub struct Rendezvous {
+    pub target: Option<TargetInfo>,
+    pub transfer: Option<TransferInfo>,
+}
 
 /// Abstand lesbar: unter 1 km in m, sonst in km.
 pub fn distance_text(meters: f64) -> String {
@@ -49,7 +64,7 @@ pub fn distance_text(meters: f64) -> String {
 /// Einmal pro Bild: Annäherung und Bahnebene zum Ziel des gewählten Schiffs.
 pub fn update(sim: Res<Sim>, selection: Res<Selection>, mut info: ResMut<Rendezvous>) {
     let world = &sim.0;
-    info.0 = selection.0.and_then(|vessel| {
+    info.target = selection.0.and_then(|vessel| {
         Some(TargetInfo {
             vessel,
             target: world.vessels[vessel].target?,
@@ -57,6 +72,25 @@ pub fn update(sim: Res<Sim>, selection: Res<Selection>, mut info: ResMut<Rendezv
             plane: world.plane_to_target(vessel),
         })
     });
+    info.transfer = selection.0.and_then(|vessel| {
+        Some(TransferInfo {
+            vessel,
+            body: world.vessels[vessel].target_body?,
+            window: world.transfer_window(vessel),
+            approach: world.body_approach(vessel),
+        })
+    });
+}
+
+/// Wo die Annäherung an den Zielkörper gezeichnet wird: das Schiff dort, wo
+/// seine Bahn gezeichnet ist (`view::anchor_at`), der Körper im echten
+/// Abstand und in der echten Richtung daneben.
+fn transfer_points(world: &World, info: &TransferInfo) -> Option<(DVec3, DVec3)> {
+    let a = info.approach.as_ref()?;
+    let trajectory = &world.vessels[world.host(info.vessel)].trajectory;
+    let (_, state) = trajectory.predicted_state(&world.bodies, a.time)?;
+    let own = view::anchor_at(world, trajectory, a.time) + state.position;
+    Some((own, own + a.body_position - a.position))
 }
 
 /// Lage des gewählten Schiffs zum Zeitpunkt `t` (vorausberechnet).
@@ -77,8 +111,24 @@ pub fn draw(
     camera: Single<&Transform, With<MainCamera>>,
     mut gizmos: Gizmos,
 ) {
-    let Some(info) = &info.0 else { return };
     let eye = camera.translation;
+    if let Some(transfer) = &info.transfer
+        && let Some((own, body)) = transfer_points(&sim.0, transfer)
+    {
+        let (own, body) = (to_view(own, rig.focus), to_view(body, rig.focus));
+        for (p, color) in [(own, OWN_COLOR), (body, TARGET_COLOR)] {
+            let rotation = Quat::from_rotation_arc(Vec3::Z, (eye - p).normalize());
+            gizmos
+                .circle(
+                    Isometry3d::new(p, rotation),
+                    p.distance(eye) * APPROACH_RADIUS,
+                    color,
+                )
+                .resolution(24);
+        }
+        gizmos.line(own, body, TARGET_COLOR);
+    }
+    let Some(info) = &info.target else { return };
     let mut ring = |p: Vec3, size: f32, resolution: u32, color: Color| {
         let rotation = Quat::from_rotation_arc(Vec3::Z, (eye - p).normalize());
         gizmos
@@ -163,30 +213,48 @@ pub fn sync_labels(
     let (camera, transform) = *camera;
     let projector = Projector::new(camera, transform, rig.focus, &sim.0);
     for (label, mut node, mut text) in &mut labels {
-        let shown = info.0.as_ref().and_then(|info| {
-            let (position, value) = match label {
-                Label::Approach => {
-                    let a = info.approach.as_ref()?;
-                    let trajectory = &sim.0.vessels[info.vessel].trajectory;
-                    let anchor = view::anchor_at(&sim.0, trajectory, a.time);
-                    (anchor + a.position, distance_text(a.distance))
-                }
-                Label::Ascending | Label::Descending => {
-                    let plane = info.plane.as_ref()?;
-                    let (time, name) = if *label == Label::Ascending {
-                        (plane.ascending?, "AN")
-                    } else {
-                        (plane.descending?, "DN")
-                    };
-                    let position = own_position(&sim, info, time)?;
-                    (
-                        position,
-                        format!("{name} {:.1}°", plane.inclination.to_degrees()),
-                    )
-                }
-            };
-            let screen = projector.project(to_view(position, rig.focus))?;
-            Some((screen, value))
+        // Zielkörper: Abstand (bei einer Begegnung die Periapsis) am Schiff.
+        let transfer = info
+            .transfer
+            .as_ref()
+            .filter(|_| *label == Label::Approach)
+            .and_then(|transfer| {
+                let a = transfer.approach.as_ref()?;
+                let (own, _) = transfer_points(&sim.0, transfer)?;
+                let value = if a.encounter {
+                    format!("Pe {}", km(a.distance - sim.0.bodies[transfer.body].radius))
+                } else {
+                    distance_text(a.distance)
+                };
+                let screen = projector.project(to_view(own, rig.focus))?;
+                Some((screen, value))
+            });
+        let shown = transfer.or_else(|| {
+            info.target.as_ref().and_then(|info| {
+                let (position, value) = match label {
+                    Label::Approach => {
+                        let a = info.approach.as_ref()?;
+                        let trajectory = &sim.0.vessels[info.vessel].trajectory;
+                        let anchor = view::anchor_at(&sim.0, trajectory, a.time);
+                        (anchor + a.position, distance_text(a.distance))
+                    }
+                    Label::Ascending | Label::Descending => {
+                        let plane = info.plane.as_ref()?;
+                        let (time, name) = if *label == Label::Ascending {
+                            (plane.ascending?, "AN")
+                        } else {
+                            (plane.descending?, "DN")
+                        };
+                        let position = own_position(&sim, info, time)?;
+                        (
+                            position,
+                            format!("{name} {:.1}°", plane.inclination.to_degrees()),
+                        )
+                    }
+                };
+                let screen = projector.project(to_view(position, rig.focus))?;
+                Some((screen, value))
+            })
         });
         let Some((screen, value)) = shown else {
             node.display = Display::None;
