@@ -6,6 +6,7 @@
 //!
 //! Einheiten: SI (m, s, kg), alles in `f64`.
 
+pub mod base;
 pub mod body;
 pub mod docking;
 pub mod integrator;
@@ -21,6 +22,7 @@ pub mod trajectory;
 pub mod transfer;
 pub mod world;
 
+pub use base::BaseError;
 pub use body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint};
 pub use docking::{DockError, DockPlan, DockRequest, Docking, UndockError, UndockFuel};
 pub use kepler::StateVector;

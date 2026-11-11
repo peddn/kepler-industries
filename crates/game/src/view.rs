@@ -138,6 +138,9 @@ pub struct MarkerMaterials {
     /// Ziel des gewählten Schiffs.
     target: Handle<StandardMaterial>,
     wreck: Handle<StandardMaterial>,
+    base: Handle<StandardMaterial>,
+    /// Kugel für die Markierungen.
+    sphere: Handle<Mesh>,
 }
 
 pub fn setup(
@@ -231,21 +234,13 @@ pub fn setup(
         }
     }
 
-    let base_material = materials.add(unlit(Color::srgb(0.3, 1.0, 0.4)));
-    for i in 0..sim.0.bases.len() {
-        commands.spawn((
-            BaseMarker(i),
-            Mesh3d(sphere.clone()),
-            MeshMaterial3d(base_material.clone()),
-            Transform::default(),
-        ));
-    }
-
     let markers = MarkerMaterials {
         vessel: materials.add(unlit(Color::srgb(1.0, 1.0, 1.0))),
         selected: materials.add(unlit(Color::srgb(1.0, 0.85, 0.2))),
         target: materials.add(unlit(TARGET_COLOR)),
         wreck: materials.add(unlit(Color::srgb(1.0, 0.2, 0.2))),
+        base: materials.add(unlit(Color::srgb(0.3, 1.0, 0.4))),
+        sphere: sphere.clone(),
     };
     for i in 0..sim.0.vessels.len() {
         commands.spawn((
@@ -256,6 +251,23 @@ pub fn setup(
         ));
     }
     commands.insert_resource(markers);
+}
+
+/// Eine Markierung für jede Basis, auch für neu gegründete.
+pub fn spawn_base_markers(
+    mut commands: Commands,
+    sim: Res<Sim>,
+    markers: Res<MarkerMaterials>,
+    existing: Query<(), With<BaseMarker>>,
+) {
+    for i in existing.iter().count()..sim.0.bases.len() {
+        commands.spawn((
+            BaseMarker(i),
+            Mesh3d(markers.sphere.clone()),
+            MeshMaterial3d(markers.base.clone()),
+            Transform::default(),
+        ));
+    }
 }
 
 fn marker_scale(position: Vec3, camera: Vec3) -> Vec3 {

@@ -32,6 +32,10 @@ pub enum LogKind {
     BurnStart,
     /// Das Landebrennen beginnt (siehe `landing`).
     LandingBurn,
+    /// Das Basisschiff hat die Basis mit dieser Nummer gegründet.
+    BaseFounded { base: usize },
+    /// Alle Bauteile sind da: Die Basis ist fertig.
+    BaseCompleted { base: usize },
     /// Brennschluss und die Bahn danach (Apoapsis `None` bei offener Bahn).
     BurnEnd {
         apoapsis: Option<f64>,

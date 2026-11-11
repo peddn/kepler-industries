@@ -568,7 +568,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   bewusst nicht landefähig (Schub kleiner als das Gewicht, kein Fallschirm).
 - **Ein Auftragssystem** für Daten (kein Geld, siehe „Wirtschaft“).
 
-## Wirtschaft (Konzept, noch nicht gebaut)
+## Wirtschaft (Konzept; gebaut ist der erste Schritt)
 
 Stand der Planung. Vorbilder sind Aufbauspiele wie die Anno-Reihe; der
 Engpass ist hier aber immer der Transport, damit die Orbitalmechanik das
@@ -706,9 +706,32 @@ nötig, sobald Bewohner laufend versorgt werden), Kommunikationsnetz.
 - Auftragsarten und ihre Steigerung: Sie müssen ohne Zeitdruck antreiben.
 - Chassis, Plätze und Module im Einzelnen.
 
-**Erster spielbarer Schritt (Vorschlag):** Fracht im Schiff (zählt als
-Masse), Umladen im Verbund und am Boden, und eine Basis, die durch
-Anlieferung am Landepunkt entsteht.
+**Erster spielbarer Schritt (gebaut, `sim::base`):** bewusst klein, um den
+Spielspaß zu prüfen.
+- Ein Gut: Bauteile. Fracht im Schiff zählt als Masse (`World::params` rechnet
+  sie zur Masse ohne Treibstoff; damit stimmen Brennen, Δv-Balken, Landung).
+- Schiffstypen als Werte, noch ohne Chassis und Module: Frachter (2 t
+  Frachtraum) und Basisschiff (kein Frachtraum, `base_kit`).
+- Das Basisschiff gründet auf einem Körper außer dem Heimatplaneten eine Basis
+  und wird ihr Fundament (`foundation_of`; ein Start ist dann gesperrt). Der
+  Landepunkt wird zur Zone: ein Zielgebiet mit 5 km Radius, damit Karte,
+  Landevorschau und Protokoll ohne Sonderfall damit umgehen. Im Umkreis einer
+  Basis entsteht keine zweite.
+- Die Baustelle braucht 4 t Bauteile. Schiffe, die im Umkreis stehen, laden
+  ab (so viel sie haben und noch fehlt). Mit dem letzten Bauteil ist die Basis
+  fertig.
+- Eine fertige Basis stellt Treibstoff her, 180 kg pro Stunde, bis das Lager
+  (8 t) voll ist; vorerst aus dem Nichts, bis es Rohstoffe und Strom gibt.
+  Gespeichert sind Menge und Zeitpunkt der letzten Änderung, der Stand
+  dazwischen wird direkt berechnet (Regel 14, unabhängig von der
+  Schrittgröße). Schiffe im Umkreis tanken, was in den Tank passt.
+- Abladen und Tanken gehen nur am Boden, ohne geplanten Start und ohne
+  angedockte Schiffe: Dann ändert sich nur die Masse des stehenden Schiffs,
+  keine Bahn muss neu gerechnet werden.
+- Startausstattung der Demo: ein Basisschiff und zwei Frachter mit zusammen
+  genau 4 t im Orbit um Zorb. Nachschub an Bauteilen gibt es noch nicht.
+
+Noch offen aus dem Vorschlag: Umladen im Verbund (im Orbit).
 
 ## Merkliste (nicht vergessen)
 

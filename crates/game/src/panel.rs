@@ -543,13 +543,15 @@ fn target_result(
     lines.join("\n")
 }
 
-/// Ein gelandetes Schiff (kein Wrack) ist gewählt: dessen Nummer.
+/// Ein gelandetes Schiff, das starten kann (kein Wrack, kein Fundament einer
+/// Basis), ist gewählt: dessen Nummer.
 fn landed_selection(world: &World, selection: &Selection) -> Option<usize> {
     let i = selection.0?;
-    matches!(
-        world.vessels[i].trajectory.current(),
-        Segment::Surface { wreck: false, .. }
-    )
+    (world.vessels[i].foundation_of.is_none()
+        && matches!(
+            world.vessels[i].trajectory.current(),
+            Segment::Surface { wreck: false, .. }
+        ))
     .then_some(i)
 }
 

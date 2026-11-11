@@ -6,6 +6,7 @@
 mod camera;
 mod dv_bar;
 mod focus;
+mod fracht;
 mod hud;
 mod node_ui;
 mod panel;
@@ -288,8 +289,9 @@ fn main() {
                 node_ui::configure_gizmos,
                 node_ui::setup_label,
                 rendezvous::setup_labels,
-                // Die Karte "Verbund" hängt sich in die Seitenleiste.
-                (panel::setup, verbund::setup).chain(),
+                // Die Karten "Verbund" und "Fracht & Basis" hängen sich in
+                // die Seitenleiste.
+                (panel::setup, verbund::setup, fracht::setup).chain(),
                 dv_bar::setup,
                 hud::setup,
                 status_bar::setup,
@@ -315,15 +317,21 @@ fn main() {
             (
                 panel::buttons,
                 verbund::buttons,
+                fracht::buttons,
                 node_ui::input,
                 rendezvous::update,
             )
                 .chain(),
-            (view::sync_markers, view::aim_sunlight),
+            (
+                view::spawn_base_markers,
+                view::sync_markers,
+                view::aim_sunlight,
+            )
+                .chain(),
             node_ui::draw,
             node_ui::sync_label,
             rendezvous::sync_labels,
-            (panel::sync, verbund::sync),
+            (panel::sync, verbund::sync, fracht::sync),
             panel::hover,
             dv_bar::sync,
             view::draw_planet_grid,
