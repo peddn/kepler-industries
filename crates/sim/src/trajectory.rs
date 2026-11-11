@@ -1504,6 +1504,15 @@ impl Trajectory {
         self.segments.iter().find_map(Segment::landing_burn)
     }
 
+    /// Neue Masse für ein Schiff, das ohne geplanten Start am Boden steht
+    /// (abgeladen oder getankt, siehe `base`).
+    pub fn set_landed_mass(&mut self, mass: f64) {
+        debug_assert!(self.launch.is_none() && self.segments.len() == 1);
+        if let Some(Segment::Surface { mass: m, .. }) = self.segments.front_mut() {
+            *m = mass;
+        }
+    }
+
     /// Vorausberechneter Absturz: Zeitpunkt, Körper und Ort.
     pub fn predicted_impact(&self) -> Option<(f64, BodyId, SurfacePoint)> {
         self.segments.iter().find_map(|s| match s {

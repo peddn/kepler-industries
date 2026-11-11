@@ -182,6 +182,8 @@ pub fn to_inertial(state: &StateVector, delta_v: DVec3) -> DVec3 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlanError {
     NotFlying,
+    /// Das Schiff ist das Fundament einer Basis und fliegt nicht mehr.
+    Foundation,
     Burning,
     NoEngine,
     InPast,
@@ -209,6 +211,7 @@ impl fmt::Display for PlanError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             PlanError::NotFlying => "Schiff ist nicht im Flug",
+            PlanError::Foundation => "Schiff ist das Fundament einer Basis",
             PlanError::Burning => "Schiff brennt gerade",
             PlanError::NoEngine => "Schiff hat kein Triebwerk",
             PlanError::InPast => "Zeitpunkt liegt in der Vergangenheit",
@@ -239,6 +242,8 @@ mod tests {
         exhaust_velocity: 3000.0,
         fuel_capacity: 200.0,
         parachute_area: 0.0,
+        cargo_capacity: 0.0,
+        base_kit: false,
     };
 
     #[test]

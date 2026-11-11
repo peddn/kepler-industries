@@ -16,7 +16,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 7;
+pub const SAVE_VERSION: u32 = 8;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -34,6 +34,11 @@ pub struct VesselParams {
     pub fuel_capacity: f64,
     /// Widerstandsbeiwert × Fläche des offenen Fallschirms in m² (0 = keiner).
     pub parachute_area: f64,
+    /// Fassungsvermögen des Frachtraums in kg (0 = keiner).
+    pub cargo_capacity: f64,
+    /// Basisschiff: Es gründet dort, wo es landet, eine Basis und wird ihr
+    /// Fundament (siehe `base`).
+    pub base_kit: bool,
 }
 
 impl VesselParams {
@@ -114,6 +119,12 @@ pub struct Vessel {
     /// Ziel für einen Flug: ein Himmelskörper. Höchstens eines der beiden
     /// Ziele ist gesetzt (`World::set_target`, `World::set_target_body`).
     pub target_body: Option<BodyId>,
+    /// Fracht an Bord in kg (Bauteile). Sie zählt beim Fliegen als Masse
+    /// (`World::params`).
+    pub cargo: f64,
+    /// Dieses Schiff ist das Fundament der Basis mit dieser Nummer und
+    /// fliegt nicht mehr.
+    pub foundation_of: Option<usize>,
     /// Angedockt an dieses Schiff (das Hauptschiff des Verbunds). Dann zählen
     /// Lage und Kette des Hauptschiffs, die eigenen Werte gehen in dessen
     /// wirksame Werte ein (`World::params`). Fehlt in älteren Spielständen:
@@ -127,6 +138,29 @@ pub struct Base {
     pub name: String,
     pub body: BodyId,
     pub location: SurfacePoint,
+    /// Bauteile, die zur Fertigstellung nötig sind, und was davon schon
+    /// abgeladen ist (kg). Die Startbasis braucht nichts.
+    pub required: f64,
+    pub delivered: f64,
+    /// Treibstofflager einer fertigen Basis, die Treibstoff herstellt; `None`
+    /// bei der Startbasis und auf einer Baustelle.
+    pub fuel: Option<FuelStore>,
+}
+
+impl Base {
+    /// Fertig gebaut (sonst eine Baustelle)?
+    pub fn complete(&self) -> bool {
+        self.delivered >= self.required
+    }
+}
+
+/// Treibstofflager einer Basis: der Stand zu einem Zeitpunkt. Seitdem kommt
+/// gleichmäßig dazu, bis das Lager voll ist (`base::fuel_at`): für jeden
+/// Zeitpunkt direkt berechnet, und Warten füllt es nur einmal (Regel 14).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FuelStore {
+    pub amount: f64,
+    pub since: f64,
 }
 
 /// Was die Anzeige über ein Schiff wissen muss.
@@ -180,6 +214,7 @@ pub fn combine(host: VesselParams, parts: impl IntoIterator<Item = VesselParams>
         total.thrust += p.thrust;
         total.fuel_capacity += p.fuel_capacity;
         total.parachute_area += p.parachute_area;
+        total.cargo_capacity += p.cargo_capacity;
         if p.exhaust_velocity > 0.0 {
             mass_flow += p.thrust / p.exhaust_velocity;
         }
@@ -298,6 +333,8 @@ impl World {
             halt_warp_at_burn: false,
             target: None,
             target_body: None,
+            cargo: 0.0,
+            foundation_of: None,
             docked_to: None,
         });
         self.vessels.len() - 1
@@ -305,6 +342,9 @@ impl World {
 
     /// Plant oder ändert den Start eines gelandeten Schiffs.
     pub fn set_launch(&mut self, vessel: usize, launch: Launch) -> Result<(), PlanError> {
+        if self.vessels[vessel].foundation_of.is_some() {
+            return Err(PlanError::Foundation);
+        }
         self.command(vessel, |t, bodies, params, now| {
             t.set_launch(bodies, params, now, launch)
         })
@@ -368,6 +408,8 @@ impl World {
             halt_warp_at_burn: false,
             target: None,
             target_body: None,
+            cargo: 0.0,
+            foundation_of: None,
             docked_to: None,
         });
         self.vessels.len() - 1
@@ -452,13 +494,22 @@ impl World {
             .collect()
     }
 
-    /// Wirksame Werte: bei einem Hauptschiff samt angedockter Teile.
+    /// Werte eines einzelnen Schiffs mit seiner Fracht: Sie zählt zur Masse
+    /// ohne Treibstoff.
+    fn loaded(&self, vessel: usize) -> VesselParams {
+        let v = &self.vessels[vessel];
+        VesselParams {
+            dry_mass: v.params.dry_mass + v.cargo,
+            ..v.params
+        }
+    }
+
+    /// Wirksame Werte: bei einem Hauptschiff samt angedockter Teile, mit
+    /// Fracht (siehe `loaded`).
     pub fn params(&self, vessel: usize) -> VesselParams {
         combine(
-            self.vessels[vessel].params,
-            self.parts(vessel)
-                .into_iter()
-                .map(|k| self.vessels[k].params),
+            self.loaded(vessel),
+            self.parts(vessel).into_iter().map(|k| self.loaded(k)),
         )
     }
 
@@ -588,13 +639,13 @@ impl World {
     /// das Schiff `fuel` kg mitnimmt.
     pub fn undock_delta_v(&self, part: usize, fuel: f64) -> (f64, f64) {
         let host = self.host(part);
-        let own = self.vessels[part].params;
+        let own = self.loaded(part);
         let rest = combine(
-            self.vessels[host].params,
+            self.loaded(host),
             self.parts(host)
                 .into_iter()
                 .filter(|&k| k != part)
-                .map(|k| self.vessels[k].params),
+                .map(|k| self.loaded(k)),
         );
         let pool = self.vessel_mass(host) - self.params(host).dry_mass;
         let delta_v = |p: &VesselParams, fuel: f64| {
@@ -629,7 +680,7 @@ impl World {
         let time = self.time;
         let (body, state) = self.vessel_state(host);
         let host_mass = self.vessel_mass(host);
-        let own = self.vessels[part].params;
+        let own = self.loaded(part);
         let part_mass = own.dry_mass + fuel;
 
         self.vessels[part].docked_to = None;

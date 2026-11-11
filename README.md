@@ -15,7 +15,22 @@ Triebwerk, eine Fähre am Boden und eine im Orbit. „Relais-1" kreist stabil ob
 abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
 mit einem Manöver. „Fähre-3" steht an der Startbasis und kann starten.
 „Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator, bereit für
-den Flug zum Mond.
+den Flug zum Mond. Dahinter auf derselben Bahn die Startausstattung für die
+erste Basis: „Basisschiff-5" und die Frachter „Frachter-6" und „Frachter-7"
+mit je 2 t Bauteilen.
+
+**Fracht und Basis (erster Schritt der Wirtschaft):** Das Basisschiff landet
+auf einem Körper außer Zorb; in der Karte „Fracht & Basis" gründet es dort
+eine Basis und wird ihr Fundament (es fliegt dann nicht mehr). Der Landepunkt
+wird zur Zone mit 5 km Radius, sichtbar wie jedes Zielgebiet, auch in der
+Vorschau der Landung. Die Baustelle braucht 4 t Bauteile: Frachter, die in
+der Zone landen, laden dort ab. Fracht zählt als Masse (weniger Δv, zu sehen
+am Δv-Balken). Ist alles da, ist die Basis fertig und stellt Treibstoff her
+(180 kg pro Stunde, bis das Lager mit 8 t voll ist); Schiffe in der Zone
+tanken dort. Zum Ausprobieren, alle drei direkt nach Zoon:
+`--node 5,614,845,0,0 --node 6,604,845,0,0 --node 4,598.3,845,0,0`; sie
+landen nach gut 7 Stunden nebeneinander bei 83,6° West (mit `--time 26200`
+stehen sie schon dort).
 
 Gestartet wird mit einem Startprofil aus vier Werten: Kurs, Wendebeginn,
 Wendewinkel (so weit neigt sich das Schiff beim Wendebeginn aus der
@@ -227,6 +242,12 @@ rechts unten), links steht die Begegnung in 131 Tagen. Nachspielen mit `--node 3
 Angaben. Nachspielen mit `--time 22100 --camera 30,50,30000` und einem Klick
 auf den Mond.*
 
+![Basis](docs/screenshots/basis.png)
+
+*Zoon-Basis 1 ist fertig: Das Basisschiff ist das Fundament, beide Frachter
+haben abgeladen. Die Karte „Fracht & Basis“ zeigt das Treibstofflager und den
+Tank von Frachter-7; der grüne Kreis ist die Zone der Basis (5 km).*
+
 ![Verbund](docs/screenshots/verbund.png)
 
 *Nach dem Kontakt: Relais-1 und Fähre-3 sind ein Verbund mit gemeinsamem Tank.
@@ -312,6 +333,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
+| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Treibstofflager; je nach Lage „Basis gründen“, „Bauteile abladen“ oder „Tanken“ |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
@@ -386,6 +408,6 @@ in Sekunden.
 
 ## Aufbau
 
-- `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Start, Landung, Rendezvous, Zeitleiste, Spielstand)
+- `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Start, Landung, Rendezvous, Fracht und Basen, Zeitleiste, Spielstand)
 - `crates/game`: Darstellung und Eingabe mit Bevy (Anzeige links, Seitenleiste rechts)
 - `docs/ARCHITEKTUR.md`: Regeln, Physikmodell, Entscheidungen, Merkliste

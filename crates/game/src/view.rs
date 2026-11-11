@@ -77,18 +77,46 @@ pub fn vessel_position(world: &World, i: usize) -> DVec3 {
 
 /// Zeichen-Versatz für jeden Abschnitt der Zeitleiste: wo sein Körper beim
 /// Zeichnen steht. Aufeinanderfolgende Abschnitte um denselben Körper bilden
-/// ein Stück; es liegt um den Körper zu Beginn des Stücks, frühestens jetzt.
-/// Beim Planeten ist das der Ursprung.
+/// ein Stück.
+///
+/// - Das erste Stück liegt um seinen Körper, wie er jetzt steht.
+/// - Tritt die Bahn in die Sphäre eines Mondes (oder Planeten) ein, liegt das
+///   neue Stück dort, wo er beim Eintritt *relativ zu seinem Mutterkörper*
+///   steht, und der Mutterkörper da, wo das Stück davor gezeichnet ist. So
+///   schließt die Bahn am Eintritt an, und der "Geistermond" liegt auf ihr,
+///   auch wenn der Planet bis dahin weit um die Sonne gewandert ist.
+/// - Kehrt die Bahn zu einem Körper zurück, liegt das Stück wieder dort, wo
+///   sein letztes gezeichnet ist; sonst (Austritt zum Mutterkörper) um den
+///   Körper, wie er jetzt steht.
 pub fn anchors(world: &World, trajectory: &Trajectory) -> Vec<DVec3> {
-    let mut patch: Option<(BodyId, f64)> = None;
+    let bodies = &world.bodies;
+    let mut drawn: Vec<Option<DVec3>> = vec![None; bodies.len()];
+    let mut patch: Option<(BodyId, DVec3)> = None;
     trajectory
         .segments()
         .map(|segment| {
-            if patch.is_none_or(|(body, _)| body != segment.body()) {
-                patch = Some((segment.body(), segment.start()));
+            let body = segment.body();
+            if let Some((b, anchor)) = patch
+                && b == body
+            {
+                return anchor;
             }
-            let (body, start) = patch.expect("gesetzt");
-            body_state(&world.bodies, body, start.max(world.time)).position
+            let entered = patch.filter(|&(from, _)| {
+                bodies[body]
+                    .orbit
+                    .as_ref()
+                    .is_some_and(|o| o.parent == from)
+            });
+            let anchor = if let Some((parent, parent_anchor)) = entered {
+                let t = segment.start().max(world.time);
+                parent_anchor + body_state(bodies, body, t).position
+                    - body_state(bodies, parent, t).position
+            } else {
+                drawn[body].unwrap_or_else(|| body_state(bodies, body, world.time).position)
+            };
+            drawn[body] = Some(anchor);
+            patch = Some((body, anchor));
+            anchor
         })
         .collect()
 }
@@ -138,6 +166,9 @@ pub struct MarkerMaterials {
     /// Ziel des gewählten Schiffs.
     target: Handle<StandardMaterial>,
     wreck: Handle<StandardMaterial>,
+    base: Handle<StandardMaterial>,
+    /// Kugel für die Markierungen.
+    sphere: Handle<Mesh>,
 }
 
 pub fn setup(
@@ -231,21 +262,13 @@ pub fn setup(
         }
     }
 
-    let base_material = materials.add(unlit(Color::srgb(0.3, 1.0, 0.4)));
-    for i in 0..sim.0.bases.len() {
-        commands.spawn((
-            BaseMarker(i),
-            Mesh3d(sphere.clone()),
-            MeshMaterial3d(base_material.clone()),
-            Transform::default(),
-        ));
-    }
-
     let markers = MarkerMaterials {
         vessel: materials.add(unlit(Color::srgb(1.0, 1.0, 1.0))),
         selected: materials.add(unlit(Color::srgb(1.0, 0.85, 0.2))),
         target: materials.add(unlit(TARGET_COLOR)),
         wreck: materials.add(unlit(Color::srgb(1.0, 0.2, 0.2))),
+        base: materials.add(unlit(Color::srgb(0.3, 1.0, 0.4))),
+        sphere: sphere.clone(),
     };
     for i in 0..sim.0.vessels.len() {
         commands.spawn((
@@ -256,6 +279,23 @@ pub fn setup(
         ));
     }
     commands.insert_resource(markers);
+}
+
+/// Eine Markierung für jede Basis, auch für neu gegründete.
+pub fn spawn_base_markers(
+    mut commands: Commands,
+    sim: Res<Sim>,
+    markers: Res<MarkerMaterials>,
+    existing: Query<(), With<BaseMarker>>,
+) {
+    for i in existing.iter().count()..sim.0.bases.len() {
+        commands.spawn((
+            BaseMarker(i),
+            Mesh3d(markers.sphere.clone()),
+            MeshMaterial3d(markers.base.clone()),
+            Transform::default(),
+        ));
+    }
 }
 
 fn marker_scale(position: Vec3, camera: Vec3) -> Vec3 {

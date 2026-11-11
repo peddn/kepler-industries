@@ -94,6 +94,16 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
         LogKind::Liftoff => ("Start".into(), TEXT_COLOR),
         LogKind::BurnStart => ("Brennbeginn".into(), TEXT_COLOR),
         LogKind::LandingBurn => ("Landebrennen".into(), TEXT_COLOR),
+        LogKind::BaseFounded { base } => {
+            (format!("gründet {}", world.bases[*base].name), LANDED_COLOR)
+        }
+        LogKind::BaseCompleted { base } => (
+            format!(
+                "liefert die letzten Bauteile, {} ist fertig",
+                world.bases[*base].name
+            ),
+            LANDED_COLOR,
+        ),
         LogKind::BurnEnd {
             apoapsis,
             periapsis,

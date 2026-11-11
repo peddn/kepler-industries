@@ -151,6 +151,8 @@ pub const SATELLITE: VesselParams = VesselParams {
     exhaust_velocity: 3_000.0,
     fuel_capacity: 200.0,
     parachute_area: 0.0,
+    cargo_capacity: 0.0,
+    base_kit: false,
 };
 
 /// Radius der Zielgebiete in m.
@@ -167,6 +169,34 @@ pub const FERRY: VesselParams = VesselParams {
     exhaust_velocity: 3_200.0,
     fuel_capacity: 4_000.0,
     parachute_area: 400.0,
+    cargo_capacity: 0.0,
+    base_kit: false,
+};
+
+/// Frachter: wie die Fähre, mit Frachtraum für 2 t Bauteile und mehr
+/// Treibstoff dafür (voll beladen rund 3,6 km/s Δv).
+pub const FREIGHTER: VesselParams = VesselParams {
+    dry_mass: 1_500.0,
+    drag_area: 2.0,
+    thrust: 80_000.0,
+    exhaust_velocity: 3_200.0,
+    fuel_capacity: 7_500.0,
+    parachute_area: 400.0,
+    cargo_capacity: 2_000.0,
+    base_kit: false,
+};
+
+/// Basisschiff: landet einmal und wird zum Fundament einer Basis (siehe
+/// `base`). Kein Frachtraum. 3 t leer, rund 3,6 km/s Δv.
+pub const BASE_SHIP: VesselParams = VesselParams {
+    dry_mass: 3_000.0,
+    drag_area: 3.0,
+    thrust: 80_000.0,
+    exhaust_velocity: 3_200.0,
+    fuel_capacity: 6_500.0,
+    parachute_area: 400.0,
+    cargo_capacity: 0.0,
+    base_kit: true,
 };
 
 /// Das Sonnensystem (`solar_system`), auf Zorb eine Startbasis, zwei
@@ -185,6 +215,9 @@ pub fn demo() -> World {
         name: "Startbasis".into(),
         body: ZORB,
         location: pad,
+        required: 0.0,
+        delivered: 0.0,
+        fuel: None,
     });
 
     let stable = state_from_apsides(
@@ -224,6 +257,27 @@ pub fn demo() -> World {
         false,
     );
     world.spawn_vessel("Mondfähre-4", FERRY, 4_000.0, ZORB, parked);
+
+    // Die Startausstattung für die erste Basis (siehe `base`), auf derselben
+    // Bahn hintereinander: ein Basisschiff und zwei Frachter mit zusammen
+    // genau den Bauteilen, die eine Basis braucht.
+    for (name, params, cargo, ahead) in [
+        ("Basisschiff-5", BASE_SHIP, 0.0, 316.0),
+        ("Frachter-6", FREIGHTER, 2_000.0, 318.0),
+        ("Frachter-7", FREIGHTER, 2_000.0, 320.0),
+    ] {
+        let state = state_from_apsides(
+            gm,
+            r + 100_000.0,
+            r + 100_000.0,
+            0.0,
+            0.0,
+            f64::to_radians(ahead),
+            false,
+        );
+        let vessel = world.spawn_vessel(name, params, params.fuel_capacity, ZORB, state);
+        world.load_cargo(vessel, cargo);
+    }
 
     // Zielgebiete: an der Startbasis, eines etwa 60 km östlich zum Üben eines
     // Hops (Kurs 90°, Ziel-Apoapsis rund 27 km) und eines weit weg im Osten,
