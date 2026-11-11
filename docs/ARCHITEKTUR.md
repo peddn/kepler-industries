@@ -297,7 +297,9 @@ kommt, dass es aus dieser Höhe mit 2,5 m/s aufsetzt (auf Zorb etwa 30 cm, auf
 Zoon 2 m). Jeder Versuch rechnet das Landebrennen genau wie die Zeitleiste
 (dieselben Schritte ab demselben Zustand, auch mitten in einem Abschnitt
 durch die Luft, `integrator::state_on_arc`). Sobald das Schiff steht, endet
-das Brennen (`integrate_arc` erkennt das im Schritt); der Rest ist ein kurzer
+das Brennen (`integrate_arc` erkennt das im Schritt; in diesem letzten
+Teilschritt bleibt die Schubrichtung fest, sonst bliebe bei starkem Schub
+ein Rest an Geschwindigkeit); der Rest ist ein kurzer
 Fall. Treibstoff nach der Raketengleichung, Verluste durch Schwerkraft und
 Luft inbegriffen, Vorschau = Ausführung bitgenau. Geht das nicht, wird nicht
 gebremst (Absturz mit Grund, `Crash`): Schub nicht größer als das Gewicht
@@ -706,38 +708,77 @@ nötig, sobald Bewohner laufend versorgt werden), Kommunikationsnetz.
 - Auftragsarten und ihre Steigerung: Sie müssen ohne Zeitdruck antreiben.
 - Chassis, Plätze und Module im Einzelnen.
 
-**Erster spielbarer Schritt (gebaut, `sim::base`):** bewusst klein, um den
-Spielspaß zu prüfen.
-- Ein Gut: Bauteile. Fracht im Schiff zählt als Masse (`World::params` rechnet
-  sie zur Masse ohne Treibstoff; damit stimmen Brennen, Δv-Balken, Landung).
-- Schiffstypen als Werte, noch ohne Chassis und Module: Frachter (2 t
-  Frachtraum) und Basisschiff (kein Frachtraum, `base_kit`).
-- Das Basisschiff gründet auf einem Körper außer dem Heimatplaneten eine Basis
-  und wird ihr Fundament (`foundation_of`; ein Start ist dann gesperrt). Der
-  Landepunkt wird zur Zone: ein Zielgebiet mit 5 km Radius, damit Karte,
-  Landevorschau und Protokoll ohne Sonderfall damit umgehen. Im Umkreis einer
-  Basis entsteht keine zweite.
-- Die Baustelle braucht 4 t Bauteile. Schiffe, die im Umkreis stehen, laden
-  ab (so viel sie haben und noch fehlt). Mit dem letzten Bauteil ist die Basis
-  fertig.
-- Eine fertige Basis stellt Treibstoff her, 180 kg pro Stunde, bis das Lager
-  (8 t) voll ist; vorerst aus dem Nichts, bis es Rohstoffe und Strom gibt.
-  Gespeichert sind Menge und Zeitpunkt der letzten Änderung, der Stand
-  dazwischen wird direkt berechnet (Regel 14, unabhängig von der
-  Schrittgröße). Schiffe im Umkreis tanken, was in den Tank passt.
-- Abladen und Tanken gehen nur am Boden, ohne geplanten Start und ohne
-  angedockte Schiffe: Dann ändert sich nur die Masse des stehenden Schiffs,
-  keine Bahn muss neu gerechnet werden.
-- Startausstattung der Demo: ein Basisschiff und zwei Frachter mit zusammen
-  genau 4 t im Orbit um Zorb. Nachschub an Bauteilen gibt es noch nicht.
+**Der Kreislauf (gebaut, `sim::base`):** bewusst klein, um den Spielspaß zu
+prüfen. Leitgedanke: Der Engpass ist die Leistung der Schiffe. Bauteile sind
+eine Investition (kein Verbrauch): Eine Basis erweitert dauerhaft, wie weit
+man kommt und was man zurückbringt.
 
-Noch offen aus dem Vorschlag: Umladen im Verbund (im Orbit).
+- **Kreislauf:** Bauteile von Zorb hinaus → Basen → Zorit zurück nach Zorb →
+  daraus (nächster Schritt) Schiffe und Bauteile → weiter hinaus. Hinaus ist
+  teuer (Start von Zorb, voll beladen), zurück billig (schwache Schwerkraft,
+  auf Zorb bremst die Luft).
+- **Stoffe:** Bauteile und Zorit sind Fracht und teilen sich den Frachtraum
+  (`Cargo`); Treibstoff ist der dritte Stoff und liegt im Tank. Fracht zählt
+  als Masse (`World::params` rechnet sie zur Masse ohne Treibstoff; damit
+  stimmen Brennen, Δv-Balken, Landung). Zorit ist ein seltenes Erz, das es
+  auf Zorb nicht gibt; vorerst der einzige Rohstoff, weitere Arten kommen mit
+  den Rohstoffkarten.
+- **Eine Basis, ein Stoff** (`BaseKind`): Die Startbasis gibt Bauteile und
+  Treibstoff aus und nimmt Zorit an (`World::zorit`); eine Tankstelle stellt
+  Treibstoff her, eine Mine Zorit. Wer an einem Ort beides will, baut zwei
+  Basen.
+- **Gründen:** Das Basisschiff gründet auf einem Körper außer dem
+  Heimatplaneten eine Mine oder Tankstelle und wird ihr Fundament
+  (`foundation_of`; ein Start ist dann gesperrt). Der Landepunkt wird zur
+  Zone: ein Zielgebiet mit 5 km Radius, damit Karte, Landevorschau und
+  Protokoll ohne Sonderfall damit umgehen. Im Umkreis einer Basis entsteht
+  keine zweite.
+- **Baustelle:** 4 t Bauteile. Schiffe, die im Umkreis stehen, laden ab (so
+  viel sie haben und noch fehlt). Mit dem letzten Bauteil ist die Basis
+  fertig.
+- **Herstellung:** gleichmäßig, bis das Lager voll ist; vorerst aus dem
+  Nichts, bis es Strom und Bewohner gibt. Gespeichert sind Menge und
+  Zeitpunkt der letzten Änderung (`Store`), der Stand dazwischen wird direkt
+  berechnet (Regel 14, unabhängig von der Schrittgröße). Tankstelle: 180 kg
+  pro Stunde, Lager 8 t. Mine: 100 kg pro Stunde.
+- **Häufigkeit = Lagergröße:** Weil Vorspulen nichts kostet, ist jede Rate
+  wirkungslos; auch eine schlecht gelegene Mine liefe voll. Knapp sind nur
+  die Flüge, die Leistung der Schiffe und endliche Mengen. Die Häufigkeit von
+  Zorit bestimmt deshalb, wie viel das Lager einer Mine fasst (`Body::zorit`:
+  Zoon 1 t, Zimm 2 t, Nura 4 t), also den Ertrag pro Abholung. Später ersetzt
+  die Rohstoffkarte diese eine Zahl je Körper; reiche Stellen sollen dort
+  liegen, wo das Hinkommen teuer ist. Endliche Vorkommen bleiben eine Option.
+- **Schiffe als Werte**, noch ohne Chassis und Module: Der Frachter (2 t
+  Frachtraum) startet voll beladen von Zorb, landet auf Zoon und kommt ohne
+  Tanken mit Zorit zurück; das Basisschiff (`base_kit`) fliegt nur hin.
+- Laden, Abladen und Tanken gehen nur am Boden, ohne geplanten Start und
+  ohne angedockte Schiffe: Dann ändert sich nur die Masse des stehenden
+  Schiffs, keine Bahn muss neu gerechnet werden.
+- Startausstattung der Demo, schon im Orbit um Zorb (mit dem Treibstoff, der
+  nach einem Start übrig wäre): zwei Basisschiffe und zwei Frachter mit
+  zusammen 4 t Bauteilen.
+
+**Nächster Schritt (geplant): Preise und Bestellen.** Die Startbasis wird
+anwählbar; dort bestellt man gegen Zorit Basisschiffe und Frachter, und
+Bauteile kosten Zorit (erste Werte: Schiff 1 t, Bauteile 0,25 t je Tonne).
+Gegen die Sackgasse: Solange keine Mine fertig ist, sind Basisschiff und
+Bauteile frei; ein Frachter ist frei, wenn kein heiler mehr da ist.
+
+**Daten** sind später der zweite Zähler auf Zorb (bestimmen, *was* man bauen
+kann; Zorit, *wie viel*). Sie sind keine Fracht: Sie werden gefunkt, und jede
+Entdeckung zählt einmal. Nur Proben wären Fracht.
+
+Noch offen: Umladen im Verbund (im Orbit).
 
 ## Merkliste (nicht vergessen)
 
 - Kommunikationsnetz (Verbindung, Reichweite)
 - Scans, automatisierte Routen, Ressourcen, Basen, Wirtschaft
 - Bergung von Wracks (über Daten)
+- **Story-Kampagne** mit Storymissionen. Passt zu den Aufträgen: Eine
+  Storymission ist ein Auftrag mit fester Reihenfolge und Text, kein zweites
+  System. Aufhänger: warum Zorb Zorit und die anderen seltenen Stoffe
+  braucht.
 - „Hop zum Ziel": Parameter automatisch suchen, falls Zielen per Hand zu fummelig ist
 - Modelle der Schiffe in der Nahansicht (Ausrichtung beim Anflug aus der
   Anfluglinie, Haltepunkt vor dem Andockstutzen)

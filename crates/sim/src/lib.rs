@@ -34,6 +34,6 @@ pub use rendezvous::{Approach, PlaneCrossing};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
 pub use transfer::{BodyApproach, Window};
 pub use world::{
-    Base, BudgetItem, DeltaVBudget, LandingBurn, Touchdown, Vessel, VesselParams, VesselStatus,
-    World,
+    Base, BaseKind, BudgetItem, Cargo, DeltaVBudget, LandingBurn, Store, Touchdown, Vessel,
+    VesselParams, VesselStatus, World,
 };

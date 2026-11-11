@@ -1,37 +1,51 @@
-//! Fracht und Basen: erster Schritt der Wirtschaft (siehe ARCHITEKTUR,
+//! Fracht und Basen: der Kreislauf der Wirtschaft (siehe ARCHITEKTUR,
 //! „Wirtschaft“).
 //!
-//! - **Fracht:** Ein Schiff mit Frachtraum trägt Bauteile (kg). Sie zählen
-//!   beim Fliegen als Masse.
+//! - **Stoffe:** Bauteile und Zorit sind Fracht (kg) und teilen sich den
+//!   Frachtraum; sie zählen beim Fliegen als Masse. Treibstoff ist der dritte
+//!   Stoff und liegt im Tank.
+//! - **Startbasis** (auf dem Heimatplaneten): Schiffe in ihrem Umkreis laden
+//!   Bauteile, tanken und laden Zorit ab (vorerst alles frei). Das Zorit
+//!   kommt ins Lager der Startbasis (`World::zorit`).
 //! - **Gründen:** Ein Basisschiff, das auf einem Körper außer dem
-//!   Heimatplaneten steht, gründet dort eine Basis und wird ihr Fundament; es
-//!   fliegt dann nicht mehr. Der Landepunkt wird zur Zone (ein Zielgebiet mit
-//!   `SITE_RADIUS`, damit Vorschau und Karte ihn wie jedes Zielgebiet zeigen).
+//!   Heimatplaneten steht, gründet dort eine Tankstelle oder eine Mine und
+//!   wird ihr Fundament; es fliegt dann nicht mehr. Der Landepunkt wird zur
+//!   Zone (ein Zielgebiet mit `SITE_RADIUS`, damit Vorschau und Karte ihn wie
+//!   jedes Zielgebiet zeigen).
 //! - **Baustelle:** Die Basis braucht `BASE_KIT` kg Bauteile. Schiffe, die im
 //!   Umkreis stehen, laden ab; ist alles da, ist die Basis fertig.
-//! - **Treibstoff:** Eine fertige Basis stellt Treibstoff her (vorerst aus
-//!   dem Nichts, bis es Rohstoffe gibt), gleichmäßig bis das Lager voll ist.
-//!   Schiffe im Umkreis tanken dort. Der Lagerstand wird für jeden Zeitpunkt
-//!   direkt berechnet; Warten füllt das Lager nur einmal (Regel 14).
+//! - **Herstellung:** Eine fertige Basis stellt genau einen Stoff her (vorerst
+//!   aus dem Nichts): die Tankstelle Treibstoff, die Mine Zorit, gleichmäßig
+//!   bis das Lager voll ist. Schiffe im Umkreis tanken oder laden dort. Der
+//!   Lagerstand wird für jeden Zeitpunkt direkt berechnet; Warten füllt das
+//!   Lager nur einmal (Regel 14).
+//! - **Häufigkeit:** Weil Vorspulen nichts kostet, wäre eine Förderrate
+//!   wirkungslos. Die Häufigkeit von Zorit bestimmt deshalb die Größe des
+//!   Lagers einer Mine (`Body::zorit`), also die Menge pro Abholung: Was
+//!   zählt, ist der Ertrag pro Flug.
 //!
-//! Abladen und Tanken gehen nur am Boden, ohne geplanten Start und ohne
-//! angedockte Schiffe: Dann ändert sich nur die Masse des stehenden Schiffs.
+//! Laden, Abladen und Tanken gehen nur am Boden, ohne geplanten Start und
+//! ohne angedockte Schiffe: Dann ändert sich nur die Masse des stehenden
+//! Schiffs.
 
 use crate::body::{BodyId, SurfacePoint};
 use crate::landing::LandingZone;
 use crate::log::{LogEntry, LogKind};
 use crate::trajectory::Segment;
-use crate::world::{Base, FuelStore, World};
+use crate::world::{Base, BaseKind, Store, World};
 
 /// Bauteile für eine fertige Basis in kg.
 pub const BASE_KIT: f64 = 4_000.0;
-/// Umkreis einer Basis in m (entlang der Oberfläche), in dem Schiffe abladen
-/// und tanken.
+/// Umkreis einer Basis in m (entlang der Oberfläche), in dem Schiffe laden,
+/// abladen und tanken.
 pub const SITE_RADIUS: f64 = 5_000.0;
-/// Eine fertige Basis stellt so viel Treibstoff her (kg/s; 180 kg pro Stunde).
+/// Eine Tankstelle stellt so viel Treibstoff her (kg/s; 180 kg pro Stunde).
 pub const FUEL_RATE: f64 = 0.05;
 /// Ihr Lager fasst so viel Treibstoff (kg).
 pub const FUEL_STORAGE: f64 = 8_000.0;
+/// Eine Mine baut so viel Zorit ab (kg/s; 100 kg pro Stunde). Wie viel ihr
+/// Lager fasst, hängt vom Körper ab (`Body::zorit`).
+pub const ZORIT_RATE: f64 = 100.0 / 3_600.0;
 
 /// Warum ein Befehl an Fracht oder Basis nicht geht.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -50,8 +64,12 @@ pub enum BaseError {
     NoBase,
     /// Die Basis ist noch nicht fertig.
     Unfinished,
+    /// Diese Basis bietet das nicht (z. B. Tanken an einer Mine).
+    WrongBase,
     /// Nichts abzuladen, oder die Basis braucht nichts mehr.
     NothingToUnload,
+    /// Frachtraum voll oder Lager leer.
+    NothingToLoad,
     /// Tank voll oder Lager leer.
     NothingToRefuel,
 }
@@ -66,15 +84,12 @@ impl std::fmt::Display for BaseError {
             BaseError::Occupied => "hier steht schon eine Basis",
             BaseError::NoBase => "keine Basis im Umkreis",
             BaseError::Unfinished => "die Basis ist noch nicht fertig",
+            BaseError::WrongBase => "das geht an dieser Basis nicht",
             BaseError::NothingToUnload => "nichts abzuladen",
+            BaseError::NothingToLoad => "Frachtraum voll oder Lager leer",
             BaseError::NothingToRefuel => "Tank voll oder Lager leer",
         })
     }
-}
-
-/// Treibstoff im Lager zum Zeitpunkt `t`.
-pub fn fuel_at(store: &FuelStore, t: f64) -> f64 {
-    (store.amount + FUEL_RATE * (t - store.since).max(0.0)).min(FUEL_STORAGE)
 }
 
 impl World {
@@ -100,18 +115,18 @@ impl World {
         Ok((*body, *point))
     }
 
-    /// Belädt ein Schiff, das noch nichts geplant hat (für Szenarien): Die
-    /// Fracht kommt zur Masse dazu, die Bahn bleibt dieselbe.
-    pub fn load_cargo(&mut self, vessel: usize, cargo: f64) {
+    /// Belädt ein Schiff, das noch nichts geplant hat, mit Bauteilen (für
+    /// Szenarien): Die Fracht kommt zur Masse dazu, die Bahn bleibt dieselbe.
+    pub fn load_cargo(&mut self, vessel: usize, parts: f64) {
         let v = &self.vessels[vessel];
         assert!(
-            v.cargo + cargo <= v.params.cargo_capacity,
+            v.cargo.total() + parts <= v.params.cargo_capacity,
             "{}: mehr Fracht als Frachtraum",
             v.name
         );
         let (body, state) = self.vessel_state(vessel);
-        let mass = self.vessel_mass(vessel) + cargo;
-        self.vessels[vessel].cargo += cargo;
+        let mass = self.vessel_mass(vessel) + parts;
+        self.vessels[vessel].cargo.parts += parts;
         let params = self.params(vessel);
         if let Segment::Surface { .. } = self.vessels[vessel].trajectory.current() {
             self.vessels[vessel].trajectory.set_landed_mass(mass);
@@ -155,17 +170,59 @@ impl World {
         }
     }
 
-    /// Treibstoff im Lager einer Basis jetzt (0 ohne Lager).
-    pub fn base_fuel(&self, base: usize) -> f64 {
-        self.bases[base]
-            .fuel
-            .as_ref()
-            .map_or(0.0, |s| fuel_at(s, self.time))
+    /// Wie schnell eine fertige Basis ihren Stoff herstellt (kg/s) und wie
+    /// viel ihr Lager fasst (kg).
+    pub fn production(&self, base: usize) -> (f64, f64) {
+        let base = &self.bases[base];
+        match base.kind {
+            BaseKind::Depot => (0.0, 0.0),
+            BaseKind::FuelStation => (FUEL_RATE, FUEL_STORAGE),
+            BaseKind::Mine => (ZORIT_RATE, self.bodies[base.body].zorit),
+        }
     }
 
-    /// Das Basisschiff `vessel` gründet dort, wo es steht, eine Basis (erst
-    /// eine Baustelle) und wird ihr Fundament. Liefert ihre Nummer.
-    pub fn found_base(&mut self, vessel: usize) -> Result<usize, BaseError> {
+    /// Lagerstand einer Basis jetzt: Treibstoff an der Tankstelle, Zorit an
+    /// der Mine (0 ohne Lager).
+    pub fn base_stock(&self, base: usize) -> f64 {
+        let (rate, capacity) = self.production(base);
+        self.bases[base].store.as_ref().map_or(0.0, |s| {
+            (s.amount + rate * (self.time - s.since).max(0.0)).min(capacity)
+        })
+    }
+
+    /// Das Schiff steht bereit an einer fertigen Basis dieser Art: ihre
+    /// Nummer.
+    fn parked_at(&self, vessel: usize, kind: BaseKind) -> Result<usize, BaseError> {
+        self.parked(vessel)?;
+        let base = self.base_of(vessel).ok_or(BaseError::NoBase)?;
+        if self.bases[base].kind != kind {
+            return Err(BaseError::WrongBase);
+        }
+        if !self.bases[base].complete() {
+            return Err(BaseError::Unfinished);
+        }
+        Ok(base)
+    }
+
+    /// Ändert die Masse eines stehenden Schiffs um `change` kg.
+    fn change_mass(&mut self, vessel: usize, change: f64) {
+        let mass = self.vessel_mass(vessel) + change;
+        self.vessels[vessel].trajectory.set_landed_mass(mass);
+    }
+
+    /// Nimmt `amount` kg aus dem Lager der Basis.
+    fn take(&mut self, base: usize, amount: f64) {
+        let stock = self.base_stock(base);
+        self.bases[base].store = Some(Store {
+            amount: stock - amount,
+            since: self.time,
+        });
+    }
+
+    /// Das Basisschiff `vessel` gründet dort, wo es steht, eine Tankstelle
+    /// oder Mine (erst eine Baustelle) und wird ihr Fundament. Liefert ihre
+    /// Nummer.
+    pub fn found_base(&mut self, vessel: usize, kind: BaseKind) -> Result<usize, BaseError> {
         let (body, point) = self.parked(vessel)?;
         let v = &self.vessels[vessel];
         if !v.params.base_kit || v.foundation_of.is_some() {
@@ -177,16 +234,23 @@ impl World {
         if self.base_at(body, &point).is_some() {
             return Err(BaseError::Occupied);
         }
-        let number = 1 + self.bases.iter().filter(|b| b.body == body).count();
-        let name = format!("{}-Basis {number}", self.bodies[body].name);
+        let label = match kind {
+            BaseKind::Depot => return Err(BaseError::WrongBase),
+            BaseKind::FuelStation => "Tankstelle",
+            BaseKind::Mine => "Mine",
+        };
+        let same = |b: &&Base| b.body == body && b.kind == kind;
+        let number = 1 + self.bases.iter().filter(same).count();
+        let name = format!("{}-{label} {number}", self.bodies[body].name);
         let base = self.bases.len();
         self.bases.push(Base {
             name: name.clone(),
             body,
             location: point,
+            kind,
             required: BASE_KIT,
             delivered: 0.0,
-            fuel: None,
+            store: None,
         });
         self.zones.push(LandingZone {
             name,
@@ -209,17 +273,16 @@ impl World {
         self.parked(vessel)?;
         let base = self.base_of(vessel).ok_or(BaseError::NoBase)?;
         let needed = (self.bases[base].required - self.bases[base].delivered).max(0.0);
-        let amount = self.vessels[vessel].cargo.min(needed);
+        let amount = self.vessels[vessel].cargo.parts.min(needed);
         if amount <= 0.0 {
             return Err(BaseError::NothingToUnload);
         }
-        let mass = self.vessel_mass(vessel) - amount;
-        self.vessels[vessel].cargo -= amount;
-        self.vessels[vessel].trajectory.set_landed_mass(mass);
+        self.change_mass(vessel, -amount);
+        self.vessels[vessel].cargo.parts -= amount;
         let site = &mut self.bases[base];
         site.delivered += amount;
         if site.complete() {
-            site.fuel = Some(FuelStore {
+            site.store = Some(Store {
                 amount: 0.0,
                 since: self.time,
             });
@@ -232,26 +295,70 @@ impl World {
         Ok(amount)
     }
 
-    /// Tankt an der fertigen Basis, in deren Umkreis das Schiff steht: so
-    /// viel, wie in den Tank passt und im Lager ist. Liefert die Menge in kg.
+    /// Tankt: an der Startbasis voll, an einer Tankstelle so viel, wie im
+    /// Lager ist und in den Tank passt. Liefert die Menge in kg.
     pub fn refuel(&mut self, vessel: usize) -> Result<f64, BaseError> {
         self.parked(vessel)?;
         let base = self.base_of(vessel).ok_or(BaseError::NoBase)?;
-        let Some(store) = self.bases[base].fuel else {
-            return Err(BaseError::Unfinished);
-        };
-        let stock = fuel_at(&store, self.time);
         let room = self.vessels[vessel].params.fuel_capacity - self.vessel_fuel(vessel);
-        let amount = stock.min(room);
+        let amount = match self.bases[base].kind {
+            BaseKind::Depot => room,
+            BaseKind::FuelStation => {
+                room.min(self.base_stock(self.parked_at(vessel, BaseKind::FuelStation)?))
+            }
+            BaseKind::Mine => return Err(BaseError::WrongBase),
+        };
         if amount <= 0.0 {
             return Err(BaseError::NothingToRefuel);
         }
-        let mass = self.vessel_mass(vessel) + amount;
-        self.vessels[vessel].trajectory.set_landed_mass(mass);
-        self.bases[base].fuel = Some(FuelStore {
-            amount: stock - amount,
-            since: self.time,
-        });
+        self.change_mass(vessel, amount);
+        if self.bases[base].kind == BaseKind::FuelStation {
+            self.take(base, amount);
+        }
+        Ok(amount)
+    }
+
+    /// Lädt an einer Mine Zorit: so viel, wie im Lager ist und in den
+    /// Frachtraum passt. Liefert die Menge in kg.
+    pub fn load_zorit(&mut self, vessel: usize) -> Result<f64, BaseError> {
+        let base = self.parked_at(vessel, BaseKind::Mine)?;
+        let v = &self.vessels[vessel];
+        let room = v.params.cargo_capacity - v.cargo.total();
+        let amount = room.min(self.base_stock(base));
+        if amount <= 0.0 {
+            return Err(BaseError::NothingToLoad);
+        }
+        self.change_mass(vessel, amount);
+        self.vessels[vessel].cargo.zorit += amount;
+        self.take(base, amount);
+        Ok(amount)
+    }
+
+    /// Lädt an der Startbasis Bauteile, bis der Frachtraum voll ist. Liefert
+    /// die Menge in kg.
+    pub fn load_parts(&mut self, vessel: usize) -> Result<f64, BaseError> {
+        self.parked_at(vessel, BaseKind::Depot)?;
+        let v = &self.vessels[vessel];
+        let amount = v.params.cargo_capacity - v.cargo.total();
+        if amount <= 0.0 {
+            return Err(BaseError::NothingToLoad);
+        }
+        self.change_mass(vessel, amount);
+        self.vessels[vessel].cargo.parts += amount;
+        Ok(amount)
+    }
+
+    /// Lädt an der Startbasis alles Zorit ab; es kommt in ihr Lager
+    /// (`World::zorit`). Liefert die Menge in kg.
+    pub fn deliver_zorit(&mut self, vessel: usize) -> Result<f64, BaseError> {
+        self.parked_at(vessel, BaseKind::Depot)?;
+        let amount = self.vessels[vessel].cargo.zorit;
+        if amount <= 0.0 {
+            return Err(BaseError::NothingToUnload);
+        }
+        self.change_mass(vessel, -amount);
+        self.vessels[vessel].cargo.zorit = 0.0;
+        self.zorit += amount;
         Ok(amount)
     }
 }

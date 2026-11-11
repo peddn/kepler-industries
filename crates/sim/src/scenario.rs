@@ -3,7 +3,7 @@
 use crate::body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint, circular_period};
 use crate::kepler::state_from_apsides;
 use crate::landing::LandingZone;
-use crate::world::{Base, VesselParams, World};
+use crate::world::{Base, BaseKind, VesselParams, World};
 use std::f64::consts::PI;
 
 /// Nummern der Körper in der Demo: die Sonne zuerst, dann der Heimatplanet
@@ -24,6 +24,7 @@ pub fn sun() -> Body {
         rotation_period: 432_000.0,
         atmosphere: Atmosphere::NONE,
         orbit: None,
+        zorit: 0.0,
     }
 }
 
@@ -46,6 +47,7 @@ pub fn home_planet() -> Body {
             top_altitude: 70_000.0,
         },
         orbit: None,
+        zorit: 0.0,
     }
 }
 
@@ -72,6 +74,7 @@ pub fn moon(parent: BodyId, planet: &Body) -> Body {
         rotation_period: circular_period(planet.gm, distance),
         atmosphere: Atmosphere::NONE,
         orbit: Some(BodyOrbit::circular(parent, distance, PI)),
+        zorit: 1_000.0,
     }
 }
 
@@ -98,6 +101,7 @@ pub fn outer_moon(parent: BodyId) -> Body {
             argument_of_periapsis: 38f64.to_radians(),
             mean_anomaly: 0.9,
         }),
+        zorit: 2_000.0,
     }
 }
 
@@ -129,6 +133,7 @@ pub fn nura(parent: BodyId) -> Body {
             argument_of_periapsis: 0.0,
             mean_anomaly: 1.52,
         }),
+        zorit: 4_000.0,
     }
 }
 
@@ -173,31 +178,37 @@ pub const FERRY: VesselParams = VesselParams {
     base_kit: false,
 };
 
-/// Frachter: wie die Fähre, mit Frachtraum für 2 t Bauteile und mehr
-/// Treibstoff dafür (voll beladen rund 3,6 km/s Δv).
+/// Frachter: 2 t Frachtraum. So groß, dass er in einem Stück voll beladen von
+/// Zorb startet (in den Orbit kostet das rund 3,5 km/s), auf Zoon landet und
+/// ohne Tanken mit Zorit zurückkommt; auf Zorb bremsen Luft und Fallschirm.
 pub const FREIGHTER: VesselParams = VesselParams {
-    dry_mass: 1_500.0,
-    drag_area: 2.0,
-    thrust: 80_000.0,
+    dry_mass: 2_500.0,
+    drag_area: 5.0,
+    thrust: 440_000.0,
     exhaust_velocity: 3_200.0,
-    fuel_capacity: 7_500.0,
-    parachute_area: 400.0,
+    fuel_capacity: 30_000.0,
+    parachute_area: 1_000.0,
     cargo_capacity: 2_000.0,
     base_kit: false,
 };
 
-/// Basisschiff: landet einmal und wird zum Fundament einer Basis (siehe
-/// `base`). Kein Frachtraum. 3 t leer, rund 3,6 km/s Δv.
+/// Basisschiff: startet von Zorb, landet einmal und wird zum Fundament einer
+/// Basis (siehe `base`). Kein Frachtraum.
 pub const BASE_SHIP: VesselParams = VesselParams {
     dry_mass: 3_000.0,
-    drag_area: 3.0,
-    thrust: 80_000.0,
+    drag_area: 4.0,
+    thrust: 250_000.0,
     exhaust_velocity: 3_200.0,
-    fuel_capacity: 6_500.0,
+    fuel_capacity: 16_000.0,
     parachute_area: 400.0,
     cargo_capacity: 0.0,
     base_kit: true,
 };
+
+/// So viel Treibstoff haben die Schiffe der Startausstattung im Orbit: etwa,
+/// was nach einem Start von Zorb übrig ist.
+const FREIGHTER_FUEL_IN_ORBIT: f64 = 6_900.0;
+const BASE_SHIP_FUEL_IN_ORBIT: f64 = 3_100.0;
 
 /// Das Sonnensystem (`solar_system`), auf Zorb eine Startbasis, zwei
 /// Satelliten: einer stabil oberhalb der Atmosphäre, einer zu tief abgesetzt. Ohne Eingriff bremst die Luft ihn bei
@@ -215,9 +226,10 @@ pub fn demo() -> World {
         name: "Startbasis".into(),
         body: ZORB,
         location: pad,
+        kind: BaseKind::Depot,
         required: 0.0,
         delivered: 0.0,
-        fuel: None,
+        store: None,
     });
 
     let stable = state_from_apsides(
@@ -258,13 +270,38 @@ pub fn demo() -> World {
     );
     world.spawn_vessel("Mondfähre-4", FERRY, 4_000.0, ZORB, parked);
 
-    // Die Startausstattung für die erste Basis (siehe `base`), auf derselben
-    // Bahn hintereinander: ein Basisschiff und zwei Frachter mit zusammen
-    // genau den Bauteilen, die eine Basis braucht.
-    for (name, params, cargo, ahead) in [
-        ("Basisschiff-5", BASE_SHIP, 0.0, 316.0),
-        ("Frachter-6", FREIGHTER, 2_000.0, 318.0),
-        ("Frachter-7", FREIGHTER, 2_000.0, 320.0),
+    // Die Startausstattung (siehe `base`), auf derselben Bahn
+    // hintereinander: zwei Basisschiffe (für eine Mine und eine Tankstelle)
+    // und zwei Frachter mit zusammen den Bauteilen für eine Basis.
+    for (name, params, fuel, cargo, ahead) in [
+        (
+            "Basisschiff-5",
+            BASE_SHIP,
+            BASE_SHIP_FUEL_IN_ORBIT,
+            0.0,
+            316.0,
+        ),
+        (
+            "Basisschiff-6",
+            BASE_SHIP,
+            BASE_SHIP_FUEL_IN_ORBIT,
+            0.0,
+            318.0,
+        ),
+        (
+            "Frachter-7",
+            FREIGHTER,
+            FREIGHTER_FUEL_IN_ORBIT,
+            2_000.0,
+            320.0,
+        ),
+        (
+            "Frachter-8",
+            FREIGHTER,
+            FREIGHTER_FUEL_IN_ORBIT,
+            2_000.0,
+            322.0,
+        ),
     ] {
         let state = state_from_apsides(
             gm,
@@ -275,7 +312,7 @@ pub fn demo() -> World {
             f64::to_radians(ahead),
             false,
         );
-        let vessel = world.spawn_vessel(name, params, params.fuel_capacity, ZORB, state);
+        let vessel = world.spawn_vessel(name, params, fuel, ZORB, state);
         world.load_cargo(vessel, cargo);
     }
 

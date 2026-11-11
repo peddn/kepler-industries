@@ -2,8 +2,9 @@
 //!
 //! Sie erscheint für Schiffe mit Frachtraum, für Basisschiffe und für jedes
 //! Schiff, das im Umkreis einer Basis steht. Sie zeigt Fracht, Baustelle und
-//! Treibstofflager; die eine Schaltfläche darunter tut, was gerade dran ist:
-//! "Basis gründen", "Bauteile abladen" oder "Tanken".
+//! Lager; die Schaltflächen darunter tun, was dort gerade geht: an der
+//! Startbasis laden, tanken und Zorit abladen, mit dem Basisschiff gründen,
+//! an der Baustelle abladen, an der Tankstelle tanken, an der Mine laden.
 
 use crate::Sim;
 use crate::hud::UiFont;
@@ -14,36 +15,49 @@ use crate::panel::{
 use crate::status_bar::{StatusBar, over_status};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use sim::base::{FUEL_RATE, FUEL_STORAGE, SITE_RADIUS};
-use sim::{Segment, World};
+use sim::base::SITE_RADIUS;
+use sim::{BaseKind, Segment, World};
 
 #[derive(Component)]
 pub struct FrachtCard;
 
-/// Texte der Karte: die Zeilen und die Beschriftung der Schaltfläche.
+/// Texte der Karte: die Zeilen und die Beschriftungen der Schaltflächen.
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum FrachtText {
     Lines,
-    Button,
+    Button(usize),
 }
 
+/// Schaltfläche der Karte mit ihrer Nummer; sie tut, was `actions` an
+/// dieser Stelle nennt.
 #[derive(Component)]
-pub struct FrachtButton;
+pub struct FrachtButton(usize);
 
-/// Was die Schaltfläche gerade tut.
+/// So viele Schaltflächen hat die Karte höchstens.
+const BUTTONS: usize = 3;
+
+/// Was eine Schaltfläche tut.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Action {
-    Found,
+    FoundMine,
+    FoundStation,
     Unload,
     Refuel,
+    LoadZorit,
+    LoadParts,
+    DeliverZorit,
 }
 
 impl Action {
     fn label(self) -> &'static str {
         match self {
-            Action::Found => "Basis gründen",
+            Action::FoundMine => "Mine gründen",
+            Action::FoundStation => "Tankstelle gründen",
             Action::Unload => "Bauteile abladen",
             Action::Refuel => "Tanken",
+            Action::LoadZorit => "Zorit laden",
+            Action::LoadParts => "Bauteile laden",
+            Action::DeliverZorit => "Zorit abladen",
         }
     }
 }
@@ -61,21 +75,45 @@ fn landed(world: &World, vessel: usize) -> bool {
     )
 }
 
-/// Was für das Schiff gerade dran ist.
-fn action(world: &World, vessel: usize) -> Option<Action> {
+/// Was für das Schiff gerade geht (höchstens `BUTTONS`).
+fn actions(world: &World, vessel: usize) -> Vec<Action> {
     let v = &world.vessels[vessel];
     if !landed(world, vessel) || v.docked_to.is_some() || v.foundation_of.is_some() {
-        return None;
+        return Vec::new();
     }
-    if v.params.base_kit {
-        return Some(Action::Found);
+    let base = world.base_of(vessel).map(|k| &world.bases[k]);
+    let mut actions = Vec::new();
+    match base {
+        None if v.params.base_kit => {
+            actions.extend([Action::FoundMine, Action::FoundStation]);
+        }
+        None => {}
+        Some(base) if !base.complete() => {
+            if v.cargo.parts > 0.0 {
+                actions.push(Action::Unload);
+            }
+        }
+        Some(base) => match base.kind {
+            BaseKind::Depot => {
+                if v.cargo.zorit > 0.0 {
+                    actions.push(Action::DeliverZorit);
+                }
+                if v.cargo.total() < v.params.cargo_capacity {
+                    actions.push(Action::LoadParts);
+                }
+                if world.vessel_fuel(vessel) < v.params.fuel_capacity {
+                    actions.push(Action::Refuel);
+                }
+            }
+            BaseKind::FuelStation => actions.push(Action::Refuel),
+            BaseKind::Mine => {
+                if v.params.cargo_capacity > 0.0 {
+                    actions.push(Action::LoadZorit);
+                }
+            }
+        },
     }
-    let base = &world.bases[world.base_of(vessel)?];
-    if base.fuel.is_some() {
-        Some(Action::Refuel)
-    } else {
-        (!base.complete() && v.cargo > 0.0).then_some(Action::Unload)
-    }
+    actions
 }
 
 /// Die Zeilen der Karte; leer: keine Karte.
@@ -84,15 +122,23 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
     let mut lines = Vec::new();
     if v.params.cargo_capacity > 0.0 {
         lines.push(format!(
-            "Fracht: {} von {} Bauteile",
-            tons(v.cargo),
+            "Fracht: {} von {}",
+            tons(v.cargo.total()),
             tons(v.params.cargo_capacity)
         ));
+        if v.cargo.parts > 0.0 {
+            lines.push(format!("  Bauteile {}", tons(v.cargo.parts)));
+        }
+        if v.cargo.zorit > 0.0 {
+            lines.push(format!("  Zorit {}", tons(v.cargo.zorit)));
+        }
     }
     if let Some(base) = v.foundation_of {
         lines.push(format!("Fundament von {}", world.bases[base].name));
     } else if v.params.base_kit {
-        lines.push("Basisschiff: wird am Landeplatz zum Fundament einer Basis.".into());
+        lines.push(
+            "Basisschiff: wird am Landeplatz zum Fundament einer Mine oder Tankstelle.".into(),
+        );
         if !landed(world, vessel) {
             lines.push(format!(
                 "Dazu landen (nicht auf {}).",
@@ -103,6 +149,13 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
     if !landed(world, vessel) {
         return lines;
     }
+    let tank = || {
+        format!(
+            "Tank: {:.0} von {:.0} kg",
+            world.vessel_fuel(vessel).floor(),
+            world.params(world.host(vessel)).fuel_capacity
+        )
+    };
     match world.base_of(vessel).map(|k| (k, &world.bases[k])) {
         Some((_, base)) if !base.complete() => lines.push(format!(
             "{} (Baustelle):\n  {} von {} Bauteile",
@@ -110,24 +163,35 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
             tons(base.delivered),
             tons(base.required)
         )),
-        Some((k, base)) if base.fuel.is_some() => {
-            lines.push(format!(
-                "{}:\n  Treibstoff {:.0} von {:.0} kg\n  (+{:.0} kg pro Stunde)",
-                base.name,
-                world.base_fuel(k).floor(),
-                FUEL_STORAGE,
-                FUEL_RATE * 3_600.0
-            ));
-            if v.foundation_of.is_none() {
-                lines.push(format!(
-                    "Tank: {:.0} von {:.0} kg",
-                    world.vessel_fuel(vessel).floor(),
-                    world.params(world.host(vessel)).fuel_capacity
-                ));
+        Some((k, base)) => {
+            let (rate, capacity) = world.production(k);
+            let stock = world.base_stock(k).floor();
+            let per_hour = rate * 3_600.0;
+            match base.kind {
+                BaseKind::Depot => {
+                    lines.push(format!(
+                        "{}:\n  Zorit im Lager {}\n  Bauteile und Treibstoff frei",
+                        base.name,
+                        tons(world.zorit)
+                    ));
+                    lines.push(tank());
+                }
+                BaseKind::FuelStation => {
+                    lines.push(format!(
+                        "{}:\n  Treibstoff {stock:.0} von {capacity:.0} kg\n  (+{per_hour:.0} kg pro Stunde)",
+                        base.name
+                    ));
+                    if v.foundation_of.is_none() {
+                        lines.push(tank());
+                    }
+                }
+                BaseKind::Mine => lines.push(format!(
+                    "{}:\n  Zorit {stock:.0} von {capacity:.0} kg\n  (+{per_hour:.0} kg pro Stunde)",
+                    base.name
+                )),
             }
         }
-        Some(_) => {}
-        None if v.cargo > 0.0 => lines.push(format!(
+        None if v.cargo.total() > 0.0 => lines.push(format!(
             "Keine Basis im Umkreis ({:.0} km).",
             SITE_RADIUS / 1_000.0
         )),
@@ -155,14 +219,16 @@ pub fn setup(mut commands: Commands, font: Res<UiFont>, panel: Single<Entity, Wi
         .with_children(|card| {
             card.spawn(text(font, "Fracht & Basis", 16.0));
             card.spawn((FrachtText::Lines, text(font, "", 14.0)));
-            card.spawn((
-                PanelButton,
-                FrachtButton,
-                button_node(percent(100)),
-                BackgroundColor(BUTTON_COLOR),
-                BorderColor::all(BORDER_COLOR),
-            ))
-            .with_child((FrachtText::Button, text(font, "", 14.0)));
+            for k in 0..BUTTONS {
+                card.spawn((
+                    PanelButton,
+                    FrachtButton(k),
+                    button_node(percent(100)),
+                    BackgroundColor(BUTTON_COLOR),
+                    BorderColor::all(BORDER_COLOR),
+                ))
+                .with_child((FrachtText::Button(k), text(font, "", 14.0)));
+            }
         })
         .id();
     commands.entity(*panel).add_child(card);
@@ -173,7 +239,7 @@ pub fn sync(
     sim: Res<Sim>,
     selection: Res<Selection>,
     mut card: Single<&mut Node, With<FrachtCard>>,
-    mut button: Single<&mut Node, (With<FrachtButton>, Without<FrachtCard>)>,
+    mut buttons: Query<(&FrachtButton, &mut Node), Without<FrachtCard>>,
     mut texts: Query<(&FrachtText, &mut Text)>,
 ) {
     let world = &sim.0;
@@ -186,16 +252,18 @@ pub fn sync(
         return;
     };
     card.display = Display::Flex;
-    let action = action(world, vessel);
-    button.display = if action.is_some() {
-        Display::Flex
-    } else {
-        Display::None
-    };
+    let actions = actions(world, vessel);
+    for (button, mut node) in &mut buttons {
+        node.display = if button.0 < actions.len() {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
     for (which, mut text) in &mut texts {
         let value = match which {
             FrachtText::Lines => lines.join("\n"),
-            FrachtText::Button => action.map_or("", Action::label).into(),
+            FrachtText::Button(k) => actions.get(*k).map_or("", |a| a.label()).into(),
         };
         if text.0 != value {
             text.0 = value;
@@ -203,7 +271,7 @@ pub fn sync(
     }
 }
 
-/// Klick auf die Schaltfläche der Karte.
+/// Klick auf eine Schaltfläche der Karte.
 #[allow(clippy::too_many_arguments)]
 pub fn buttons(
     mut sim: ResMut<Sim>,
@@ -213,7 +281,7 @@ pub fn buttons(
     mut message: ResMut<UiMessage>,
     window: Single<&Window, With<PrimaryWindow>>,
     status: Res<StatusBar>,
-    button: Single<(&ComputedNode, &UiGlobalTransform), With<FrachtButton>>,
+    buttons: Query<(&FrachtButton, &ComputedNode, &UiGlobalTransform)>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
         return;
@@ -228,22 +296,42 @@ pub fn buttons(
     let (Some(vessel), Some(cursor)) = (selection.0, physical_cursor(&window)) else {
         return;
     };
-    let Some(action) = action(world, vessel) else {
+    let actions = actions(world, vessel);
+    let Some(action) = buttons
+        .iter()
+        .find(|(_, node, transform)| node.contains_point(**transform, cursor))
+        .and_then(|(button, ..)| actions.get(button.0).copied())
+    else {
         return;
     };
-    if !button.0.contains_point(*button.1, cursor) {
-        return;
-    }
     let name = world.vessels[vessel].name.clone();
     let done = match action {
         // Gründen steht schon im Protokoll.
-        Action::Found => world.found_base(vessel).map(|_| String::new()),
+        Action::FoundMine => world
+            .found_base(vessel, BaseKind::Mine)
+            .map(|_| String::new()),
+        Action::FoundStation => world
+            .found_base(vessel, BaseKind::FuelStation)
+            .map(|_| String::new()),
         Action::Unload => world
             .unload(vessel)
             .map(|kg| format!("{name}: {} Bauteile abgeladen", tons(kg))),
         Action::Refuel => world
             .refuel(vessel)
             .map(|kg| format!("{name}: {kg:.0} kg getankt")),
+        Action::LoadZorit => world
+            .load_zorit(vessel)
+            .map(|kg| format!("{name}: {} Zorit geladen", tons(kg))),
+        Action::LoadParts => world
+            .load_parts(vessel)
+            .map(|kg| format!("{name}: {} Bauteile geladen", tons(kg))),
+        Action::DeliverZorit => world.deliver_zorit(vessel).map(|kg| {
+            format!(
+                "{name}: {} Zorit abgeladen, im Lager {}",
+                tons(kg),
+                tons(world.zorit)
+            )
+        }),
     };
     let text = done.unwrap_or_else(|e| e.to_string());
     if !text.is_empty() {
