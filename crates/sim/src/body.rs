@@ -209,6 +209,10 @@ pub struct Body {
     /// Häufigkeit von Zorit: so viel fasst das Lager einer Mine hier (kg),
     /// so viel gibt es also höchstens pro Abholung (siehe `base`). 0: keins.
     pub zorit: f64,
+    /// Grundwert für Daten in GB: Aufgaben an diesem Körper bringen
+    /// Vielfache davon (siehe `task`). 0: keine Aufgaben.
+    #[serde(default)]
+    pub data: f64,
 }
 
 /// Umlaufzeit einer Kreisbahn mit Radius `radius` um einen Körper mit `gm`;

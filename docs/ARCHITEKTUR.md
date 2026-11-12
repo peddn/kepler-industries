@@ -959,14 +959,41 @@ Fundament wiegt 1.500 kg und belegt 3 t (0,4 t Zorit). Ein Schiff trägt nur
 eine Sorte Triebwerk. Startentwürfe: Frachter = Mittel + 2 × Z-1, 14 t Tank,
 2 t Fracht; Basisschiff = Klein + Z-1 + Fundament, 7 t Tank; beide 1 t Zorit,
 beide löschbar. Ein Basisschiff mit freiem Innenraum darf Fracht tragen.
-Entdeckungen geben Daten in GB (erste Umlaufbahn / Landung / Basis: Zorb
-5 / – / –, Zoon 5 / 10 / 15, Zill 10 / 20 / 30, Nura 15 / 30 / 45; zusammen
-185, der Techtree kostet 160). Umbau am gelandeten Schiff an der Startbasis,
+Daten kommen von Aufgaben (siehe unten); die Preise im Techtree werden mit
+ihm festgelegt. Umbau am gelandeten Schiff an der Startbasis,
 das alte Teil wird voll in Zorit erstattet.
 
-**Daten** sind später der zweite Zähler auf Zorb (bestimmen, *was* man bauen
-kann; Zorit, *wie viel*). Sie sind keine Fracht: Sie werden gefunkt, und jede
-Entdeckung zählt einmal. Nur Proben wären Fracht.
+**Daten und Aufgaben** (`sim::task`; gebaut): Daten (GB) sind der zweite
+Zähler (bestimmen später, *was* man bauen kann; Zorit, *wie viel*). Sie sind
+keine Fracht und gehören keinem Ort: Sie werden gefunkt und sofort
+gutgeschrieben.
+
+- *Ein System für alles:* Eine Aufgabe ist Körper, Ziel und Belohnung. Ziele
+  sind eine Umlaufbahn nach Vorgabe, eine Landung oder eine fertige Basis.
+  Die feste Liste leitet sich aus den Körpern ab (Grundwert `Body::data`:
+  Zorb 5, Zoon 5, Zill 10, Nura 15; niedrige und hohe Umlaufbahn einfach,
+  polare und Landung doppelt, Basis dreifach; zusammen 290 GB).
+  Storymissionen und erzeugte Aufträge sind später weitere Einträge derselben
+  Art.
+- *Orbitvorgaben sind Bereiche* für Periapsis, Apoapsis und Bahnneigung. Die
+  Breite des Bereichs ist die Toleranz. Die Grenzen der festen Aufgaben
+  folgen aus Radius und Luftgrenze des Körpers (niedrig: bis ein Viertel
+  Radius über Luft oder Boden; hoch: ab zwei Radien).
+- *Gezählt wird an Ereignissen des Protokolls* (Brennschluss, Landung, Basis
+  fertig): Jeder Eintrag wird beim Eintragen geprüft, der Eintrag
+  „Aufgabe erfüllt" steht direkt dahinter. Der Brennschluss trägt dafür
+  Körper und Bahnneigung. So hängt nichts von der Schrittgröße ab, und es
+  zählt nur, was ein Schiff wirklich tut: Vorbeiflüge und Schiffe, die schon
+  auf einer Bahn stehen, zählen nicht. Der Booster erfüllt nichts.
+- *Vorschau statt Fummeln:* Die Karte „Manöver" zeigt beim Node, welche
+  offenen Aufgaben die Bahn danach erfüllt (`World::tasks_met_by`, dieselbe
+  Prüfung wie beim Zählen).
+- *Noch offen:* Proben zurückbringen (eine neue Fracht; mehr Masse bringt
+  mehr Daten, mit einer Obergrenze je Körper, damit sich Daten nicht endlos
+  farmen lassen). Zufällig erzeugte Vorgaben: Der Zufall müsste in den
+  Spielstand, und Daten wären nicht mehr endlich; das entscheidet sich mit
+  der Story-Kampagne. Die Preise im Techtree richten sich nach der Menge an
+  Daten, die es dann gibt.
 
 Noch offen: Umladen im Verbund (im Orbit).
 

@@ -5,6 +5,7 @@
 //! Kante.
 
 use crate::camera::CameraRig;
+use crate::fracht::tons_fine;
 use crate::hud::{self, format_time};
 use crate::side::{Edge, Side};
 use crate::{TimeWarp, focus};
@@ -19,7 +20,7 @@ pub struct Panels {
     pub ships: bool,
     /// Angaben zur Auswahl in der linken Leiste.
     pub info: bool,
-    /// Fenster mit dem Überblick über Basen und Fracht.
+    /// Fenster mit dem Überblick über Basen, Fracht und Aufgaben.
     pub economy: bool,
     /// Fenster mit dem Schiffseditor.
     pub designs: bool,
@@ -59,7 +60,14 @@ pub fn show(
         // laufen.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.toggle_value(&mut panels.help, "Hilfe");
-            ui.toggle_value(&mut panels.economy, "Wirtschaft");
+            // Die Daten gehören dem Spieler, nicht einem Ort, und stehen
+            // deshalb hier; ein Klick öffnet die Übersicht dazu.
+            ui.toggle_value(&mut panels.economy, format!("Daten {:.0} GB", world.data))
+                .on_hover_text(format!(
+                    "Daten aus erfüllten Aufgaben. Klick: Wirtschaft und Aufgaben.\n\
+                     Im Lager der Startbasis: Zorit {}",
+                    tons_fine(world.zorit)
+                ));
             ui.toggle_value(&mut panels.designs, "Entwürfe");
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.label(format_time(world.time, hud::day(world)));

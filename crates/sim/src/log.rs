@@ -42,6 +42,12 @@ pub enum LogKind {
     BurnEnd {
         apoapsis: Option<f64>,
         periapsis: f64,
+        /// Um welchen Körper.
+        #[serde(default)]
+        body: BodyId,
+        /// Bahnneigung gegen den Äquator in Grad.
+        #[serde(default)]
+        inclination: f64,
     },
     /// Eintritt in die Atmosphäre.
     AtmosphereEntry { periapsis: f64 },
@@ -71,4 +77,6 @@ pub enum LogKind {
     SoiExit { body: BodyId },
     /// Der Booster hat sich bei Brennschluss vom Schiff `ship` getrennt.
     Separated { ship: usize },
+    /// Die Aufgabe mit dieser Nummer ist erfüllt (siehe `task`).
+    TaskDone { task: usize },
 }

@@ -75,6 +75,7 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
         LogKind::BurnEnd {
             apoapsis,
             periapsis,
+            ..
         } => (
             format!(
                 "Brennschluss, Ap {}  Pe {}",
@@ -137,6 +138,16 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             ),
             TEXT_COLOR,
         ),
+        LogKind::TaskDone { task } => {
+            let task = &world.tasks[*task];
+            (
+                format!(
+                    "Aufgabe erfüllt: {} ({}), +{:.0} GB",
+                    task.title, world.bodies[task.body].name, task.data
+                ),
+                LANDED_COLOR,
+            )
+        }
         LogKind::Separated { ship } => (
             format!("trennt sich von {}", world.vessels[*ship].name),
             TEXT_COLOR,

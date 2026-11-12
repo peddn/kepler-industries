@@ -279,11 +279,11 @@ impl World {
             radius: SITE_RADIUS,
         });
         self.vessels[vessel].foundation_of = Some(base);
-        self.log.push(LogEntry {
+        self.push_log([LogEntry {
             time: self.time,
             vessel,
             kind: LogKind::BaseFounded { base },
-        });
+        }]);
         Ok(base)
     }
 
@@ -306,11 +306,11 @@ impl World {
                 amount: 0.0,
                 since: self.time,
             });
-            self.log.push(LogEntry {
+            self.push_log([LogEntry {
                 time: self.time,
                 vessel,
                 kind: LogKind::BaseCompleted { base },
-            });
+            }]);
         }
         Ok(amount)
     }
@@ -376,11 +376,11 @@ impl World {
         let params = design.params();
         let vessel = self.spawn_landed(&name, params, params.fuel_capacity, body, pad);
         self.vessels[vessel].design = Some(design);
-        self.log.push(LogEntry {
+        self.push_log([LogEntry {
             time: self.time,
             vessel,
             kind: LogKind::Ordered,
-        });
+        }]);
         Ok(vessel)
     }
 

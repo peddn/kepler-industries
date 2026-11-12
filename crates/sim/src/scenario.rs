@@ -4,6 +4,7 @@ use crate::body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint, circular_pe
 use crate::design::Design;
 use crate::kepler::state_from_apsides;
 use crate::landing::LandingZone;
+use crate::task;
 use crate::world::{Base, BaseKind, VesselParams, World};
 use std::f64::consts::PI;
 
@@ -26,6 +27,7 @@ pub fn sun() -> Body {
         atmosphere: Atmosphere::NONE,
         orbit: None,
         zorit: 0.0,
+        data: 0.0,
     }
 }
 
@@ -49,6 +51,7 @@ pub fn home_planet() -> Body {
         },
         orbit: None,
         zorit: 0.0,
+        data: 5.0,
     }
 }
 
@@ -76,6 +79,7 @@ pub fn moon(parent: BodyId, planet: &Body) -> Body {
         atmosphere: Atmosphere::NONE,
         orbit: Some(BodyOrbit::circular(parent, distance, PI)),
         zorit: 1_000.0,
+        data: 5.0,
     }
 }
 
@@ -106,6 +110,7 @@ pub fn outer_moon(parent: BodyId) -> Body {
             mean_anomaly: 2.2,
         }),
         zorit: 2_000.0,
+        data: 10.0,
     }
 }
 
@@ -138,6 +143,7 @@ pub fn nura(parent: BodyId) -> Body {
             mean_anomaly: 1.52,
         }),
         zorit: 4_000.0,
+        data: 15.0,
     }
 }
 
@@ -257,6 +263,7 @@ fn add_booster(world: &mut World) {
 /// Sonnensystem und Startbasis, noch ohne Booster.
 fn base_world() -> World {
     let mut world = World::new(solar_system());
+    world.tasks = task::standard(&world.bodies, ZORB);
     world.designs = vec![Design::base_ship(), Design::freighter()];
     world.home = ZORB;
     world.zorit = START_ZORIT;
