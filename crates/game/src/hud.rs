@@ -573,7 +573,7 @@ fn lines(
     lines.extend(
         [
             "Linksklick: Schiff / Zielgebiet / Mond / Node wählen, Node setzen",
-            "Griffe ziehen: Δv (Umschalt: fein)   Node ziehen: verschieben",
+            "Griffe ziehen: Δv (Umschalt: fein)   Node ziehen: verschieben (Strg: ohne Griffe)",
             "↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff",
             "H: Zeitraffer-Stopp   , / .: Zeitraffer   Leertaste: Pause",
             "Rechte Maustaste ziehen: drehen   Mausrad: zoomen",

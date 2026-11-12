@@ -389,7 +389,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
-| Node ziehen | Node entlang seiner Bahn verschieben; spätere Nodes wandern mit. Auf einer Bahn durch die Luft kommt er nach innen gezogen auf einen späteren Umlauf („+N Umläufe“) |
+| Node ziehen | Node entlang seiner Bahn verschieben; spätere Nodes wandern mit. Liegen Mitte und ein Griff nah beieinander, greift der Klick, was näher am Mauszeiger ist; mit `Strg` sind die Griffe aus, man verschiebt nur. Auf einer Bahn durch die Luft kommt er nach innen gezogen auf einen späteren Umlauf („+N Umläufe“) |
 | `Entf` / `Rücktaste` | gewählten Node löschen |
 | `F5` / `F9` | Spielstand speichern / laden (siehe unten) |
 | `H` | Zeitraffer-Stopp für das gewählte Schiff an/aus: Beginnt es zu brennen, hält der Zeitraffer genau dort an und schaltet auf 1× |

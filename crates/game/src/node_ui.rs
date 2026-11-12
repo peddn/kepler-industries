@@ -177,6 +177,15 @@ pub enum Drag {
     },
 }
 
+/// Greift ein Klick den Griff (Abstand `handle` zum Mauszeiger in Pixeln)
+/// oder die Mitte eines Nodes (`node`, falls eine in Reichweite ist)? Der
+/// Griff gewinnt nur, wenn er näher liegt: Zeigt er auf die Kamera zu, liegt
+/// er im Bild auf der Mitte und nähme sonst jeden Klick dorthin weg. Mit
+/// `only_move` (Strg) sind die Griffe ganz aus, man verschiebt nur.
+fn grabs_handle(handle: f32, node: Option<f32>, only_move: bool) -> bool {
+    !only_move && node.is_none_or(|node| handle < node)
+}
+
 /// Eigene Gizmo-Gruppe für Nodes und Griffe. Sie wird von der Overlay-Kamera
 /// gezeichnet und liegt damit immer über der Welt, sonst verschwände z. B. der
 /// Griff "radial nach innen" bei niedrigen Bahnen im Planeten.
@@ -534,13 +543,15 @@ pub fn input(
                     .map(|s| s.distance(cursor))
                     .filter(|&d| d < PICK_RADIUS)
             };
-            // Zuerst die Griffe des gewählten Nodes, dann alle Nodes.
+            // Die Griffe des gewählten Nodes und alle Nodes: Gegriffen wird,
+            // was dem Mauszeiger am nächsten ist (`grabs_handle`).
             let handle = selected_node(world, &selection, &selected).and_then(|(_, k)| {
                 let plan = trajectory.nodes()[k].plan.ok()?;
                 let position = node_position(world, trajectory, &plan);
                 let (_, handles) = node_geometry(&plan, position, rig.focus, projector.eye);
-                let handle = (0..6).find(|&h| near(handles[h]).is_some())?;
-                Some((k, handle))
+                (0..6)
+                    .filter_map(|h| near(handles[h]).map(|d| (d, k, h)))
+                    .min_by(|a, b| a.0.total_cmp(&b.0))
             });
             let node = trajectory
                 .plans()
@@ -549,7 +560,10 @@ pub fn input(
                     near(to_view(node_position(world, trajectory, plan), rig.focus)).map(|d| (d, k))
                 })
                 .min_by(|a, b| a.0.total_cmp(&b.0));
-            if let Some((index, handle)) = handle {
+            let only_move =
+                keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight);
+            let handle = handle.filter(|&(d, ..)| grabs_handle(d, node.map(|n| n.0), only_move));
+            if let Some((_, index, handle)) = handle {
                 *drag = Drag::Handle {
                     index,
                     handle,
@@ -881,6 +895,18 @@ pub fn draw(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Griff und Mitte beide in Reichweite: Das Nähere gewinnt, bei
+    /// Gleichstand die Mitte. Mit Strg nie der Griff.
+    #[test]
+    fn nearest_of_handle_and_node_is_grabbed() {
+        assert!(grabs_handle(3.0, None, false));
+        assert!(grabs_handle(3.0, Some(12.0), false));
+        assert!(!grabs_handle(8.0, Some(2.0), false));
+        assert!(!grabs_handle(5.0, Some(5.0), false));
+        assert!(!grabs_handle(3.0, None, true));
+        assert!(!grabs_handle(3.0, Some(12.0), true));
+    }
 
     #[test]
     fn tank_limit_caps_growth_but_allows_shrinking() {
