@@ -9,12 +9,16 @@ mod dv_bar;
 mod focus;
 mod fracht;
 mod hud;
+mod left_bar;
+mod maneuver_card;
 mod node_ui;
 mod rendezvous;
 mod savegame;
+mod side;
 mod start_card;
 mod status_bar;
 mod target_card;
+mod top_bar;
 mod ui;
 mod verbund;
 mod view;
@@ -308,6 +312,8 @@ fn main() {
     .insert_resource(zone)
     .init_resource::<node_ui::SelectedBody>()
     .init_resource::<ui::WorldLabels>()
+    .init_resource::<ui::MapArea>()
+    .init_resource::<top_bar::Panels>()
     .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<status_bar::StatusBar>()
     .init_resource::<verbund::UndockChoice>()
@@ -325,7 +331,7 @@ fn main() {
                 focus::keys,
                 focus::follow,
                 // Über der Oberfläche gehören Mausrad und Ziehen dieser.
-                camera::input.run_if(not(bevy_egui::input::egui_wants_any_pointer_input)),
+                camera::input.run_if(ui::pointer_on_map),
                 camera::apply,
             )
                 .chain(),
