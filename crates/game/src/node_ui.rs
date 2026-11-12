@@ -15,15 +15,11 @@
 
 use crate::Sim;
 use crate::camera::{CameraRig, Focus, MainCamera, OVERLAY_LAYER, dir_to_view, to_view};
-use crate::dv_bar::{BarShown, over_bar};
-use crate::hud::UiFont;
-use crate::status_bar::{StatusBar, over_status};
-use crate::ui::PanelShown;
+use crate::ui::WorldLabels;
 use crate::view::{self, orbit_points};
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use bevy::text::FontSize;
 use bevy::window::PrimaryWindow;
 use bevy_egui::input::EguiWantsInput;
 use sim::body::body_state;
@@ -193,27 +189,8 @@ pub fn configure_gizmos(mut store: ResMut<GizmoConfigStore>) {
     config.line.width = 2.5;
 }
 
-/// Etikett neben dem gewählten Node: nach wie vielen Umläufen er kommt.
-#[derive(Component)]
-pub struct NodeLabel;
-
-pub fn setup_label(mut commands: Commands, font: Res<UiFont>) {
-    commands.spawn((
-        NodeLabel,
-        Text::new(""),
-        TextFont {
-            font: font.0.clone().into(),
-            font_size: FontSize::Px(14.0),
-            ..default()
-        },
-        TextColor(Color::srgb(1.0, 0.9, 0.6)),
-        Node {
-            position_type: PositionType::Absolute,
-            display: Display::None,
-            ..default()
-        },
-    ));
-}
+/// Farbe des Etiketts am gewählten Node.
+const LABEL_COLOR: Color = Color::srgb(1.0, 0.9, 0.6);
 
 /// "1 Umlauf", "3 Umläufe".
 pub fn revolutions_text(n: u32) -> String {
@@ -224,41 +201,35 @@ pub fn revolutions_text(n: u32) -> String {
     }
 }
 
-/// Etikett an den gewählten Node schieben. Nur wenn er mindestens einen
-/// Umlauf nach dem vorherigen Brennen (oder nach jetzt) kommt.
-pub fn sync_label(
+/// Etikett am gewählten Node: nach wie vielen Umläufen er kommt. Nur wenn er
+/// mindestens einen Umlauf nach dem vorherigen Brennen (oder nach jetzt)
+/// kommt.
+pub fn label(
     sim: Res<Sim>,
     selection: Res<Selection>,
     selected: Res<SelectedNode>,
     rig: Res<CameraRig>,
     camera: Single<(&Camera, &Transform), With<MainCamera>>,
-    mut label: Single<(&mut Node, &mut Text), With<NodeLabel>>,
+    mut labels: ResMut<WorldLabels>,
 ) {
     let world = &sim.0;
     let (camera, transform) = *camera;
-    let shown = selected_node(world, &selection, &selected).and_then(|(i, k)| {
-        let plan = world.vessels[i].trajectory.nodes()[k].plan.ok()?;
-        let n = world.revolutions_before_node(i, k).filter(|&n| n > 0)?;
-        let node = to_view(
-            node_position(world, &world.vessels[i].trajectory, &plan),
-            rig.focus,
-        );
-        let screen = camera
-            .world_to_viewport(&GlobalTransform::from(*transform), node)
-            .ok()?;
-        Some((screen, n))
-    });
-    let (node, text) = &mut *label;
-    let Some((screen, n)) = shown else {
-        node.display = Display::None;
+    let Some((i, k)) = selected_node(world, &selection, &selected) else {
         return;
     };
-    node.display = Display::Flex;
-    node.left = px(screen.x + LABEL_OFFSET.x);
-    node.top = px(screen.y + LABEL_OFFSET.y);
-    let wanted = format!("+{}", revolutions_text(n));
-    if text.0 != wanted {
-        text.0 = wanted;
+    let Ok(plan) = world.vessels[i].trajectory.nodes()[k].plan else {
+        return;
+    };
+    let Some(n) = world.revolutions_before_node(i, k).filter(|&n| n > 0) else {
+        return;
+    };
+    let node = to_view(
+        node_position(world, &world.vessels[i].trajectory, &plan),
+        rig.focus,
+    );
+    if let Ok(screen) = camera.world_to_viewport(&GlobalTransform::from(*transform), node) {
+        let text = format!("+{}", revolutions_text(n));
+        labels.add(screen + LABEL_OFFSET, text, LABEL_COLOR);
     }
 }
 
@@ -479,12 +450,7 @@ pub fn input(
     keys: Res<ButtonInput<KeyCode>>,
     real_time: Res<Time<Real>>,
     mut rig: ResMut<CameraRig>,
-    (shown, egui, bar, status): (
-        Res<PanelShown>,
-        Res<EguiWantsInput>,
-        Res<BarShown>,
-        Res<StatusBar>,
-    ),
+    egui: Res<EguiWantsInput>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<MainCamera>>,
 ) {
@@ -554,10 +520,8 @@ pub fn input(
     let (camera, transform) = *camera;
     let projector = Projector::new(camera, transform, rig.focus, world);
 
-    // Klicks auf Seitenleiste, Δv-Balken und Statusleiste gehören diesen.
-    let over_ui = egui.wants_any_pointer_input()
-        || over_bar(&bar, &shown, &window, cursor)
-        || over_status(&status, &window, cursor);
+    // Klicks auf die Oberfläche gehören dieser.
+    let over_ui = egui.wants_any_pointer_input();
     if buttons.just_pressed(MouseButton::Left) && !over_ui {
         *drag = Drag::Pending(cursor);
         if let Some(i) = selection.0

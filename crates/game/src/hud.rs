@@ -1,72 +1,18 @@
 //! Textanzeige: Spielzeit, Zeitraffer, Zustand der Schiffe, Bedienhilfe.
 
+use crate::TimeWarp;
 use crate::camera::CameraRig;
 use crate::focus;
 use crate::node_ui::{self, SelectedBody, SelectedNode, SelectedZone, Selection};
 use crate::rendezvous::distance_text;
-use crate::{Sim, TimeWarp};
-use bevy::prelude::*;
-use bevy::text::FontSize;
+use bevy_egui::egui;
 use sim::body::{body_state, orbital_period, sphere_of_influence};
 use sim::{
     Crash, Event, LandingBurn, Plan, Segment, SurfacePoint, Touchdown, VesselStatus, World, kepler,
 };
 use std::ops::Range;
 
-#[derive(Component)]
-pub struct Hud;
-
-/// Teil der Anzeige in Rot (ungültige Nodes) und der Rest danach.
-#[derive(Component)]
-pub struct HudWarning;
-
-#[derive(Component)]
-pub struct HudRest;
-
-const WARNING_COLOR: Color = Color::srgb(1.0, 0.35, 0.3);
-
-/// Schrift für alle Texte.
-#[derive(Resource)]
-pub struct UiFont(pub Handle<Font>);
-
-pub fn load_font(mut commands: Commands, mut fonts: ResMut<Assets<Font>>) {
-    // Bevys eingebaute Schrift hat nur ASCII (keine Umlaute). Fira Mono ist die
-    // vollständige Fassung davon (SIL Open Font License, siehe assets/fonts).
-    // Eingebettet statt geladen: funktioniert unabhängig vom Arbeitsverzeichnis.
-    let font = fonts.add(Font::from_bytes(
-        include_bytes!("../assets/fonts/FiraMono-Regular.ttf").to_vec(),
-    ));
-    commands.insert_resource(UiFont(font));
-}
-
-pub fn setup(mut commands: Commands, font: Res<UiFont>) {
-    let text_font = TextFont {
-        font: font.0.clone().into(),
-        font_size: FontSize::Px(15.0),
-        ..default()
-    };
-    commands
-        .spawn((
-            Hud,
-            Text::new(""),
-            text_font.clone(),
-            Node {
-                position_type: PositionType::Absolute,
-                top: px(12),
-                left: px(12),
-                ..default()
-            },
-        ))
-        .with_children(|hud| {
-            hud.spawn((
-                HudWarning,
-                TextSpan::new(""),
-                text_font.clone(),
-                TextColor(WARNING_COLOR),
-            ));
-            hud.spawn((HudRest, TextSpan::new(""), text_font));
-        });
-}
+const WARNING_COLOR: egui::Color32 = egui::Color32::from_rgb(255, 89, 77);
 
 /// Länge eines Tags in s: eine Umdrehung des Heimatplaneten. Überall gilt
 /// diese eine Zeit (wie die Kerbin-Zeit in KSP), auch beim Mond.
@@ -477,20 +423,16 @@ fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
     lines
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn update(
-    sim: Res<Sim>,
-    warp: Res<TimeWarp>,
-    selection: Res<Selection>,
-    selected: Res<SelectedNode>,
-    zone: Res<SelectedZone>,
-    body: Res<SelectedBody>,
-    rig: Res<CameraRig>,
-    mut text: Single<&mut Text, With<Hud>>,
-    mut warning: Single<&mut TextSpan, (With<HudWarning>, Without<HudRest>)>,
-    mut rest: Single<&mut TextSpan, (With<HudRest>, Without<HudWarning>)>,
-) {
-    let world = &sim.0;
+/// Die Zeilen der Anzeige links und welche davon rot sind (Warnung).
+fn lines(
+    world: &World,
+    warp: &TimeWarp,
+    selection: &Selection,
+    selected: &SelectedNode,
+    zone: &SelectedZone,
+    body: &SelectedBody,
+    rig: &CameraRig,
+) -> (Vec<String>, Range<usize>) {
     let mut lines = vec![format!(
         "{}    Zeitraffer {}×{}    Kamera: {}{}",
         format_time(world.time, day(world)),
@@ -587,7 +529,7 @@ pub fn update(
     }
     let mut red = 0..0;
     if let Some(i) = selection.0 {
-        let chosen = node_ui::selected_node(world, &selection, &selected).map(|(_, k)| k);
+        let chosen = node_ui::selected_node(world, selection, selected).map(|(_, k)| k);
         lines.push(String::new());
         let (details, warning) = selected_details(world, i, chosen);
         red = lines.len() + warning.start..lines.len() + warning.end;
@@ -639,23 +581,34 @@ pub fn update(
         ]
         .map(String::from),
     );
-    // Drei Teile: davor, rot, danach. Ohne rote Zeilen steht alles im ersten.
-    let (before, red, after) = if red.is_empty() {
-        (lines.join("\n"), String::new(), String::new())
-    } else {
-        (
-            lines[..red.start].join("\n") + "\n",
-            lines[red.clone()].join("\n"),
-            "\n".to_owned() + &lines[red.end..].join("\n"),
-        )
-    };
-    for (target, value) in [
-        (&mut text.0, before),
-        (&mut warning.0, red),
-        (&mut rest.0, after),
-    ] {
-        if *target != value {
-            *target = value;
-        }
+    (lines, red)
+}
+
+/// Zeichnet die Anzeige links oben in die freie Fläche (`painter` ist auf
+/// sie begrenzt, `origin` ihre Ecke): reine Information ohne eigene Fläche,
+/// Klicks gehen hindurch an die Karte.
+#[allow(clippy::too_many_arguments)]
+pub fn show(
+    painter: &egui::Painter,
+    origin: egui::Pos2,
+    font: &egui::FontId,
+    world: &World,
+    warp: &TimeWarp,
+    selection: &Selection,
+    selected: &SelectedNode,
+    zone: &SelectedZone,
+    body: &SelectedBody,
+    rig: &CameraRig,
+) {
+    let (lines, red) = lines(world, warp, selection, selected, zone, body, rig);
+    let mut at = origin + egui::vec2(12.0, 12.0);
+    for (k, line) in lines.into_iter().enumerate() {
+        let color = if red.contains(&k) {
+            WARNING_COLOR
+        } else {
+            egui::Color32::WHITE
+        };
+        painter.text(at, egui::Align2::LEFT_TOP, line, font.clone(), color);
+        at.y += font.size + 3.0;
     }
 }

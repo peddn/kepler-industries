@@ -3,17 +3,22 @@
 //! keinen Abgleich von Texten; eine Karte ist eine Funktion, die die Welt
 //! liest, zeichnet und bei einem Klick ändert.
 //!
-//! Bisher hier: die Seitenleiste rechts mit allem, was man bedienen kann, je
-//! nach Lage als Karte. Statusleiste, Δv-Balken und die Anzeige links folgen.
+//! Aufbau des Bildes: unten die Statusleiste mit dem Protokoll, rechts die
+//! Seitenleiste mit allem, was man bedienen kann (je nach Lage als Karte),
+//! unten links davon der Δv-Balken, links oben die Anzeige (reine
+//! Information), dazu Beschriftungen an Punkten der Karte (`WorldLabels`).
 //!
 //! Klicks auf die Oberfläche gehen nicht an die Karte dahinter: Die Eingabe
 //! der 3D-Ansicht fragt egui (`EguiWantsInput`).
 
-use crate::node_ui::{SelectedZone, Selection, UiMessage};
+use crate::camera::CameraRig;
+use crate::node_ui::{
+    SelectedBody, SelectedNode, SelectedZone, Selection, UiMessage, selected_node,
+};
 use crate::rendezvous::Rendezvous;
 use crate::status_bar::{self, StatusBar};
 use crate::verbund::UndockChoice;
-use crate::{Sim, depot, fracht, start_card, target_card, verbund};
+use crate::{Sim, TimeWarp, depot, dv_bar, fracht, hud, start_card, target_card, verbund};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use sim::{Segment, World};
@@ -26,9 +31,16 @@ pub const PANEL_WIDTH: f32 = 330.0;
 const TEXT_SIZE: f32 = 14.0;
 const HEADING_SIZE: f32 = 16.0;
 
-/// Ist die Seitenleiste gerade zu sehen? (Der Δv-Balken weicht ihr aus.)
+/// Beschriftungen an Punkten der Karte (Bildschirmkoordinaten) für das
+/// nächste Bild: Die 3D-Ansicht trägt sie ein, `draw` zeichnet und leert sie.
 #[derive(Resource, Default)]
-pub struct PanelShown(pub bool);
+pub struct WorldLabels(Vec<(Vec2, String, Color)>);
+
+impl WorldLabels {
+    pub fn add(&mut self, at: Vec2, text: String, color: Color) {
+        self.0.push((at, text, color));
+    }
+}
 
 /// Hinweise an den Spieler aus der Oberfläche (erscheinen in der
 /// Statusleiste).
@@ -125,20 +137,30 @@ fn intact(world: &World, selection: &Selection) -> Option<usize> {
     })
 }
 
+/// Was gerade gewählt ist.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct Selected<'w> {
+    vessel: ResMut<'w, Selection>,
+    node: Res<'w, SelectedNode>,
+    zone: Res<'w, SelectedZone>,
+    body: Res<'w, SelectedBody>,
+}
+
 /// Zeichnet die Oberfläche.
 #[allow(clippy::too_many_arguments)]
 pub fn draw(
     mut contexts: EguiContexts,
     mut styled: Local<bool>,
     mut sim: ResMut<Sim>,
-    mut selection: ResMut<Selection>,
-    zone: Res<SelectedZone>,
+    mut selected: Selected,
     rendezvous: Res<Rendezvous>,
-    status: Res<StatusBar>,
+    warp: Res<TimeWarp>,
+    rig: Res<CameraRig>,
     real_time: Res<Time<Real>>,
+    mut status: ResMut<StatusBar>,
     mut choice: ResMut<UndockChoice>,
     mut message: ResMut<UiMessage>,
-    mut shown: ResMut<PanelShown>,
+    mut labels: ResMut<WorldLabels>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if !*styled {
@@ -146,43 +168,69 @@ pub fn draw(
         *styled = true;
     }
     let world = &mut sim.0;
-    let mut notes = Notes {
-        message: &mut message,
-        time: world.time,
-        real: real_time.elapsed_secs_f64(),
-    };
-    let vessel = intact(world, &selection);
-    let at_depot = depot::selected(world, &zone, &selection);
-    shown.0 = vessel.is_some() || at_depot;
-    if !shown.0 {
-        return Ok(());
-    }
-
-    // Die Statusleiste unten gehört noch nicht zu egui: Platz lassen.
-    let mut screen = ctx.viewport_rect();
-    screen.max.y -= status_bar::height(&status);
     let mut root = egui::Ui::new(
         ctx.clone(),
         "root".into(),
         egui::UiBuilder::new()
             .layer_id(egui::LayerId::background())
-            .max_rect(screen),
+            .max_rect(ctx.viewport_rect()),
     );
-    egui::Panel::right("sidebar")
-        .resizable(false)
-        .exact_size(PANEL_WIDTH)
-        .show(&mut root, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                if let Some(vessel) = vessel {
-                    start_card::show(ui, world, vessel, &mut notes);
-                    target_card::show(ui, world, vessel, &rendezvous, &mut notes);
-                    verbund::show(ui, world, vessel, &mut choice, &mut notes);
-                    fracht::show(ui, world, vessel, &mut notes);
-                }
-                if at_depot && let Some(ordered) = depot::show(ui, world, &mut notes) {
-                    selection.0 = Some(ordered);
-                }
+    status_bar::show(&mut root, world, &message, &mut status);
+
+    let mut notes = Notes {
+        message: &mut message,
+        time: world.time,
+        real: real_time.elapsed_secs_f64(),
+    };
+    let vessel = intact(world, &selected.vessel);
+    let at_depot = depot::selected(world, &selected.zone, &selected.vessel);
+    if vessel.is_some() || at_depot {
+        egui::Panel::right("sidebar")
+            .resizable(false)
+            .exact_size(PANEL_WIDTH)
+            .show(&mut root, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    if let Some(vessel) = vessel {
+                        start_card::show(ui, world, vessel, &mut notes);
+                        target_card::show(ui, world, vessel, &rendezvous, &mut notes);
+                        verbund::show(ui, world, vessel, &mut choice, &mut notes);
+                        fracht::show(ui, world, vessel, &mut notes);
+                    }
+                    if at_depot && let Some(ordered) = depot::show(ui, world, &mut notes) {
+                        selected.vessel.0 = Some(ordered);
+                    }
+                });
             });
-        });
+    }
+    if let Some(vessel) = selected.vessel.0 {
+        let chosen = selected_node(world, &selected.vessel, &selected.node).map(|(_, k)| k);
+        dv_bar::show(&mut root, world, vessel, chosen);
+    }
+    // Was die Leisten frei lassen, gehört der Karte: Anzeige und
+    // Beschriftungen werden darauf begrenzt gezeichnet.
+    let free = root.available_rect_before_wrap();
+    let painter = root.painter_at(free);
+    let font = egui::FontId::monospace(TEXT_SIZE);
+    hud::show(
+        &painter,
+        free.min,
+        &font,
+        world,
+        &warp,
+        &selected.vessel,
+        &selected.node,
+        &selected.zone,
+        &selected.body,
+        &rig,
+    );
+    for (at, text, color) in labels.0.drain(..) {
+        painter.text(
+            egui::pos2(at.x, at.y),
+            egui::Align2::LEFT_TOP,
+            text,
+            font.clone(),
+            color32(color),
+        );
+    }
     Ok(())
 }
