@@ -7,7 +7,8 @@
 //! Schaltern für die Bereiche; unten die Statusleiste mit dem Protokoll; links
 //! die Leiste mit reiner Information (Schiffe, Auswahl); rechts die
 //! Seitenleiste mit allem, was man bedienen kann (je nach Lage als Karte);
-//! dazwischen unten der Δv-Balken. Über der Karte selbst stehen nur
+//! unten über die ganze Breite der Δv-Balken. Die Seitenleisten sind
+//! durchscheinend (Regler an ihrem unteren Ende). Über der Karte selbst stehen nur
 //! Warnungen zum gewählten Schiff und die Beschriftungen an ihren Punkten
 //! (`WorldLabels`).
 //!
@@ -195,7 +196,13 @@ pub fn draw(
     );
     top_bar::show(&mut root, world, &warp, &rig, &mut panels);
     status_bar::show(&mut root, world, &message, &mut status);
-    left_bar::show(&mut root, world, &mut selected, &panels);
+    // Der Δv-Balken geht über die ganze Breite, die Seitenleisten stehen
+    // darüber.
+    if let Some(vessel) = selected.vessel.0 {
+        let chosen = selected_node(world, &selected.vessel, &selected.node).map(|(_, k)| k);
+        dv_bar::show(&mut root, world, vessel, chosen);
+    }
+    left_bar::show(&mut root, world, &mut selected, &mut panels);
 
     let mut notes = Notes {
         message: &mut message,
@@ -208,7 +215,9 @@ pub fn draw(
         egui::Panel::right("sidebar")
             .resizable(false)
             .exact_size(PANEL_WIDTH)
+            .frame(panels.side_frame(root.style()))
             .show(&mut root, |ui| {
+                panels.opacity_slider(ui, "right_opacity");
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if let Some(vessel) = vessel {
                         start_card::show(ui, world, vessel, &mut notes);
@@ -226,10 +235,6 @@ pub fn draw(
                     }
                 });
             });
-    }
-    if let Some(vessel) = selected.vessel.0 {
-        let chosen = selected_node(world, &selected.vessel, &selected.node).map(|(_, k)| k);
-        dv_bar::show(&mut root, world, vessel, chosen);
     }
     // Was die Leisten frei lassen, gehört der Karte: Warnungen und
     // Beschriftungen werden darauf begrenzt gezeichnet.

@@ -376,8 +376,9 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Mausrad | Zoomen (über dem aufgeklappten Protokoll: scrollen) |
 | ▲ / ▼ rechts in der Statusleiste | Protokoll auf- und zuklappen (mit Mausrad oder Scrollleiste blättern) |
 | Linksklick auf ein Schiff (in der Karte oder in der Liste links) / `Tab` | Schiff wählen / nächstes Schiff |
-| Schalter oben rechts: Schiffe, Info, Hilfe | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
+| Schalter oben links: Schiffe, Info, Hilfe | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
 | Klick auf einen Node in der Karte „Manöver“ | Node wählen |
+| Regler „Deckkraft“ unten in den Seitenleisten | Wie durchscheinend die Seitenleisten sind (die Karte läuft dahinter weiter) |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
 | Linksklick auf den Mond | Mond wählen (eine Bahn davor geht vor: Node setzen) |
 | `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten. Ist ein Node gewählt, wechselt `F` der Reihe nach: Node, sein Schiff, Planet |

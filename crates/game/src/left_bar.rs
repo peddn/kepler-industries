@@ -1,6 +1,7 @@
 //! Leiste links: reine Information. Die Liste der Schiffe (ein Klick wählt)
 //! und die Angaben zur Auswahl: Schiff, Zielgebiet oder Himmelskörper. Beide
-//! Teile lassen sich in der Leiste oben ausblenden.
+//! Teile lassen sich in der Leiste oben ausblenden. Unten der Regler für die
+//! Deckkraft der Seitenleisten.
 
 use crate::hud;
 use crate::top_bar::Panels;
@@ -63,14 +64,16 @@ fn info(ui: &mut egui::Ui, world: &World, selected: &Selected) {
     });
 }
 
-pub fn show(root: &mut egui::Ui, world: &World, selected: &mut Selected, panels: &Panels) {
+pub fn show(root: &mut egui::Ui, world: &World, selected: &mut Selected, panels: &mut Panels) {
     if !(panels.ships || panels.info) {
         return;
     }
     egui::Panel::left("left_bar")
         .resizable(false)
         .exact_size(WIDTH)
+        .frame(panels.side_frame(root.style()))
         .show(root, |ui| {
+            panels.opacity_slider(ui, "left_opacity");
             egui::ScrollArea::vertical().show(ui, |ui| {
                 if panels.ships {
                     ships(ui, world, selected);
