@@ -634,7 +634,6 @@ pub fn draw_trajectories(
         .and_then(|i| world.vessels[i].target)
         .map(|t| world.host(t));
     let points = orbit_points(rig.near);
-    let booster_chosen = world.booster.is_some() && selection.0 == world.booster;
     for (i, vessel) in world.vessels.iter().enumerate() {
         // Angedockte Schiffe fliegen mit ihrem Hauptschiff.
         if vessel.docked_to.is_some() {
@@ -646,14 +645,13 @@ pub fn draw_trajectories(
             ORBIT_COLOR
         };
         let params = world.params(i);
-        // Auf dem Booster ist die momentane Bahn die des Schiffs allein
-        // (Brennschluss ist Trennung). Ist der Booster gewählt, zählt sein
-        // Weg: der geplante Rückflug, ohne diese Linie daneben.
-        let on_booster = vessel
+        // Solange Schiff und Booster gekoppelt sind, gibt es keine momentane
+        // Bahn: Brennschluss ist Trennung, und was danach kommt, steht als
+        // geplante Bahn schon da (für beide).
+        let momentary = !vessel
             .trajectory
             .launch()
             .is_some_and(|plan| plan.booster.is_some());
-        let momentary = !(on_booster && booster_chosen);
         draw_trajectory(
             &mut gizmos,
             world,
@@ -819,8 +817,8 @@ fn draw_trajectory(
 
 /// Während des Brennens: die Bahn, die das Schiff hätte, wenn das Triebwerk
 /// jetzt abschaltete (wie in KSP). Sie verformt sich sichtbar von der alten zur
-/// neuen Bahn. Auf dem Booster ist es die Bahn des Schiffs allein, denn
-/// Brennschluss ist Trennung. Über der Luft ist das eine Keplerbahn, abgeschnitten am
+/// neuen Bahn (nicht auf dem Booster: Dort ist Brennschluss Trennung, und
+/// die Bahnen danach sind geplant). Über der Luft ist das eine Keplerbahn, abgeschnitten am
 /// Eintritt in die Luft. In der Luft ist es der Freiflug, wie ihn die
 /// Zeitleiste rechnete (mit Luftwiderstand, bis zum Boden): So sieht man
 /// etwa beim Boostback den Aufsetzpunkt zur Startbasis wandern.
