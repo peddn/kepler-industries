@@ -10,7 +10,7 @@ dieses Dokument (mit Begründung).
 | Crate | Aufgabe | Abhängigkeiten |
 |---|---|---|
 | `crates/sim` | Die gesamte Simulation: Himmelskörper, Bahnen, Atmosphäre, Schiffe, Zeit. Der Zustand (`World`) ist zugleich der Spielstand. | nur `glam` (f64-Mathe), `serde` und `serde_json` (Spielstand als Text) |
-| `crates/game` | Darstellung und Eingabe mit Bevy. Liest die Simulation und treibt sie voran. | `sim`, `bevy` |
+| `crates/game` | Darstellung und Eingabe mit Bevy. Liest die Simulation und treibt sie voran. | `sim`, `bevy`, `bevy_egui` (Oberfläche) |
 
 `sim` kennt Bevy nicht. Dadurch kompiliert es in Sekunden, ist vollständig
 ohne Fenster testbar (`cargo test -p sim`), und es gibt keinen Spielzustand,
@@ -515,8 +515,23 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Gitter 10 m über dem Boden. Später kommen hier die Modelle der Schiffe hin.
 - **Seitenleiste rechts** für alles, was man bedient, als Karten je nach Lage
   („Start“ bei einem gelandeten Schiff, „Ziel“ bei jedem Schiff außer
-  Wracks). Die Anzeige links bleibt reine Information. Klicks auf die Leiste gehen nicht an die Karte dahinter.
-  Schaltflächen prüfen Treffer selbst, ohne Bevys Picking.
+  Wracks). Die Anzeige links bleibt reine Information. Klicks auf die Leiste
+  gehen nicht an die Karte dahinter.
+- **Oberfläche mit egui** (`bevy_egui`; Entscheidung vor dem Schiffseditor,
+  der Regler, Listen und Textfelder braucht). Ziel: die ganze Oberfläche in
+  egui, daneben nur die 3D-Ansicht; Bevys eigenes UI fällt weg. Umgezogen ist
+  die Seitenleiste (`ui::draw`), es folgen Statusleiste, Δv-Balken und die
+  Anzeige links. Sauberer Code geht dabei vor gleichem Aussehen.
+  - egui zeichnet jedes Bild neu: Eine Karte ist eine Funktion, die die Welt
+    liest, zeichnet und bei einem Klick ändert (`start_card::show` und so
+    weiter). Aufbau vorab, Abgleich der Texte und eigene Treffer-Prüfung
+    entfallen.
+  - Die Eingabe der 3D-Ansicht fragt egui, ob die Maus der Oberfläche gehört
+    (`EguiWantsInput`), statt Rechtecke zu vergleichen.
+  - Schrift ist dieselbe (Fira Mono, dicktengleich): Spalten in den Karten
+    sind weiter aufgefüllter Text.
+  - Preis: ein Fremdpaket, das bei einem Bevy-Update nachziehen muss; die
+    Bevy-Version ist ohnehin fest.
 - **Statusleiste mit Protokoll** ganz unten: letzte Meldung mit Spielzeit,
   ▲ klappt die letzten Meldungen auf (12 Zeilen, Mausrad, ziehbare
   Scrollleiste; wer hochgescrollt hat, bleibt an seiner Stelle). Protokolliert

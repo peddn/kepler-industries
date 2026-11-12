@@ -10,9 +10,9 @@
 use crate::Sim;
 use crate::hud::UiFont;
 use crate::node_ui::{SelectedNode, Selection, selected_node};
-use crate::panel::{PANEL_WIDTH, PanelShown};
 use crate::rendezvous::TARGET_COLOR;
 use crate::status_bar::STATUS_HEIGHT;
+use crate::ui::{PANEL_WIDTH, PanelShown};
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use bevy::window::PrimaryWindow;
