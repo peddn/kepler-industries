@@ -1,7 +1,7 @@
 //! Leiste links: reine Information. Die Liste der Schiffe (ein Klick wählt)
 //! und die Angaben zur Auswahl: Schiff, Zielgebiet oder Himmelskörper. Beide
-//! Teile lassen sich in der Leiste oben ausblenden. Unten der Regler für die
-//! Deckkraft der Seitenleisten.
+//! Teile lassen sich mit den Schaltern in ihrer Kopfzeile ausblenden (zur
+//! Leiste selbst siehe `side`).
 
 use crate::hud;
 use crate::top_bar::Panels;
@@ -10,7 +10,7 @@ use bevy_egui::egui;
 use sim::World;
 
 /// Breite der Leiste in Pixeln.
-pub const WIDTH: f32 = 300.0;
+const WIDTH: f32 = 300.0;
 /// Schriftgröße der hervorgehobenen Flugdaten.
 const VALUE_SIZE: f32 = 16.0;
 
@@ -84,22 +84,30 @@ fn info(ui: &mut egui::Ui, world: &World, selected: &Selected) {
 }
 
 pub fn show(root: &mut egui::Ui, world: &World, selected: &mut Selected, panels: &mut Panels) {
-    if !(panels.ships || panels.info) {
-        return;
-    }
-    egui::Panel::left("left_bar")
-        .resizable(false)
-        .exact_size(WIDTH)
-        .frame(panels.left.frame(root.style()))
-        .show(root, |ui| {
-            panels.left.slider(ui, "left_opacity");
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                if panels.ships {
-                    ships(ui, world, selected);
-                }
-                if panels.info {
-                    info(ui, world, selected);
-                }
-            });
-        });
+    // Der Inhalt richtet sich nach den Schaltern, wie sie vor diesem Bild
+    // standen; ein Klick wirkt im nächsten.
+    let (show_ships, show_info) = (panels.ships, panels.info);
+    let Panels {
+        ships,
+        info: infos,
+        left,
+        ..
+    } = panels;
+    left.show(
+        root,
+        "left_bar",
+        WIDTH,
+        |ui| {
+            ui.toggle_value(ships, "Schiffe");
+            ui.toggle_value(infos, "Info");
+        },
+        |ui| {
+            if show_ships {
+                self::ships(ui, world, selected);
+            }
+            if show_info {
+                info(ui, world, selected);
+            }
+        },
+    );
 }

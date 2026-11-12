@@ -194,7 +194,6 @@ pub fn draw(
             .layer_id(egui::LayerId::background())
             .max_rect(ctx.viewport_rect()),
     );
-    top_bar::show(&mut root, world, &warp, &rig, &mut panels);
     status_bar::show(&mut root, world, &message, &mut status);
     // Der Δv-Balken geht über die ganze Breite, die Seitenleisten stehen
     // darüber.
@@ -212,30 +211,32 @@ pub fn draw(
     let vessel = intact(world, &selected.vessel);
     let at_depot = depot::selected(world, &selected.zone, &selected.vessel);
     if vessel.is_some() || at_depot {
-        egui::Panel::right("sidebar")
-            .resizable(false)
-            .exact_size(PANEL_WIDTH)
-            .frame(panels.right.frame(root.style()))
-            .show(&mut root, |ui| {
-                panels.right.slider(ui, "right_opacity");
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    if let Some(vessel) = vessel {
-                        start_card::show(ui, world, vessel, &mut notes);
-                        let chosen = selected_node(world, &selected.vessel, &selected.node);
-                        let chosen = chosen.map(|(_, k)| k);
-                        if let Some(time) = maneuver_card::show(ui, world, vessel, chosen) {
-                            selected.node.0 = Some(time);
-                        }
-                        target_card::show(ui, world, vessel, &rendezvous, &mut notes);
-                        verbund::show(ui, world, vessel, &mut choice, &mut notes);
-                        fracht::show(ui, world, vessel, &mut notes);
+        panels.right.show(
+            &mut root,
+            "sidebar",
+            PANEL_WIDTH,
+            |_| {},
+            |ui| {
+                if let Some(vessel) = vessel {
+                    start_card::show(ui, world, vessel, &mut notes);
+                    let chosen = selected_node(world, &selected.vessel, &selected.node);
+                    let chosen = chosen.map(|(_, k)| k);
+                    if let Some(time) = maneuver_card::show(ui, world, vessel, chosen) {
+                        selected.node.0 = Some(time);
                     }
-                    if at_depot && let Some(ordered) = depot::show(ui, world, &mut notes) {
-                        selected.vessel.0 = Some(ordered);
-                    }
-                });
-            });
+                    target_card::show(ui, world, vessel, &rendezvous, &mut notes);
+                    verbund::show(ui, world, vessel, &mut choice, &mut notes);
+                    fracht::show(ui, world, vessel, &mut notes);
+                }
+                if at_depot && let Some(ordered) = depot::show(ui, world, &mut notes) {
+                    selected.vessel.0 = Some(ordered);
+                }
+            },
+        );
     }
+    // Zuletzt die Leiste oben: Sie liegt zwischen den Seitenleisten.
+    top_bar::show(&mut root, world, &warp, &rig, &mut panels);
+
     // Was die Leisten frei lassen, gehört der Karte: Warnungen und
     // Beschriftungen werden darauf begrenzt gezeichnet.
     let free = root.available_rect_before_wrap();

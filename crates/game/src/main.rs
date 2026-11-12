@@ -14,6 +14,7 @@ mod maneuver_card;
 mod node_ui;
 mod rendezvous;
 mod savegame;
+mod side;
 mod start_card;
 mod status_bar;
 mod target_card;

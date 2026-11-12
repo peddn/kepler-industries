@@ -376,7 +376,8 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Mausrad | Zoomen (über dem aufgeklappten Protokoll: scrollen) |
 | ▲ / ▼ rechts in der Statusleiste | Protokoll auf- und zuklappen (mit Mausrad oder Scrollleiste blättern) |
 | Linksklick auf ein Schiff (in der Karte oder in der Liste links) / `Tab` | Schiff wählen / nächstes Schiff |
-| Schalter oben: links Schiffe und Info, rechts Hilfe | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
+| Schalter „Schiffe“ und „Info“ im Kopf der linken Leiste, „Hilfe“ oben rechts | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
+| ◀ / ▶ im Kopf jeder Seitenleiste | Leiste ein- und ausklappen |
 | Klick auf einen Node in der Karte „Manöver“ | Node wählen |
 | Regler „Deckkraft“ unten in jeder Seitenleiste | Wie durchscheinend diese Leiste ist (die Karte läuft dahinter weiter) |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
