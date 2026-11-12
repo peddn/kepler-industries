@@ -2,7 +2,7 @@
 
 use glam::DVec3;
 use sim::ManeuverNode;
-use sim::scenario::{NURA, ZIMM, ZOON, ZORB, demo};
+use sim::scenario::{NURA, ZILL, ZOON, ZORB, demo};
 
 const FERRY: usize = 3;
 
@@ -45,7 +45,7 @@ fn window_to_a_moon() {
     let window = world.transfer_window(FERRY).unwrap();
     assert_eq!(window.origin, None);
     assert!((window.wait - 600.0).abs() < 120.0, "{window:?}");
-    world.set_target_body(FERRY, Some(ZIMM));
+    world.set_target_body(FERRY, Some(ZILL));
     assert!(world.transfer_window(FERRY).is_some());
 }
 

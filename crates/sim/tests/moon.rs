@@ -3,7 +3,7 @@
 
 use glam::DVec3;
 use sim::body::{body_state, day_length, orbital_period, sphere_of_influence};
-use sim::scenario::{NURA, ZIMM, ZOON, ZORB, ZUNN, demo};
+use sim::scenario::{NURA, ZILL, ZOON, ZORB, ZUNN, demo};
 use sim::{Event, StateVector, World, kepler};
 
 /// Lage und Geschwindigkeit von `body` relativ zu seinem Mutterkörper.
@@ -117,25 +117,25 @@ fn bodies_are_saved() {
     assert_eq!(loaded, world);
 }
 
-/// Zimm läuft auf einer geneigten Ellipse: Seine Lage stimmt mit einer
+/// Zill läuft auf einer geneigten Ellipse: Seine Lage stimmt mit einer
 /// unabhängigen Keplerbahn aus seinem Anfangszustand überein, Abstände,
 /// Neigung, Knoten und Umlauf passen zu den Bahnelementen.
 #[test]
 fn outer_moon_follows_its_ellipse() {
     let world = demo();
     let bodies = &world.bodies;
-    assert_eq!(bodies[ZIMM].name, "Zimm");
-    let orbit = bodies[ZIMM].orbit.clone().unwrap();
+    assert_eq!(bodies[ZILL].name, "Zill");
+    let orbit = bodies[ZILL].orbit.clone().unwrap();
     assert_eq!(orbit.parent, ZORB);
     let gm = bodies[ZORB].gm;
-    let start = relative(&world, ZIMM, 0.0);
-    let period = orbital_period(bodies, ZIMM).unwrap();
+    let start = relative(&world, ZILL, 0.0);
+    let period = orbital_period(bodies, ZILL).unwrap();
     assert!((period / 1_077_311.0 - 1.0).abs() < 1e-5, "{period}");
 
     let (mut nearest, mut farthest) = (f64::INFINITY, 0.0f64);
     for i in 0..=1_000 {
         let t = period * i as f64 / 1_000.0 + 12_345.0;
-        let s = relative(&world, ZIMM, t);
+        let s = relative(&world, ZILL, t);
         let kepler = kepler::propagate(gm, start, t);
         assert!(s.position.distance(kepler.position) < 1.0, "{t}");
         assert!(s.velocity.distance(kepler.velocity) < 1e-4, "{t}");
@@ -150,41 +150,46 @@ fn outer_moon_follows_its_ellipse() {
         (farthest / orbit.apoapsis() - 1.0).abs() < 1e-4,
         "{farthest}"
     );
-    assert!((orbit.periapsis() - 42_300_000.0).abs() < 1e-3);
-    assert!((orbit.apoapsis() - 51_700_000.0).abs() < 1e-3);
+    assert!((orbit.periapsis() - 35_250_000.0).abs() < 1e-3);
+    assert!((orbit.apoapsis() - 58_750_000.0).abs() < 1e-3);
 
-    // Bahnebene: Neigung 6°, aufsteigender Knoten bei 78°.
+    // Bahnebene: Neigung 15°, aufsteigender Knoten bei 78°.
     let h = start.position.cross(start.velocity);
-    assert!(((h.z / h.length()).acos().to_degrees() - 6.0).abs() < 1e-9);
+    assert!(((h.z / h.length()).acos().to_degrees() - 15.0).abs() < 1e-9);
     let node = DVec3::Z.cross(h);
     assert!((node.y.atan2(node.x).to_degrees() - 78.0).abs() < 1e-9);
 
     // Nach einem Umlauf wieder am selben Ort, auch nach Jahren.
     for t in [0.0, 3.0e7] {
-        let s = relative(&world, ZIMM, t);
-        let again = relative(&world, ZIMM, t + period);
+        let s = relative(&world, ZILL, t);
+        let again = relative(&world, ZILL, t + period);
         assert!(again.position.distance(s.position) < 1e-2, "{t}");
     }
     // Geschwindigkeit = Ableitung der Lage.
     let t = 500_000.0;
-    let before = relative(&world, ZIMM, t - 1.0).position;
-    let after = relative(&world, ZIMM, t + 1.0).position;
+    let before = relative(&world, ZILL, t - 1.0).position;
+    let after = relative(&world, ZILL, t + 1.0).position;
     let slope = (after - before) / 2.0;
-    assert!(slope.distance(relative(&world, ZIMM, t).velocity) < 1e-3);
+    assert!(slope.distance(relative(&world, ZILL, t).velocity) < 1e-3);
 
-    // Einflusssphäre aus der großen Halbachse, wie bei Minmus.
-    let soi = sphere_of_influence(bodies, ZIMM);
-    assert!((soi / 2_247_000.0 - 1.0).abs() < 1e-3, "{soi}");
+    // Einflusssphäre aus der großen Halbachse; klein, aber schwer:
+    // Fluchtgeschwindigkeit am Boden höher als bei Zoon.
+    let soi = sphere_of_influence(bodies, ZILL);
+    assert!((soi / 9052664.0 - 1.0).abs() < 1e-3, "{soi}");
+    let escape = |b: usize| (2.0 * bodies[b].gm / bodies[b].radius).sqrt();
+    assert!((escape(ZILL) - 1_072.4).abs() < 0.1, "{}", escape(ZILL));
+    assert!(escape(ZILL) > 1.3 * escape(ZOON));
+    assert!(bodies[ZILL].radius < bodies[ZOON].radius);
 }
 
-/// Ein Schiff, das auf Zimm zufliegt, tritt genau am Rand seiner Sphäre ein,
+/// Ein Schiff, das auf Zill zufliegt, tritt genau am Rand seiner Sphäre ein,
 /// fliegt um ihn herum und verlässt sie wieder zum Planeten.
 #[test]
 fn flyby_of_the_outer_moon() {
     let mut world = demo();
     world.vessels.clear();
-    let moon = relative(&world, ZIMM, 0.0);
-    let soi = sphere_of_influence(&world.bodies, ZIMM);
+    let moon = relative(&world, ZILL, 0.0);
+    let soi = sphere_of_influence(&world.bodies, ZILL);
     let toward = -moon.velocity.normalize();
     let aside = toward.cross(DVec3::Z).normalize();
     let state = StateVector {
@@ -193,13 +198,13 @@ fn flyby_of_the_outer_moon() {
     };
     world.spawn_vessel("Sonde", sim::scenario::SATELLITE, 100.0, ZORB, state);
     let segments: Vec<_> = world.vessels[0].trajectory.segments().cloned().collect();
-    assert_eq!(segments[0].end_event(), Some(Event::SoiEntry(ZIMM)));
+    assert_eq!(segments[0].end_event(), Some(Event::SoiEntry(ZILL)));
     let entry = segments[0].end();
     let ship = segments[0].state_at(&world.bodies, entry).position;
-    let center = relative(&world, ZIMM, entry).position;
+    let center = relative(&world, ZILL, entry).position;
     let distance = ship.distance(center);
     assert!((distance - soi).abs() < 1.0, "{distance}");
-    assert_eq!(segments[1].body(), ZIMM);
+    assert_eq!(segments[1].body(), ZILL);
     assert_eq!(segments[1].end_event(), Some(Event::SoiExit));
     assert_eq!(segments[2].body(), ZORB);
 }
