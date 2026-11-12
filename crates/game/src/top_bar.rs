@@ -1,15 +1,46 @@
-//! Leiste oben: links die Schalter, die Bereiche ein- und ausblenden
-//! (Schiffe und Info in der Leiste links darunter, Hilfe als Fenster; `F1`
-//! schaltet die Hilfe), daneben Spielzeit, Zeitraffer und Kamera.
+//! Leiste oben: links, so breit wie die Leiste darunter, die Schalter für
+//! deren Teile (Schiffe, Info); daneben Spielzeit, Zeitraffer und Kamera;
+//! ganz rechts der Schalter für das Hilfe-Fenster (`F1`).
 
 use crate::camera::CameraRig;
 use crate::hud::{self, format_time};
+use crate::left_bar::WIDTH as LEFT_WIDTH;
 use crate::{TimeWarp, focus};
 use bevy::prelude::*;
 use bevy_egui::egui;
 use sim::World;
 
-/// Welche Bereiche zu sehen sind (Bedienung, nicht im Spielstand).
+/// Deckkraft einer Seitenleiste (0 durchsichtig bis 1 deckend): Dahinter
+/// läuft die Karte weiter.
+pub struct Opacity(f32);
+
+impl Opacity {
+    /// Kleinste einstellbare Deckkraft: Die Schrift muss lesbar bleiben.
+    const MIN: f32 = 0.2;
+
+    /// Rahmen der Seitenleiste mit dieser Deckkraft.
+    pub fn frame(&self, style: &egui::Style) -> egui::Frame {
+        let frame = egui::Frame::side_top_panel(style);
+        frame.fill(frame.fill.gamma_multiply(self.0))
+    }
+
+    /// Regler am unteren Ende der Seitenleiste (ohne eigenen Grund, er
+    /// gehört zur Leiste).
+    pub fn slider(&mut self, ui: &mut egui::Ui, id: &str) {
+        egui::Panel::bottom(id.to_owned())
+            .frame(egui::Frame::NONE)
+            .resizable(false)
+            .show(ui, |ui| {
+                ui.add(
+                    egui::Slider::new(&mut self.0, Self::MIN..=1.0)
+                        .show_value(false)
+                        .text("Deckkraft"),
+                );
+            });
+    }
+}
+
+/// Welche Bereiche zu sehen sind und wie (Bedienung, nicht im Spielstand).
 #[derive(Resource)]
 pub struct Panels {
     /// Liste der Schiffe in der linken Leiste.
@@ -18,35 +49,9 @@ pub struct Panels {
     pub info: bool,
     /// Fenster mit der Bedienhilfe.
     pub help: bool,
-    /// Deckkraft der Seitenleisten (0 durchsichtig bis 1 deckend): Dahinter
-    /// läuft die Karte weiter.
-    pub opacity: f32,
-}
-
-impl Panels {
-    /// Kleinste einstellbare Deckkraft: Die Schrift muss lesbar bleiben.
-    const MIN_OPACITY: f32 = 0.2;
-
-    /// Rahmen einer Seitenleiste mit der eingestellten Deckkraft.
-    pub fn side_frame(&self, style: &egui::Style) -> egui::Frame {
-        let frame = egui::Frame::side_top_panel(style);
-        frame.fill(frame.fill.gamma_multiply(self.opacity))
-    }
-
-    /// Regler für die Deckkraft, am unteren Ende einer Seitenleiste (ohne
-    /// eigenen Grund, er gehört zur Leiste).
-    pub fn opacity_slider(&mut self, ui: &mut egui::Ui, id: &str) {
-        egui::Panel::bottom(id.to_owned())
-            .frame(egui::Frame::NONE)
-            .resizable(false)
-            .show(ui, |ui| {
-                ui.add(
-                    egui::Slider::new(&mut self.opacity, Self::MIN_OPACITY..=1.0)
-                        .show_value(false)
-                        .text("Deckkraft"),
-                );
-            });
-    }
+    /// Deckkraft der linken und der rechten Seitenleiste.
+    pub left: Opacity,
+    pub right: Opacity,
 }
 
 impl Default for Panels {
@@ -55,7 +60,8 @@ impl Default for Panels {
             ships: true,
             info: true,
             help: false,
-            opacity: 0.85,
+            left: Opacity(0.85),
+            right: Opacity(0.85),
         }
     }
 }
@@ -72,9 +78,19 @@ pub fn show(
     }
     egui::Panel::top("top").show(root, |ui| {
         ui.horizontal(|ui| {
-            ui.toggle_value(&mut panels.ships, "Schiffe");
-            ui.toggle_value(&mut panels.info, "Info");
-            ui.toggle_value(&mut panels.help, "Hilfe");
+            // Die Schalter der linken Leiste stehen über ihr, in ihrer Breite.
+            ui.allocate_ui_with_layout(
+                egui::vec2(
+                    LEFT_WIDTH - ui.spacing().item_spacing.x,
+                    ui.available_height(),
+                ),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.toggle_value(&mut panels.ships, "Schiffe");
+                    ui.toggle_value(&mut panels.info, "Info");
+                    ui.allocate_space(egui::vec2(ui.available_width(), 0.0));
+                },
+            );
             ui.separator();
             ui.label(format_time(world.time, hud::day(world)));
             ui.separator();
@@ -83,6 +99,9 @@ pub fn show(
             ui.separator();
             let near = if rig.near { " (Nahansicht)" } else { "" };
             ui.label(format!("Kamera: {}{near}", focus::name(world, rig.target)));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.toggle_value(&mut panels.help, "Hilfe");
+            });
         });
     });
     egui::Window::new("Hilfe")

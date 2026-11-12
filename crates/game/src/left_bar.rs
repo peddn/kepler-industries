@@ -10,53 +10,72 @@ use bevy_egui::egui;
 use sim::World;
 
 /// Breite der Leiste in Pixeln.
-const WIDTH: f32 = 300.0;
+pub const WIDTH: f32 = 300.0;
+/// Schriftgröße der hervorgehobenen Flugdaten.
+const VALUE_SIZE: f32 = 16.0;
 
-/// Liste der Schiffe; angedockte stehen bei ihrem Verbund.
+/// Liste der Schiffe: Name und der Körper, bei dem es ist. Angedockte
+/// stehen bei ihrem Verbund.
 fn ships(ui: &mut egui::Ui, world: &World, selected: &mut Selected) {
     card(ui, "Schiffe", |ui| {
         if world.vessels.is_empty() {
             ui.weak("Noch keine. Bestellen: rechts in der Karte \"Startbasis\".");
         }
         for i in (0..world.vessels.len()).filter(|&i| world.vessels[i].docked_to.is_none()) {
-            let chosen = selected.vessel.0 == Some(i);
-            if ui
-                .selectable_label(chosen, hud::ship_name(world, i))
-                .clicked()
-            {
-                selected.select_vessel(i);
-            }
-            // Ohne die Spalten der früheren Liste: Die Leiste ist schmal.
-            ui.weak(format!(
-                "  {}",
-                hud::ship_status(world, i).replace("  ", " ")
-            ));
+            ui.horizontal(|ui| {
+                let chosen = selected.vessel.0 == Some(i);
+                if ui
+                    .selectable_label(chosen, hud::ship_name(world, i))
+                    .clicked()
+                {
+                    selected.select_vessel(i);
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.weak(hud::ship_body(world, i));
+                });
+            });
         }
     });
+}
+
+/// Zustand und Flugdaten des gewählten Schiffs, die Werte hervorgehoben.
+fn vessel_info(ui: &mut egui::Ui, world: &World, i: usize) {
+    ui.label(hud::ship_status(world, i).replace("  ", " "));
+    egui::Grid::new("flight_data")
+        .num_columns(2)
+        .show(ui, |ui| {
+            for (label, value) in hud::flight_data(world, i) {
+                ui.label(label);
+                ui.label(egui::RichText::new(value).strong().size(VALUE_SIZE));
+                ui.end_row();
+            }
+        });
+    ui.label(hud::info_lines(world, i).join("\n"));
 }
 
 /// Angaben zu dem, was gewählt ist.
 fn info(ui: &mut egui::Ui, world: &World, selected: &Selected) {
     card(ui, "Info", |ui| {
         let mut any = false;
-        let mut section = |ui: &mut egui::Ui, title: &str, lines: Vec<String>| {
+        let mut title = |ui: &mut egui::Ui, title: &str| {
             if any {
                 ui.separator();
             }
             any = true;
             ui.strong(title);
-            ui.label(lines.join("\n"));
         };
         if let Some(i) = selected.vessel.0 {
-            section(ui, &hud::ship_name(world, i), hud::info_lines(world, i));
+            title(ui, &hud::ship_name(world, i));
+            vessel_info(ui, world, i);
         }
         if let Some(k) = selected.zone.0 {
             let mut lines = hud::zone_lines(world, k);
-            let title = lines.remove(0);
-            section(ui, &title, lines);
+            title(ui, &lines.remove(0));
+            ui.label(lines.join("\n"));
         }
         if let Some(b) = selected.body.0 {
-            section(ui, &world.bodies[b].name, hud::body_details(world, b));
+            title(ui, &world.bodies[b].name);
+            ui.label(hud::body_details(world, b).join("\n"));
         }
         if !any {
             ui.weak("Nichts gewählt.");
@@ -71,9 +90,9 @@ pub fn show(root: &mut egui::Ui, world: &World, selected: &mut Selected, panels:
     egui::Panel::left("left_bar")
         .resizable(false)
         .exact_size(WIDTH)
-        .frame(panels.side_frame(root.style()))
+        .frame(panels.left.frame(root.style()))
         .show(root, |ui| {
-            panels.opacity_slider(ui, "left_opacity");
+            panels.left.slider(ui, "left_opacity");
             egui::ScrollArea::vertical().show(ui, |ui| {
                 if panels.ships {
                     ships(ui, world, selected);

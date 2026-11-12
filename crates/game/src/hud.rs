@@ -375,6 +375,48 @@ pub fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<Strin
     lines
 }
 
+/// Die wichtigsten Flugdaten eines Schiffs als Paare aus Bezeichnung und
+/// Wert: Bahn (Apoapsis, Periapsis als Höhen), Höhe, Geschwindigkeit auf der
+/// Bahn und relativ zum Boden (senkrecht: steigend positiv; waagerecht).
+/// Die Höhe zählt ab der Kugel des Körpers: Solange es kein Gelände gibt,
+/// ist das zugleich die Höhe über dem Boden.
+pub fn flight_data(world: &World, i: usize) -> Vec<(&'static str, String)> {
+    let (body, state) = world.vessel_state(i);
+    let body = &world.bodies[body];
+    let landed = matches!(
+        world.vessels[world.host(i)].trajectory.current(),
+        Segment::Surface { .. }
+    );
+    let speed = |v: f64| format!("{v:.1} m/s");
+    let up = state.position.normalize();
+    let ground = state.velocity - body.co_rotating_velocity(state.position);
+    let vertical = ground.dot(up);
+    let horizontal = (ground - up * vertical).length();
+    let (apoapsis, periapsis) = if landed {
+        ("–".into(), "–".into())
+    } else {
+        let orbit = kepler::orbit_info(body.gm, &state);
+        (
+            orbit.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
+            km(orbit.periapsis - body.radius),
+        )
+    };
+    vec![
+        ("Apoapsis", apoapsis),
+        ("Periapsis", periapsis),
+        ("Höhe", height(state.position.length() - body.radius)),
+        ("Bahngeschw.", speed(state.velocity.length())),
+        ("Zum Boden", String::new()),
+        ("  senkrecht", speed(vertical)),
+        ("  waagerecht", speed(horizontal)),
+    ]
+}
+
+/// Der Körper, bei dem ein Schiff gerade ist.
+pub fn ship_body(world: &World, i: usize) -> &str {
+    &world.bodies[world.vessel_state(i).0].name
+}
+
 /// Name eines Schiffs; ein Verbund trägt die Namen seiner Teile.
 pub fn ship_name(world: &World, i: usize) -> String {
     std::iter::once(world.vessels[i].name.as_str())
@@ -388,14 +430,11 @@ pub fn ship_name(world: &World, i: usize) -> String {
         .join(" + ")
 }
 
-/// Zustand eines Schiffs in einer Zeile (für die Liste der Schiffe).
+/// Zustand eines Schiffs in einer Zeile (die Zahlen dazu stehen in
+/// `flight_data`).
 pub fn ship_status(world: &World, i: usize) -> String {
     match world.vessel_status(i) {
-        VesselStatus::Orbit {
-            periapsis_altitude,
-            apoapsis_altitude,
-            descending,
-        } => {
+        VesselStatus::Orbit { descending, .. } => {
             let body = &world.bodies[world.vessel_state(i).0];
             let around = if world.vessel_state(i).0 == world.home {
                 String::new()
@@ -404,18 +443,12 @@ pub fn ship_status(world: &World, i: usize) -> String {
             };
             let warning = match (descending, body.atmosphere.exists()) {
                 (false, _) => "",
-                (true, true) => "  – Bahn führt in die Atmosphäre!",
-                (true, false) => "  – Bahn führt auf den Boden!",
+                (true, true) => ": Bahn führt in die Atmosphäre!",
+                (true, false) => ": Bahn führt auf den Boden!",
             };
-            format!(
-                "Orbit{around}  Ap {}  Pe {}{warning}",
-                apoapsis_altitude.map_or("–".into(), km),
-                km(periapsis_altitude),
-            )
+            format!("Orbit{around}{warning}")
         }
-        VesselStatus::Atmosphere { altitude } => {
-            format!("In der Atmosphäre, Höhe {}", km(altitude))
-        }
+        VesselStatus::Atmosphere { .. } => "In der Atmosphäre".into(),
         VesselStatus::Burning { remaining } => {
             let (body_id, state) = world.vessel_state(i);
             let body = &world.bodies[body_id];

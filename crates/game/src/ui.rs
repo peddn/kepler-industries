@@ -215,9 +215,9 @@ pub fn draw(
         egui::Panel::right("sidebar")
             .resizable(false)
             .exact_size(PANEL_WIDTH)
-            .frame(panels.side_frame(root.style()))
+            .frame(panels.right.frame(root.style()))
             .show(&mut root, |ui| {
-                panels.opacity_slider(ui, "right_opacity");
+                panels.right.slider(ui, "right_opacity");
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if let Some(vessel) = vessel {
                         start_card::show(ui, world, vessel, &mut notes);

@@ -518,16 +518,19 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Gitter 10 m über dem Boden. Später kommen hier die Modelle der Schiffe hin.
 - **Aufbau des Bildes:** Über der Karte steht kein Text außer Warnungen und
   Beschriftungen an ihren Punkten; alles andere liegt in Leisten.
-  - *Leiste oben:* links die Schalter, die Bereiche ein- und ausblenden
-    (Schiffe, Info, Hilfe), über der Leiste, auf die sie wirken; daneben
-    Spielzeit, Zeitraffer, Kamera.
+  - *Leiste oben:* links, so breit wie die Leiste darunter, die Schalter für
+    deren Teile (Schiffe, Info); daneben Spielzeit, Zeitraffer, Kamera; ganz
+    rechts der Schalter für die Hilfe.
   - *Δv-Balken* unten über die ganze Breite, die Seitenleisten stehen
     darüber.
   - *Seitenleisten durchscheinend:* Die Karte läuft hinter ihnen weiter; ein
-    Regler am unteren Ende jeder Leiste stellt die gemeinsame Deckkraft ein.
+    Regler am unteren Ende jeder Leiste stellt deren Deckkraft ein.
   - *Leiste links, reine Information* (ausblendbar): die Liste der Schiffe
-    (ein Klick wählt) und die Angaben zur Auswahl (Schiff, Zielgebiet,
-    Himmelskörper).
+    (Name und Körper; ein Klick wählt) und die Angaben zur Auswahl. Beim
+    Schiff stehen die Flugdaten hervorgehoben: Apoapsis, Periapsis, Höhe,
+    Geschwindigkeit auf der Bahn und zum Boden (senkrecht, waagerecht). Die
+    Höhe zählt ab der Kugel des Körpers; solange es kein Gelände gibt, ist
+    das zugleich die Höhe über dem Boden.
   - *Seitenleiste rechts, alles zum Bedienen,* als Karten je nach Lage:
     „Start“ bei einem gelandeten Schiff, „Manöver“ mit der Kette der Nodes,
     „Ziel“ bei jedem Schiff außer Wracks, dazu Verbund, Fracht & Basis und
