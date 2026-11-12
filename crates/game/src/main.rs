@@ -7,6 +7,7 @@ mod booster_card;
 mod camera;
 mod depot;
 mod dv_bar;
+mod entwurf;
 mod focus;
 mod fracht;
 mod hud;
@@ -316,6 +317,7 @@ fn main() {
     .init_resource::<ui::WorldLabels>()
     .init_resource::<ui::MapArea>()
     .init_resource::<view::BoosterPreview>()
+    .init_resource::<entwurf::Editor>()
     .init_resource::<top_bar::Panels>()
     .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<status_bar::StatusBar>()
@@ -328,10 +330,11 @@ fn main() {
     .add_systems(
         Update,
         (
-            controls,
+            // Beim Tippen in ein Textfeld gehören die Tasten der Oberfläche.
+            controls.run_if(ui::not_typing),
             advance_simulation,
             (
-                focus::keys,
+                focus::keys.run_if(ui::not_typing),
                 focus::follow,
                 // Über der Oberfläche gehören Mausrad und Ziehen dieser.
                 camera::input.run_if(ui::pointer_on_map),
@@ -339,7 +342,12 @@ fn main() {
             )
                 .chain(),
             // Eingaben ändern die Simulation; danach wird nur noch gelesen.
-            (savegame::keys, node_ui::input, rendezvous::update).chain(),
+            (
+                savegame::keys.run_if(ui::not_typing),
+                node_ui::input.run_if(ui::not_typing),
+                rendezvous::update,
+            )
+                .chain(),
             (view::spawn_markers, view::sync_markers, view::aim_sunlight).chain(),
             node_ui::draw,
             node_ui::label,

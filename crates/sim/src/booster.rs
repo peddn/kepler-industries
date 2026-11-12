@@ -16,10 +16,12 @@
 //! Tank ist.
 
 use crate::body::{Body, BodyId, SurfacePoint};
-use crate::kepler::StateVector;
+use crate::design::Design;
+use crate::kepler::{self, StateVector};
+use crate::launch::{Launch, LaunchProfile};
 use crate::maneuver::{self, ManeuverNode, PlanError};
 use crate::trajectory::{Segment, Trajectory};
-use crate::world::VesselParams;
+use crate::world::{BaseKind, VesselParams, World};
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 
@@ -241,4 +243,76 @@ struct Landing {
     time: f64,
     ahead: f64,
     aside: f64,
+}
+
+/// Was ein Start auf dem Booster für einen Entwurf ergibt (für den Editor).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LaunchEstimate {
+    /// Δv, das das Schiff nach der Trennung noch bis in die Kreisbahn an
+    /// der Apoapsis braucht (m/s); `None`, wenn der Aufstieg nicht über die
+    /// Luft führt.
+    pub to_orbit: Option<f64>,
+    /// Δv des Schiffs mit vollem Tank und dieser Fracht (m/s).
+    pub on_board: f64,
+}
+
+impl LaunchEstimate {
+    /// Was im Orbit übrig bleibt (m/s; negativ: es reicht nicht).
+    pub fn left(&self) -> Option<f64> {
+        self.to_orbit.map(|needed| self.on_board - needed)
+    }
+}
+
+impl World {
+    /// Plant probeweise den Start eines Schiffs nach `design` mit `cargo` kg
+    /// Fracht von der Startbasis, mit vollem Tank und dem Standardprofil:
+    /// dieselbe Planung wie im Spiel, in einer eigenen kleinen Welt (was der
+    /// Booster gerade tut, spielt dafür keine Rolle). Fehler: warum der
+    /// Start nicht ginge.
+    pub fn launch_estimate(
+        &self,
+        design: &Design,
+        cargo: f64,
+    ) -> Result<LaunchEstimate, PlanError> {
+        let depot = self
+            .bases
+            .iter()
+            .find(|b| b.kind == BaseKind::Depot)
+            .ok_or(PlanError::BoosterAway)?;
+        let booster = self.booster.ok_or(PlanError::BoosterAway)?;
+        let booster = self.vessels[booster].params;
+        let (body, pad) = (depot.body, depot.location);
+
+        let mut world = World::new(self.bodies.clone());
+        world.bases.push(depot.clone());
+        let index = world.spawn_landed("Booster", booster, booster.fuel_capacity, body, pad);
+        world.booster = Some(index);
+        let params = design.params();
+        let ship = world.spawn_landed("Entwurf", params, params.fuel_capacity, body, pad);
+        world.load_cargo(ship, cargo);
+        let launch = Launch {
+            time: 60.0,
+            profile: LaunchProfile::for_body(&world.bodies[body]),
+        };
+        world.set_launch(ship, launch)?;
+
+        let trajectory = &world.vessels[ship].trajectory;
+        let end = trajectory.launch().map_or(0.0, |plan| plan.burn.end);
+        let gm = world.bodies[body].gm;
+        let to_orbit = trajectory.segments().find_map(|s| match s {
+            Segment::Kepler { start, state, .. } if *start >= end => {
+                let apoapsis = kepler::orbit_info(gm, state).apoapsis?;
+                let speed = state.position.cross(state.velocity).length() / apoapsis;
+                Some((gm / apoapsis).sqrt() - speed)
+            }
+            _ => None,
+        });
+        let dry = params.dry_mass + cargo;
+        let on_board = if params.exhaust_velocity > 0.0 && params.thrust > 0.0 {
+            params.exhaust_velocity * ((dry + params.fuel_capacity) / dry).ln()
+        } else {
+            0.0
+        };
+        Ok(LaunchEstimate { to_orbit, on_board })
+    }
 }

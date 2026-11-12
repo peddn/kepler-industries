@@ -545,7 +545,9 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
     geplanten Start nur die Karte „Start“, Annäherung und Andocken nur die
     Karte „Ziel“.
   - *Fenster* (Schalter oben rechts) für alles, was nicht an der Auswahl
-    hängt: die Hilfe (auch `F1`) und die Wirtschaft (`wirtschaft.rs`). Die
+    hängt: die Hilfe (auch `F1`), die Entwürfe (`entwurf.rs`, der
+    Schiffseditor) und die Wirtschaft (`wirtschaft.rs`). Die Leiste oben legt
+    zuerst die Schalter an und kürzt bei wenig Platz die Angabe zur Kamera. Die
     Wirtschaft ist reine Anzeige: je Basis Vorrat und Stand ("voll in …",
     aus dem geschlossen gerechneten Lager), dazu die Fracht an Bord. Sie
     zeigt bewusst keine Summe der Förderraten (ein volles Lager fördert
@@ -921,8 +923,14 @@ zum Schiff; es gibt genau einen.
   damit Tests und Beispiele bleiben, wie sie sind.
 
 **Katalog** (`sim::design`; gebaut sind der Katalog, Entwürfe mit ihren
-Flugwerten und Preisen und das Bestellen nach Entwurf, noch nicht Editor,
-Umbau, Daten und Techtree). Jedes bestellte Schiff merkt sich seinen
+Flugwerten und Preisen, das Bestellen nach Entwurf und der Editor, noch
+nicht Umbau, Daten und Techtree). Der Editor (`entwurf.rs`, Fenster
+„Entwürfe") ändert die Entwürfe der Welt direkt; einstellen lässt sich nur,
+was sich bauen lässt, alles Weitere sind Warnungen. Was nach dem Start im
+Orbit bleibt, kommt aus einer echten Probeplanung (`World::launch_estimate`:
+dieselbe Startplanung in einer eigenen kleinen Welt, neu nur, wenn sich der
+Entwurf ändert). Solange jemand in ein Textfeld tippt, laufen die Systeme
+mit Tasten nicht (`ui::not_typing`). Jedes bestellte Schiff merkt sich seinen
 Entwurf (`Vessel::design`); was man bauen darf, steht in `World::unlocked`
 (bis zum Techtree: die Ausstattung vom Spielbeginn). Die Schiffe der Demo
 und der Booster sind feste Vorlagen ohne Entwurf; der Frachter der Demo hat
