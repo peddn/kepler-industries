@@ -2,12 +2,13 @@
 //! serialisierbar, und es gibt keinen Zustand außerhalb.
 
 use crate::body::{Body, BodyId, SurfacePoint};
+use crate::booster::{self, BoosterPlan};
 use crate::docking::{
     self, DOCKING_RANGE, DockError, DockRequest, SEPARATION_SPEED, UndockError, UndockFuel,
 };
 use crate::kepler::{self, StateVector};
 use crate::landing::{self, Crash, LandingZone};
-use crate::launch::Launch;
+use crate::launch::{Launch, LaunchPlan};
 use crate::log::{LOG_LIMIT, LogEntry, LogKind};
 use crate::maneuver::{self, Burn, ManeuverNode, PlanError};
 use crate::rendezvous::{self, Approach, PlaneCrossing};
@@ -16,7 +17,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 11;
+pub const SAVE_VERSION: u32 = 12;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -252,6 +253,19 @@ pub fn combine(host: VesselParams, parts: impl IntoIterator<Item = VesselParams>
     total
 }
 
+/// Wo der Booster der Startbasis gerade ist.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoosterStatus {
+    /// Steht an der Startbasis bereit.
+    Ready,
+    /// Für den geplanten Start dieses Schiffs vorgesehen.
+    Reserved { ship: usize },
+    /// Trägt gerade dieses Schiff nach oben.
+    Ascending { ship: usize },
+    /// Fliegt nach der Trennung zurück (oder steht nicht an der Startbasis).
+    Returning,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct World {
     pub save_version: u32,
@@ -271,6 +285,9 @@ pub struct World {
     /// Einträge). Fehlt in älteren Spielständen: leer.
     #[serde(default)]
     pub log: Vec<LogEntry>,
+    /// Der Booster der Startbasis: Nummer seines Fahrzeugs (siehe `booster`).
+    #[serde(default)]
+    pub booster: Option<usize>,
 }
 
 impl World {
@@ -285,6 +302,7 @@ impl World {
             zorit: 0.0,
             zones: Vec::new(),
             log: Vec::new(),
+            booster: None,
         }
     }
 
@@ -375,8 +393,9 @@ impl World {
         if self.vessels[vessel].foundation_of.is_some() {
             return Err(PlanError::Foundation);
         }
+        let booster = self.booster_for(vessel)?;
         self.command(vessel, |t, bodies, params, now| {
-            t.set_launch(bodies, params, now, launch)
+            t.set_launch(bodies, params, now, launch, booster)
         })
     }
 
@@ -402,6 +421,9 @@ impl World {
         vessel: usize,
         f: impl FnOnce(&mut Trajectory, &[Body], &VesselParams, f64) -> Result<T, PlanError>,
     ) -> Result<T, PlanError> {
+        if self.booster == Some(vessel) {
+            return Err(PlanError::Booster);
+        }
         let host = self.host(vessel);
         let params = self.params(host);
         let result = f(
@@ -458,17 +480,37 @@ impl World {
     /// bei gleicher Zeit nach Schiff.
     pub fn advance_to(&mut self, t: f64) {
         loop {
-            let contact = (0..self.vessels.len())
-                .filter(|&i| self.vessels[i].docked_to.is_none())
+            let free = || (0..self.vessels.len()).filter(|&i| self.vessels[i].docked_to.is_none());
+            let contact = free()
                 .filter_map(|i| {
                     let plan = self.vessels[i].trajectory.dock_plan()?;
-                    (plan.contact <= t).then_some((plan.contact, i))
+                    (plan.contact <= t).then_some((plan.contact, i, None))
                 })
                 .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-            match contact {
-                Some((time, i)) => {
+            // Trennung vom Booster bei Brennschluss des Aufstiegs.
+            let separation = free()
+                .filter_map(|i| {
+                    let plan = self.vessels[i].trajectory.launch()?;
+                    let booster = plan.booster?;
+                    (plan.burn.end <= t).then_some((plan.burn.end, i, Some(booster)))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            let next = [contact, separation]
+                .into_iter()
+                .flatten()
+                .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+            match next {
+                Some((time, i, None)) => {
                     self.advance_all(time.max(self.time));
                     self.dock(i);
+                }
+                Some((time, i, Some(booster))) => {
+                    self.advance_all(time.max(self.time));
+                    // Nur wenn der Aufstieg wirklich geflogen ist: Eine nicht
+                    // scharfe Kette ist stattdessen einen Tag weitergerückt.
+                    if self.vessels[i].trajectory.launch().is_none() {
+                        self.separate(i, &booster);
+                    }
                 }
                 None => return self.advance_all(t),
             }
@@ -503,6 +545,129 @@ impl World {
             }
         }
         self.push_log(entries);
+        self.refuel_booster();
+    }
+
+    /// Der Booster für einen Start von `vessel`: An der Startbasis startet
+    /// jedes Schiff mit ihm (seine Werte), anderswo aus eigener Kraft
+    /// (`None`). Fehler, wenn er nicht bereitsteht.
+    fn booster_for(&self, vessel: usize) -> Result<Option<VesselParams>, PlanError> {
+        let Some(booster) = self.booster else {
+            return Ok(None);
+        };
+        if booster == vessel {
+            return Err(PlanError::Booster);
+        }
+        let at_depot =
+            |i: usize| matches!(self.base_of(i), Some(k) if self.bases[k].kind == BaseKind::Depot);
+        if !at_depot(self.host(vessel)) {
+            return Ok(None);
+        }
+        let reserved = (0..self.vessels.len()).any(|i| {
+            i != self.host(vessel)
+                && self.vessels[i]
+                    .trajectory
+                    .launch()
+                    .is_some_and(|l| l.booster.is_some())
+        });
+        if reserved {
+            return Err(PlanError::BoosterBusy);
+        }
+        if !at_depot(booster) {
+            return Err(PlanError::BoosterAway);
+        }
+        Ok(Some(self.vessels[booster].params))
+    }
+
+    /// Zahl der Schiffe; der Booster zählt nicht dazu.
+    pub fn ship_count(&self) -> usize {
+        self.vessels.len() - usize::from(self.booster.is_some())
+    }
+
+    /// Der Start, für den der Booster vorgesehen ist: das Schiff, der Plan
+    /// des Boosters und ob der Aufstieg schon läuft.
+    fn booster_launch(&self) -> Option<(usize, LaunchPlan, bool)> {
+        self.booster?;
+        (0..self.vessels.len()).find_map(|i| {
+            let trajectory = &self.vessels[i].trajectory;
+            let plan = *trajectory.launch()?;
+            plan.booster?;
+            Some((i, plan, trajectory.current().is_burn()))
+        })
+    }
+
+    /// Der Booster steht an der Startbasis: Dort ist er sofort wieder
+    /// vollgetankt (wie Tanken an der Startbasis: frei und ohne Wartezeit).
+    fn refuel_booster(&mut self) {
+        let Some(index) = self.booster else { return };
+        if self.booster_status() != Some(BoosterStatus::Ready) {
+            return;
+        }
+        let params = self.vessels[index].params;
+        self.vessels[index]
+            .trajectory
+            .set_landed_mass(params.dry_mass + params.fuel_capacity);
+    }
+
+    /// Der Rückflug des Boosters für den geplanten Start von `ship`: die
+    /// Zeitleiste, die er bei der Trennung bekommt (für die Vorschau).
+    pub fn booster_preview(&self, ship: usize) -> Option<Trajectory> {
+        let trajectory = &self.vessels[ship].trajectory;
+        let plan = trajectory.launch()?;
+        let booster = plan.booster?;
+        let end = plan.burn.end;
+        let (body, state) = trajectory.predicted_state(&self.bodies, end)?;
+        booster::flight(
+            &self.bodies,
+            &booster.params,
+            body,
+            end,
+            state,
+            booster.mass,
+            booster.back.node,
+        )
+    }
+
+    /// Wo der Booster gerade ist (für die Anzeige).
+    pub fn booster_status(&self) -> Option<BoosterStatus> {
+        let booster = self.booster?;
+        Some(match self.booster_launch() {
+            Some((ship, _, true)) => BoosterStatus::Ascending { ship },
+            Some((ship, _, false)) => BoosterStatus::Reserved { ship },
+            None => match self.vessels[booster].trajectory.current() {
+                Segment::Surface { wreck: false, .. } if matches!(self.base_of(booster), Some(k) if self.bases[k].kind == BaseKind::Depot) => {
+                    BoosterStatus::Ready
+                }
+                _ => BoosterStatus::Returning,
+            },
+        })
+    }
+
+    /// Trennung bei Brennschluss: Der Booster von `ship` fliegt ab jetzt
+    /// selbst, mit dem beim Planen berechneten Boostback (siehe `booster`).
+    fn separate(&mut self, ship: usize, plan: &BoosterPlan) {
+        let Some(index) = self.booster else { return };
+        let time = self.time;
+        let (body, state) = self.vessel_state(ship);
+        let flight = booster::flight(
+            &self.bodies,
+            &plan.params,
+            body,
+            time,
+            state,
+            plan.mass,
+            plan.back.node,
+        );
+        // Ohne gültigen Boostback (kann nach dem Planen nicht mehr eintreten)
+        // fällt er antriebslos zurück.
+        self.vessels[index].trajectory = flight.unwrap_or_else(|| {
+            Trajectory::new_flying(&self.bodies, &plan.params, body, time, state, plan.mass)
+        });
+        self.push_log([LogEntry {
+            time,
+            vessel: index,
+            kind: LogKind::Separated { ship },
+        }]);
     }
 
     fn push_log(&mut self, entries: impl IntoIterator<Item = LogEntry>) {
@@ -943,6 +1108,11 @@ impl World {
     /// Körper und Zustand eines Schiffs zur aktuellen Zeit (angedockt: des
     /// Hauptschiffs).
     pub fn vessel_state(&self, index: usize) -> (BodyId, StateVector) {
+        // Der Booster fliegt bis zur Trennung am Schiff mit.
+        let index = match self.booster_status() {
+            Some(BoosterStatus::Ascending { ship }) if self.booster == Some(index) => ship,
+            _ => index,
+        };
         self.vessels[self.host(index)]
             .trajectory
             .state_at(&self.bodies, self.time)
@@ -950,6 +1120,12 @@ impl World {
 
     /// Aktuelle Masse in kg (angedockt: des ganzen Verbunds).
     pub fn vessel_mass(&self, index: usize) -> f64 {
+        // Der Booster am Schiff: der Stapel ohne das Schiff.
+        if self.booster == Some(index)
+            && let Some((_, plan, true)) = self.booster_launch()
+        {
+            return plan.burn.mass_at(self.time) - plan.burn.payload().unwrap_or(0.0);
+        }
         self.vessels[self.host(index)]
             .trajectory
             .current()
@@ -970,6 +1146,12 @@ impl World {
     /// Δv-Haushalt eines Schiffs: voller Tank, jetzt, geplante Brennvorgänge
     /// (Start und gültige Nodes), Rest und was fehlt.
     pub fn delta_v_budget(&self, index: usize) -> DeltaVBudget {
+        if self.booster == Some(index)
+            && let Some((_, plan, _)) = self.booster_launch()
+            && let Some(booster) = plan.booster
+        {
+            return self.booster_budget(index, &booster);
+        }
         let index = self.host(index);
         let params = &self.params(index);
         let trajectory = &self.vessels[index].trajectory;
@@ -979,6 +1161,8 @@ impl World {
 
         let items = trajectory
             .launch()
+            // Auf dem Booster verbraucht das Schiff beim Aufstieg nichts.
+            .filter(|l| l.booster.is_none())
             .map(|l| (BudgetItem::Launch, l.burn, None))
             .into_iter()
             .chain(
@@ -1050,6 +1234,27 @@ impl World {
             burns,
             rest: ve * (end_mass / params.dry_mass).ln(),
             missing,
+        }
+    }
+
+    /// Δv-Haushalt des Boosters vor der Trennung, aus dem Plan des Starts:
+    /// der Aufstieg (was er dabei verbrennt, als sein eigenes Δv gerechnet)
+    /// und der Boostback. Der Rest bleibt für das Landebrennen.
+    fn booster_budget(&self, index: usize, plan: &BoosterPlan) -> DeltaVBudget {
+        let params = &plan.params;
+        let ve = params.exhaust_velocity;
+        let mass = self.vessel_mass(index);
+        let back = plan.back.node.delta_v.length();
+        let after = plan.mass * (-back / ve).exp();
+        DeltaVBudget {
+            full: params.full_delta_v(),
+            available: ve * (mass / params.dry_mass).ln(),
+            burns: vec![
+                (BudgetItem::Launch, ve * (mass / plan.mass).max(1.0).ln()),
+                (BudgetItem::Node(0), back),
+            ],
+            rest: ve * (after / params.dry_mass).max(1.0).ln(),
+            missing: 0.0,
         }
     }
 

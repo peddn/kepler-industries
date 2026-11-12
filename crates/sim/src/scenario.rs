@@ -181,28 +181,44 @@ pub const FERRY: VesselParams = VesselParams {
     base_kit: false,
 };
 
-/// Frachter: 2 t Frachtraum. So groß, dass er in einem Stück voll beladen von
-/// Zorb startet (in den Orbit kostet das rund 3,5 km/s), auf Zoon landet und
-/// ohne Tanken mit Zorit zurückkommt; auf Zorb bremsen Luft und Fallschirm.
+/// Booster der Startbasis (siehe `booster`): hebt Schiffe bis etwa 19 t so
+/// hoch und schnell, dass sie mit rund 1,5 km/s eigenem Δv die Umlaufbahn
+/// erreichen, und kommt zurück: Er landet ohne Fallschirm mit einem
+/// Landebrennen kurz über dem Boden. Schub: das 1,5-fache des
+/// Startgewichts mit einem vollen Frachter.
+pub const BOOSTER: VesselParams = VesselParams {
+    dry_mass: 3_000.0,
+    drag_area: 8.0,
+    thrust: 760_000.0,
+    exhaust_velocity: 3_000.0,
+    fuel_capacity: 30_000.0,
+    parachute_area: 0.0,
+    cargo_capacity: 0.0,
+    base_kit: false,
+};
+
+/// Frachter: 2 t Frachtraum. So groß, dass er voll beladen auf dem Booster
+/// von Zorb startet, auf Zoon landet und ohne Tanken mit Zorit zurückkommt;
+/// auf Zorb bremsen Luft und Fallschirm.
 pub const FREIGHTER: VesselParams = VesselParams {
     dry_mass: 2_500.0,
     drag_area: 5.0,
     thrust: 440_000.0,
     exhaust_velocity: 3_200.0,
-    fuel_capacity: 30_000.0,
+    fuel_capacity: 14_000.0,
     parachute_area: 1_000.0,
     cargo_capacity: 2_000.0,
     base_kit: false,
 };
 
-/// Basisschiff: startet von Zorb, landet einmal und wird zum Fundament einer
-/// Basis (siehe `base`). Kein Frachtraum.
+/// Basisschiff: startet auf dem Booster von Zorb, landet einmal und wird zum
+/// Fundament einer Basis (siehe `base`). Kein Frachtraum.
 pub const BASE_SHIP: VesselParams = VesselParams {
     dry_mass: 3_000.0,
     drag_area: 4.0,
     thrust: 250_000.0,
     exhaust_velocity: 3_200.0,
-    fuel_capacity: 16_000.0,
+    fuel_capacity: 7_000.0,
     parachute_area: 400.0,
     cargo_capacity: 0.0,
     base_kit: true,
@@ -219,9 +235,23 @@ const BASE_SHIP_FUEL_IN_ORBIT: f64 = 3_100.0;
 pub const START_ZORIT: f64 = 3_000.0;
 
 /// Spielbeginn: das Sonnensystem (`solar_system`), auf Zorb die Startbasis
-/// mit ihrem Zielgebiet und `START_ZORIT` im Lager. Keine Schiffe: Man
-/// bestellt, was man braucht (siehe `base`).
+/// mit ihrem Zielgebiet, dem Booster und `START_ZORIT` im Lager. Keine
+/// Schiffe: Man bestellt, was man braucht (siehe `base`).
 pub fn start() -> World {
+    let mut world = base_world();
+    add_booster(&mut world);
+    world
+}
+
+/// Der Booster steht vollgetankt an der Startbasis.
+fn add_booster(world: &mut World) {
+    let pad = world.bases[0].location;
+    let booster = world.spawn_landed("Booster", BOOSTER, BOOSTER.fuel_capacity, ZORB, pad);
+    world.booster = Some(booster);
+}
+
+/// Sonnensystem und Startbasis, noch ohne Booster.
+fn base_world() -> World {
     let mut world = World::new(solar_system());
     world.home = ZORB;
     world.zorit = START_ZORIT;
@@ -244,7 +274,9 @@ pub fn start() -> World {
     world
 }
 
-/// Für Tests und zum Ausprobieren (`--demo`): wie `start`, aber mit leerem
+/// Für Tests und zum Ausprobieren (`--demo`): wie `start`, aber ohne Booster
+/// (die Fähre an der Startbasis startet aus eigener Kraft, wie überall
+/// sonst; die Beispiele mit ihr bleiben so, wie sie sind), mit leerem
 /// Lager, weiteren Zielgebieten und Schiffen. Zwei Satelliten: einer stabil
 /// oberhalb der Atmosphäre, einer zu tief abgesetzt. Ohne Eingriff bremst die
 /// Luft ihn bei jedem Durchgang ab, bis er abstürzt. Mit einem Manöver an der
@@ -252,7 +284,7 @@ pub fn start() -> World {
 /// starten kann, eine vollgetankte Fähre im Orbit für den Flug zum Mond und
 /// dahinter zwei Basisschiffe und zwei beladene Frachter.
 pub fn demo() -> World {
-    let mut world = start();
+    let mut world = base_world();
     world.zorit = 0.0;
     let planet = &world.bodies[ZORB];
     let (gm, r) = (planet.gm, planet.radius);

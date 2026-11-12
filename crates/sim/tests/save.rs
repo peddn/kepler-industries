@@ -47,7 +47,8 @@ fn start_is_saved() {
     world.order_ship(ShipKind::Freighter).unwrap();
     let loaded = from_json(&to_json(&world)).unwrap();
     assert_eq!(loaded, world);
-    assert_eq!((loaded.zorit, loaded.vessels.len()), (2_000.0, 1));
+    // Der Booster und das bestellte Schiff.
+    assert_eq!((loaded.zorit, loaded.vessels.len()), (2_000.0, 2));
 }
 
 /// Ein Spielstand einer anderen Version wird als solcher erkannt, auch wenn

@@ -130,6 +130,17 @@ impl Burn {
         self.mass_at(self.end)
     }
 
+    /// Aufstieg mit Booster: die Masse des Schiffs, das nach dem
+    /// Brennschluss allein weiterfliegt (es verbraucht dabei nichts).
+    pub fn payload(&self) -> Option<f64> {
+        self.ascent.and_then(|a| a.stack).map(|s| s.payload)
+    }
+
+    /// Masse des Schiffs nach dem Brennen: ohne den Booster.
+    pub fn ship_end_mass(&self) -> f64 {
+        self.payload().unwrap_or(self.end_mass())
+    }
+
     /// Tatsächlich geliefertes Δv (Raketengleichung).
     pub fn delta_v(&self) -> f64 {
         let exhaust_velocity = self.thrust / self.mass_flow;
@@ -205,6 +216,15 @@ pub enum PlanError {
     TooWeak,
     /// Das Schiff fliegt gerade zum Andocken an.
     Docking,
+    /// Der Booster fliegt selbst; er lässt sich nicht steuern.
+    Booster,
+    /// Der Booster steht nicht an der Startbasis.
+    BoosterAway,
+    /// Der Booster ist für den Start eines anderen Schiffs verplant.
+    BoosterBusy,
+    /// Mit diesem Schiff und Profil käme der Booster nicht zur Startbasis
+    /// zurück.
+    BoosterNoReturn,
 }
 
 impl fmt::Display for PlanError {
@@ -226,6 +246,12 @@ impl fmt::Display for PlanError {
             PlanError::TooWeak => "Schub reicht nicht zum Abheben",
             PlanError::NoNode => "Kein Node geplant",
             PlanError::Docking => "Schiff fliegt gerade zum Andocken an",
+            PlanError::Booster => "Der Booster fliegt selbst",
+            PlanError::BoosterAway => "Der Booster steht nicht an der Startbasis",
+            PlanError::BoosterBusy => "Der Booster ist für einen anderen Start verplant",
+            PlanError::BoosterNoReturn => {
+                "Der Booster käme nicht zurück (Schiff zu schwer oder Aufstieg zu flach)"
+            }
         })
     }
 }

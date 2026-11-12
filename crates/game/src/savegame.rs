@@ -42,7 +42,7 @@ fn write(world: &World) -> Result<(), String> {
 /// Welches Zielgebiet zu Beginn gewählt ist: ohne Schiffe das der
 /// Startbasis, damit ihre Karte (Schiffe bestellen) gleich offen ist.
 pub fn initial_zone(world: &World) -> SelectedZone {
-    SelectedZone((world.vessels.is_empty() && !world.zones.is_empty()).then_some(0))
+    SelectedZone((world.ship_count() == 0 && !world.zones.is_empty()).then_some(0))
 }
 
 /// `F5` speichert, `F9` lädt.

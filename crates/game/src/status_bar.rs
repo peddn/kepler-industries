@@ -137,6 +137,10 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             ),
             TEXT_COLOR,
         ),
+        LogKind::Separated { ship } => (
+            format!("trennt sich von {}", world.vessels[*ship].name),
+            TEXT_COLOR,
+        ),
     };
     Line {
         time: entry.time,

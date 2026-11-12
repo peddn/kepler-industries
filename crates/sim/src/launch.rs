@@ -7,6 +7,7 @@
 //! berechnet: wenn die Apoapsis die Zielhöhe erreicht, sonst mit leerem Tank.
 
 use crate::body::{Body, BodyId, SurfacePoint};
+use crate::booster::{self, BoosterPlan};
 use crate::integrator::{self, Forces, STEP};
 use crate::kepler::{self, StateVector};
 use crate::maneuver::{Burn, PlanError};
@@ -97,6 +98,9 @@ pub struct LaunchPlan {
     pub launch: Launch,
     /// Der Aufstieg: Brennen vom Abheben bis zum Brennschluss.
     pub burn: Burn,
+    /// Start mit dem Booster der Startbasis (siehe `booster`).
+    #[serde(default)]
+    pub booster: Option<BoosterPlan>,
 }
 
 /// Aufstiegssteuerung, eine Schwerkraftwende wie in KSP: senkrecht bis zum
@@ -118,6 +122,19 @@ pub struct Ascent {
     /// Wendewinkel in Radiant (alte Spielstände: `KICK`).
     #[serde(default = "default_kick_radians")]
     pub kick: f64,
+    /// Aufstieg als Stapel mit dem Booster.
+    #[serde(default)]
+    pub stack: Option<Stack>,
+}
+
+/// Schiff auf dem Booster: Der Booster brennt, das Schiff ist Nutzlast.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Stack {
+    /// Masse des Schiffs in kg; mit ihr fliegt es nach der Trennung weiter.
+    pub payload: f64,
+    /// Widerstandsfläche des Stapels in m²: Schiff und Booster stehen
+    /// hintereinander, es zählt die größere der beiden.
+    pub drag_area: f64,
 }
 
 fn default_kick_radians() -> f64 {
@@ -166,6 +183,10 @@ pub fn pad_state(body: &Body, point: SurfacePoint, t: f64) -> StateVector {
 /// Berechnet den Aufstieg für einen Start vom Punkt `point` mit der Masse
 /// `mass`. Das Brennen endet, sobald die Apoapsis die Zielhöhe erreicht (auf
 /// Bruchteile eines Meters genau), spätestens mit leerem Tank.
+///
+/// Mit `booster` (seine Werte, vollgetankt) hebt das Schiff als Stapel ab:
+/// Es brennt nur der Booster, und zwar höchstens, bis nur noch seine Reserve
+/// für den Rückflug im Tank ist.
 pub fn plan(
     bodies: &[Body],
     params: &VesselParams,
@@ -173,13 +194,28 @@ pub fn plan(
     point: SurfacePoint,
     mass: f64,
     launch: &Launch,
+    booster: Option<&VesselParams>,
 ) -> Result<Burn, PlanError> {
-    if params.thrust <= 0.0 || params.exhaust_velocity <= 0.0 {
+    // Wer brennt, was beim Abheben insgesamt wiegt und was verbrannt werden darf.
+    let engine = booster.unwrap_or(params);
+    let (lift_mass, fuel, drag_area) = match booster {
+        Some(b) => (
+            mass + b.dry_mass + b.fuel_capacity,
+            (b.fuel_capacity - booster::reserve(b)).max(0.0),
+            params.drag_area.max(b.drag_area),
+        ),
+        None => (mass, (mass - params.dry_mass).max(0.0), params.drag_area),
+    };
+    let stack = booster.map(|_| Stack {
+        payload: mass,
+        drag_area,
+    });
+    if engine.thrust <= 0.0 || engine.exhaust_velocity <= 0.0 {
         return Err(PlanError::NoEngine);
     }
     let body = &bodies[body_id];
     let gravity = body.gm / (body.radius * body.radius);
-    if params.thrust <= mass * gravity {
+    if engine.thrust <= lift_mass * gravity {
         return Err(PlanError::TooWeak);
     }
 
@@ -191,20 +227,21 @@ pub fn plan(
     let heading = launch.profile.heading.to_radians();
     let forward = north * heading.cos() + east * heading.sin();
     let turn_radius = body.radius + launch.profile.turn_altitude.max(0.0);
-    let mass_flow = params.thrust / params.exhaust_velocity;
-    let burnout = t0 + (mass - params.dry_mass).max(0.0) / mass_flow;
+    let mass_flow = engine.thrust / engine.exhaust_velocity;
+    let burnout = t0 + fuel / mass_flow;
     let mut burn = Burn {
         start: t0,
         end: burnout,
-        start_mass: mass,
+        start_mass: lift_mass,
         direction: up,
-        thrust: params.thrust,
+        thrust: engine.thrust,
         mass_flow,
         ascent: Some(Ascent {
             plane_normal: up.cross(forward).normalize(),
             turn_radius,
             spin: body.spin(),
             kick: kick_radians(launch.profile.kick),
+            stack,
         }),
         descent: None,
     };
@@ -213,9 +250,15 @@ pub fn plan(
     let target = body.radius + launch.profile.target_apoapsis;
     let forces = Forces {
         body,
-        drag_area: params.drag_area,
-        parachute_area: params.parachute_area,
-        mass,
+        drag_area,
+        // Der Stapel hat keinen Fallschirm; der des Schiffs zählt erst nach
+        // der Trennung.
+        parachute_area: if booster.is_some() {
+            0.0
+        } else {
+            params.parachute_area
+        },
+        mass: lift_mass,
         burn: Some(&burn),
     };
     let mut t = t0;

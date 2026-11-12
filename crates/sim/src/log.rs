@@ -69,4 +69,6 @@ pub enum LogKind {
     SoiEntry { body: BodyId, periapsis: f64 },
     /// Die Einflusssphäre von `body` verlassen (zurück zum Mutterkörper).
     SoiExit { body: BodyId },
+    /// Der Booster hat sich bei Brennschluss vom Schiff `ship` getrennt.
+    Separated { ship: usize },
 }

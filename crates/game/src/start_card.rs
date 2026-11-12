@@ -2,10 +2,11 @@
 //! kann. Start planen oder abbrechen, die Werte des Aufstiegs verstellen
 //! (− / +, mit Umschalt fein) und sehen, was daraus folgt.
 
+use crate::booster_card;
 use crate::hud::{self, format_span, km};
 use crate::ui::{Notes, card, stepper, wide_button};
 use bevy_egui::egui;
-use sim::{Launch, LaunchProfile, PlanError, Segment, World, kepler};
+use sim::{BaseKind, Launch, LaunchProfile, PlanError, Segment, World, kepler};
 
 /// Vorgabe für einen neuen Start: so lange bis zum Abheben.
 const DEFAULT_COUNTDOWN: f64 = 120.0;
@@ -81,9 +82,16 @@ fn launch_result(world: &World, i: usize) -> String {
                      Ziel-Apoapsis) ins Ziel."
                 .into(),
         };
+        // An der Startbasis geht es nur mit dem Booster.
+        let at_depot =
+            matches!(world.base_of(i), Some(k) if world.bases[k].kind == BaseKind::Depot);
+        let booster = match booster_card::status(world) {
+            Some(status) if at_depot => format!("\nStart mit dem Booster. {status}"),
+            _ => String::new(),
+        };
         return format!(
             "{place} Kurs 90° ist Osten. In den Orbit: danach mit einem Node an der \
-             Apoapsis zirkularisieren."
+             Apoapsis zirkularisieren.{booster}"
         );
     };
     let burn = &plan.burn;
@@ -96,7 +104,11 @@ fn launch_result(world: &World, i: usize) -> String {
     let row = |label: &str, value: String| format!("{label:<14}{value}");
     let mut lines = vec![
         row(
-            "Brennschluss",
+            if plan.booster.is_some() {
+                "Trennung"
+            } else {
+                "Brennschluss"
+            },
             format!(
                 "in {}",
                 format_span((burn.end - world.time).max(0.0), hud::day(world))
@@ -105,13 +117,13 @@ fn launch_result(world: &World, i: usize) -> String {
         row("  in Höhe", km(altitude)),
         row(
             "Treibstoff",
-            format!("{:.0} kg", burn.end_mass() - params.dry_mass),
+            format!("{:.0} kg", burn.ship_end_mass() - params.dry_mass),
         ),
         row(
             "  reicht für",
             format!(
                 "{:.0} m/s",
-                params.exhaust_velocity * (burn.end_mass() / params.dry_mass).ln()
+                params.exhaust_velocity * (burn.ship_end_mass() / params.dry_mass).ln()
             ),
         ),
     ];
@@ -133,6 +145,20 @@ fn launch_result(world: &World, i: usize) -> String {
         lines.push(row(
             "Bahnneigung",
             format!("{:.1}°", (h.z / h.length()).acos().to_degrees()),
+        ));
+    }
+    if let Some(booster) = &plan.booster {
+        let back = &booster.back;
+        lines.push(row(
+            "Booster",
+            format!("Boostback {:.0} m/s", back.node.delta_v.length()),
+        ));
+        lines.push(row(
+            "",
+            format!(
+                "zurück in {}",
+                format_span((back.landing - world.time).max(0.0), hud::day(world))
+            ),
         ));
     }
     // Kommt die Fähre wieder herunter (Hop), wo und heil?

@@ -8,6 +8,7 @@
 
 pub mod base;
 pub mod body;
+pub mod booster;
 pub mod docking;
 pub mod integrator;
 pub mod kepler;
@@ -25,6 +26,7 @@ pub mod world;
 
 pub use base::{BaseError, ShipKind};
 pub use body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint};
+pub use booster::{BoosterPlan, Return};
 pub use docking::{DockError, DockPlan, DockRequest, Docking, UndockError, UndockFuel};
 pub use kepler::StateVector;
 pub use landing::{Crash, LandingZone};
@@ -35,6 +37,6 @@ pub use rendezvous::{Approach, PlaneCrossing};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
 pub use transfer::{BodyApproach, Window};
 pub use world::{
-    Base, BaseKind, BudgetItem, Cargo, DeltaVBudget, LandingBurn, Store, Touchdown, Vessel,
-    VesselParams, VesselStatus, World,
+    Base, BaseKind, BoosterStatus, BudgetItem, Cargo, DeltaVBudget, LandingBurn, Store, Touchdown,
+    Vessel, VesselParams, VesselStatus, World,
 };

@@ -26,6 +26,7 @@
 //! Zentimeter.
 
 use crate::body::{Body, BodyId, SurfacePoint};
+use crate::booster::{self, BoosterPlan};
 use crate::docking::{self, DockError, DockPlan, DockRequest, Docking};
 use crate::integrator::{self, Forces, Sample};
 use crate::kepler::{self, StateVector};
@@ -208,9 +209,11 @@ impl Segment {
 
     pub fn mass_at(&self, t: f64) -> f64 {
         match self {
+            // Auf dem Booster zählt die Masse des Schiffs: Es verbraucht
+            // nichts und fliegt nach der Trennung mit ihr weiter.
             Segment::Integrated {
                 burn: Some(burn), ..
-            } => burn.mass_at(t),
+            } => burn.payload().unwrap_or(burn.mass_at(t)),
             Segment::Approach { mass, end_mass, .. } => {
                 // Gleichmäßig über den Anflug verbraucht.
                 let (start, end) = (self.start(), self.end());
@@ -383,10 +386,17 @@ fn integrated(
     mut burn: Option<Burn>,
     pending: Option<&Burn>,
 ) -> Segment {
+    // Auf dem Booster zählt die Fläche des Stapels, und er hat keinen
+    // Fallschirm (der des Schiffs zählt erst nach der Trennung).
+    let stack = burn.and_then(|b| b.ascent).and_then(|a| a.stack);
+    let (drag_area, parachute_area) = match stack {
+        Some(stack) => (stack.drag_area, 0.0),
+        None => (params.drag_area, params.parachute_area),
+    };
     let forces = Forces {
         body: &bodies[body_id],
-        drag_area: params.drag_area,
-        parachute_area: params.parachute_area,
+        drag_area,
+        parachute_area,
         mass,
         burn: burn.as_ref(),
     };
@@ -1057,7 +1067,8 @@ impl Trajectory {
                 time: plan.launch.time + dt,
                 ..plan.launch
             };
-            changed.launch = Some(self.plan_launch(bodies, params, now, launch)?);
+            let booster = plan.booster.map(|b| b.params);
+            changed.launch = Some(self.plan_launch(bodies, params, now, launch, booster)?);
         }
         for n in &mut changed.nodes {
             n.node.time += dt;
@@ -1245,13 +1256,15 @@ impl Trajectory {
     }
 
     /// Berechnet den Aufstieg für `launch` vom aktuellen Abschnitt aus (muss
-    /// am Boden sein).
+    /// am Boden sein); mit `booster` als Stapel, samt dessen Rückflug (siehe
+    /// `booster`).
     fn plan_launch(
         &self,
         bodies: &[Body],
         params: &VesselParams,
         now: f64,
         launch: Launch,
+        booster: Option<VesselParams>,
     ) -> Result<LaunchPlan, PlanError> {
         let Segment::Surface {
             body,
@@ -1266,21 +1279,57 @@ impl Trajectory {
         if launch.time <= now {
             return Err(PlanError::InPast);
         }
-        let burn = launch::plan(bodies, params, body, point, mass, &launch)?;
-        Ok(LaunchPlan { launch, burn })
+        let burn = launch::plan(bodies, params, body, point, mass, &launch, booster.as_ref())?;
+        let booster = match booster {
+            None => None,
+            Some(booster) => {
+                // Die Trennung, genau wie sie die Zeitleiste später fliegt.
+                let ascent = self
+                    .compute(bodies, params, &[burn])
+                    .ok_or(PlanError::NotLanded)?;
+                let state = ascent
+                    .iter()
+                    .find(|s| s.is_burn() && s.end_event() == Some(Event::BurnEnd))
+                    .map(|s| s.state_at(bodies, burn.end))
+                    .ok_or(PlanError::BoosterNoReturn)?;
+                let own = burn.end_mass() - mass;
+                let back = booster::plan_return(
+                    bodies,
+                    &booster,
+                    body,
+                    point,
+                    launch.profile.heading,
+                    burn.end,
+                    state,
+                    own,
+                )?;
+                Some(BoosterPlan {
+                    params: booster,
+                    mass: own,
+                    back,
+                })
+            }
+        };
+        Ok(LaunchPlan {
+            launch,
+            burn,
+            booster,
+        })
     }
 
     /// Plant oder ändert den Start (Zeitpunkt und Profil). Die Nodes danach
     /// bleiben an ihren Zeitpunkten und wandern mit der neuen Bahn. Ein neuer
-    /// Start ohne Nodes ist nicht scharf.
+    /// Start ohne Nodes ist nicht scharf. Mit `booster` (dessen Werte) startet
+    /// das Schiff auf dem Booster.
     pub fn set_launch(
         &mut self,
         bodies: &[Body],
         params: &VesselParams,
         now: f64,
         launch: Launch,
+        booster: Option<VesselParams>,
     ) -> Result<(), PlanError> {
-        let plan = self.plan_launch(bodies, params, now, launch)?;
+        let plan = self.plan_launch(bodies, params, now, launch, booster)?;
         if self.launch.is_none() && self.nodes.is_empty() {
             self.armed = false;
         }

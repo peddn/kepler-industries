@@ -385,7 +385,7 @@ impl World {
             return Err(BaseError::NotEnoughZorit);
         }
         self.zorit -= SHIP_PRICE;
-        let name = format!("{}-{}", kind.label(), self.vessels.len() + 1);
+        let name = format!("{}-{}", kind.label(), self.ship_count() + 1);
         let params = kind.params();
         let vessel = self.spawn_landed(&name, params, params.fuel_capacity, body, pad);
         self.log.push(LogEntry {
