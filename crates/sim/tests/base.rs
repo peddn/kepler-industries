@@ -19,6 +19,7 @@ use sim::{
 fn on_zoon() -> (World, usize, SurfacePoint) {
     let mut world = demo();
     world.vessels.clear();
+    world.booster = None;
     let point = SurfacePoint::from_degrees(10.0, 30.0);
     let ship = world.spawn_landed("Basisschiff", BASE_SHIP, 1_000.0, ZOON, point);
     (world, ship, point)
@@ -99,10 +100,10 @@ fn depot_loads_fuels_and_takes_zorit() {
     assert_eq!(world.load_parts(ship), Ok(2_000.0));
     assert_eq!(world.zorit, 0.0);
     assert_eq!(world.load_parts(ship), Err(BaseError::NothingToLoad));
-    assert_eq!(world.refuel(ship), Ok(29_500.0));
+    assert_eq!(world.refuel(ship), Ok(13_500.0));
     assert_eq!(world.refuel(ship), Err(BaseError::NothingToRefuel));
-    assert_eq!(world.vessel_mass(ship), 2_500.0 + 2_000.0 + 30_000.0);
-    assert!((world.vessel_fuel(ship) - 30_000.0).abs() < 1e-9);
+    assert_eq!(world.vessel_mass(ship), 2_500.0 + 2_000.0 + 14_000.0);
+    assert!((world.vessel_fuel(ship) - 14_000.0).abs() < 1e-9);
     // Bauteile nimmt die Startbasis nicht zurück.
     assert_eq!(world.unload(ship), Err(BaseError::NothingToUnload));
 
@@ -112,7 +113,11 @@ fn depot_loads_fuels_and_takes_zorit() {
     world.vessels[back]
         .trajectory
         .set_landed_mass(2_500.0 + 100.0 + 800.0);
-    world.set_launch(back, launch()).unwrap();
+    let start = Launch {
+        time: 100.0,
+        profile: LaunchProfile::default(),
+    };
+    world.set_launch(back, start).unwrap();
     assert_eq!(world.deliver_zorit(back), Err(BaseError::Busy));
     world.clear_launch(back).unwrap();
     assert_eq!(world.deliver_zorit(back), Ok(800.0));
@@ -372,8 +377,8 @@ fn mine_yield_depends_on_the_body() {
     assert_eq!(world.load_zorit(ship), Err(BaseError::NothingToLoad));
 }
 
-/// Aufstieg von der Startbasis und Zirkularisieren: so viel Δv bleibt im
-/// Orbit übrig.
+/// Aufstieg von der Startbasis auf dem Booster und Zirkularisieren: so viel
+/// Δv bleibt im Orbit übrig.
 fn left_in_orbit(params: VesselParams, parts: f64) -> f64 {
     let mut world = demo();
     let ship = at_depot(&mut world, params, 0.0);
@@ -400,7 +405,10 @@ fn left_in_orbit(params: VesselParams, parts: f64) -> f64 {
     let apoapsis = kepler::orbit_info(gm, &state).apoapsis.unwrap();
     let circularize =
         (gm / apoapsis).sqrt() - state.position.cross(state.velocity).length() / apoapsis;
-    let in_orbit = burn.end_mass() * (-circularize / params.exhaust_velocity).exp();
+    // Das Schiff verbraucht auf dem Booster nichts.
+    let full = params.dry_mass + parts + params.fuel_capacity;
+    assert_eq!(burn.ship_end_mass(), full);
+    let in_orbit = full * (-circularize / params.exhaust_velocity).exp();
     params.exhaust_velocity * (in_orbit / (params.dry_mass + parts)).ln()
 }
 
@@ -411,7 +419,7 @@ fn ships_reach_orbit_from_the_depot() {
     let freighter = left_in_orbit(FREIGHTER, 2_000.0);
     assert!(freighter > 2_900.0, "{freighter}");
     let base_ship = left_in_orbit(BASE_SHIP, 0.0);
-    assert!(base_ship > 2_200.0, "{base_ship}");
+    assert!(base_ship > 2_100.0, "{base_ship}");
 }
 
 /// Der ganze Kreislauf mit der Startausstattung: Ein Basisschiff gründet auf
@@ -477,13 +485,14 @@ fn start_kit_mines_zorit_on_zoon() {
     assert_eq!(world.vessels[6].cargo.zorit, 1_000.0);
 }
 
-/// Spielbeginn: keine Schiffe, nur die Startbasis und ein Vorrat an Zorit,
-/// der genau für eine Basis reicht. Ein bestelltes Schiff steht sofort
+/// Spielbeginn: keine Schiffe, nur die Startbasis mit ihrem Booster und ein
+/// Vorrat an Zorit, der genau für eine Basis reicht. Ein bestelltes Schiff steht sofort
 /// vollgetankt an der Startbasis.
 #[test]
 fn game_starts_with_zorit_for_one_base() {
     let mut world = start();
-    assert!(world.vessels.is_empty());
+    assert_eq!(world.vessels.len(), 1);
+    assert_eq!(world.booster, Some(0));
     assert_eq!((world.bases.len(), world.zones.len()), (1, 1));
     assert_eq!(world.bases[0].kind, BaseKind::Depot);
     assert_eq!(world.zones[0].name, "Startbasis");
@@ -496,8 +505,14 @@ fn game_starts_with_zorit_for_one_base() {
     assert!((world.vessel_fuel(ship) - BASE_SHIP.fuel_capacity).abs() < 1e-9);
     assert_eq!(world.base_of(ship), Some(0));
     assert!(matches!(world.log.last().unwrap().kind, LogKind::Ordered));
-    // Es startet von dort wie jedes Schiff.
-    world.set_launch(ship, launch()).unwrap();
+    // Es startet von dort auf dem Booster.
+    let start = Launch {
+        time: 100.0,
+        profile: LaunchProfile::default(),
+    };
+    world.set_launch(ship, start).unwrap();
+    let plan = world.vessels[ship].trajectory.launch().unwrap();
+    assert!(plan.booster.is_some());
 
     let freighter = world.order_ship(ShipKind::Freighter).unwrap();
     assert_eq!(world.vessels[freighter].name, "Frachter-2");
