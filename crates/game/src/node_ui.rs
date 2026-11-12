@@ -21,7 +21,6 @@ use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy_egui::input::EguiWantsInput;
 use sim::body::body_state;
 use sim::{BodyId, ManeuverNode, Plan, PlanError, Segment, Trajectory, World, maneuver};
 
@@ -459,7 +458,7 @@ pub fn input(
     keys: Res<ButtonInput<KeyCode>>,
     real_time: Res<Time<Real>>,
     mut rig: ResMut<CameraRig>,
-    egui: Res<EguiWantsInput>,
+    pointer: crate::ui::MapPointer,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<MainCamera>>,
 ) {
@@ -530,7 +529,7 @@ pub fn input(
     let projector = Projector::new(camera, transform, rig.focus, world);
 
     // Klicks auf die Oberfläche gehören dieser.
-    let over_ui = egui.wants_any_pointer_input();
+    let over_ui = !pointer.on_map();
     if buttons.just_pressed(MouseButton::Left) && !over_ui {
         *drag = Drag::Pending(cursor);
         if let Some(i) = selection.0

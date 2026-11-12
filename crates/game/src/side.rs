@@ -93,8 +93,8 @@ impl Side {
                         ui.add(
                             egui::Slider::new(&mut self.opacity, MIN_OPACITY..=1.0)
                                 .show_value(false),
-                        );
-                        ui.weak("Deckkraft");
+                        )
+                        .on_hover_text("Deckkraft dieser Leiste");
                     });
                 let layout = match self.edge {
                     Edge::Left => egui::Layout::left_to_right(egui::Align::Center),

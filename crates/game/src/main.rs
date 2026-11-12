@@ -312,6 +312,7 @@ fn main() {
     .insert_resource(zone)
     .init_resource::<node_ui::SelectedBody>()
     .init_resource::<ui::WorldLabels>()
+    .init_resource::<ui::MapArea>()
     .init_resource::<top_bar::Panels>()
     .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<status_bar::StatusBar>()
@@ -330,7 +331,7 @@ fn main() {
                 focus::keys,
                 focus::follow,
                 // Über der Oberfläche gehören Mausrad und Ziehen dieser.
-                camera::input.run_if(not(bevy_egui::input::egui_wants_any_pointer_input)),
+                camera::input.run_if(ui::pointer_on_map),
                 camera::apply,
             )
                 .chain(),

@@ -164,6 +164,40 @@ impl Selected<'_> {
     }
 }
 
+/// Der Teil des Fensters, den die Leisten frei lassen: die Karte. Schreibt
+/// `draw`, gilt also ab dem nächsten Bild.
+#[derive(Resource, Default)]
+pub struct MapArea(Option<egui::Rect>);
+
+/// Wem die Maus gerade gehört: der Karte oder der Oberfläche.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct MapPointer<'w, 's> {
+    area: Res<'w, MapArea>,
+    egui: Res<'w, bevy_egui::input::EguiWantsInput>,
+    windows: Query<'w, 's, &'static Window, With<bevy::window::PrimaryWindow>>,
+}
+
+impl MapPointer<'_, '_> {
+    /// Ob die Maus über der Karte steht: nicht über einer Leiste (die sind
+    /// für egui nur Hintergrund, es meldet sie nicht), nicht über einem
+    /// Fenster und nicht mitten im Ziehen eines Reglers.
+    pub fn on_map(&self) -> bool {
+        let cursor = self.windows.single().ok().and_then(Window::cursor_position);
+        match (self.area.0, cursor) {
+            (Some(area), Some(cursor)) => {
+                area.contains(egui::pos2(cursor.x, cursor.y))
+                    && !self.egui.wants_any_pointer_input()
+            }
+            _ => false,
+        }
+    }
+}
+
+/// Laufbedingung: Mausrad und Ziehen gehören der Karte.
+pub fn pointer_on_map(pointer: MapPointer) -> bool {
+    pointer.on_map()
+}
+
 /// Zeichnet die Oberfläche.
 #[allow(clippy::too_many_arguments)]
 pub fn draw(
@@ -180,6 +214,7 @@ pub fn draw(
     mut message: ResMut<UiMessage>,
     mut labels: ResMut<WorldLabels>,
     mut panels: ResMut<Panels>,
+    mut map: ResMut<MapArea>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if !*styled {
@@ -240,6 +275,7 @@ pub fn draw(
     // Was die Leisten frei lassen, gehört der Karte: Warnungen und
     // Beschriftungen werden darauf begrenzt gezeichnet.
     let free = root.available_rect_before_wrap();
+    map.0 = Some(free);
     let painter = root.painter_at(free);
     let font = egui::FontId::monospace(TEXT_SIZE);
     if let Some(vessel) = selected.vessel.0 {
