@@ -97,6 +97,7 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
         LogKind::BaseFounded { base } => {
             (format!("gründet {}", world.bases[*base].name), LANDED_COLOR)
         }
+        LogKind::Ordered => ("steht an der Startbasis bereit".into(), LANDED_COLOR),
         LogKind::BaseCompleted { base } => (
             format!(
                 "liefert die letzten Bauteile, {} ist fertig",

@@ -270,24 +270,26 @@ pub fn setup(
         base: materials.add(unlit(Color::srgb(0.3, 1.0, 0.4))),
         sphere: sphere.clone(),
     };
-    for i in 0..sim.0.vessels.len() {
+    commands.insert_resource(markers);
+}
+
+/// Eine Markierung für jedes Schiff und jede Basis, auch für bestellte
+/// Schiffe und neu gegründete Basen.
+pub fn spawn_markers(
+    mut commands: Commands,
+    sim: Res<Sim>,
+    markers: Res<MarkerMaterials>,
+    vessels: Query<(), With<VesselMarker>>,
+    existing: Query<(), With<BaseMarker>>,
+) {
+    for i in vessels.iter().count()..sim.0.vessels.len() {
         commands.spawn((
             VesselMarker(i),
-            Mesh3d(sphere.clone()),
+            Mesh3d(markers.sphere.clone()),
             MeshMaterial3d(markers.vessel.clone()),
             Transform::default(),
         ));
     }
-    commands.insert_resource(markers);
-}
-
-/// Eine Markierung für jede Basis, auch für neu gegründete.
-pub fn spawn_base_markers(
-    mut commands: Commands,
-    sim: Res<Sim>,
-    markers: Res<MarkerMaterials>,
-    existing: Query<(), With<BaseMarker>>,
-) {
     for i in existing.iter().count()..sim.0.bases.len() {
         commands.spawn((
             BaseMarker(i),

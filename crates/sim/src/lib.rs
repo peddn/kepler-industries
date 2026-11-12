@@ -22,7 +22,7 @@ pub mod trajectory;
 pub mod transfer;
 pub mod world;
 
-pub use base::BaseError;
+pub use base::{BaseError, ShipKind};
 pub use body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint};
 pub use docking::{DockError, DockPlan, DockRequest, Docking, UndockError, UndockFuel};
 pub use kepler::StateVector;

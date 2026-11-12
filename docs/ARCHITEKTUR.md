@@ -758,11 +758,22 @@ man kommt und was man zurückbringt.
   nach einem Start übrig wäre): zwei Basisschiffe und zwei Frachter mit
   zusammen 4 t Bauteilen.
 
-**Nächster Schritt (geplant): Preise und Bestellen.** Die Startbasis wird
-anwählbar; dort bestellt man gegen Zorit Basisschiffe und Frachter, und
-Bauteile kosten Zorit (erste Werte: Schiff 1 t, Bauteile 0,25 t je Tonne).
-Gegen die Sackgasse: Solange keine Mine fertig ist, sind Basisschiff und
-Bauteile frei; ein Frachter ist frei, wenn kein heiler mehr da ist.
+**Preise und Bestellen (gebaut):** Mit dem Zorit im Lager der Startbasis
+bezahlt man dort Bauteile (0,25 t je Tonne) und bestellt Basisschiffe und
+Frachter (je 1 t; `World::order_ship`). Eine neue Basis kostet damit 2 t
+Zorit: zwei Abholungen auf Zoon, eine auf Zimm. Treibstoff ist an der
+Startbasis frei.
+- Ein bestelltes Schiff steht sofort vollgetankt an der Startbasis: Eine
+  Bauzeit wäre wirkungslos, weil Vorspulen nichts kostet.
+- Reicht das Zorit nicht für den ganzen Frachtraum, gibt es so viele
+  Bauteile, wie es bezahlt.
+- Gegen die Sackgasse (Bedingungen, keine Zeit): Solange keine Mine fertig
+  ist, sind Basisschiff und Bauteile frei; ein Frachter ist frei, wenn kein
+  heiler mehr da ist. Das lässt sich ausnutzen (freie Basisschiffe ohne Mine
+  ergeben nur Tankstellen), schadet aber nicht.
+- Im Spiel: Karte „Startbasis", sobald ein Schiff gewählt ist, das dort
+  steht, oder ihr Zielgebiet (dessen Raute lässt sich nur anklicken, wenn
+  kein Schiff darauf steht; Schiffe haben beim Klicken Vorrang).
 
 **Daten** sind später der zweite Zähler auf Zorb (bestimmen, *was* man bauen
 kann; Zorit, *wie viel*). Sie sind keine Fracht: Sie werden gefunkt, und jede

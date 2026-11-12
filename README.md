@@ -24,7 +24,14 @@ teilen sich den Frachtraum, Treibstoff liegt im Tank. Fracht zählt als Masse
 Basis" der Seitenleiste.
 
 - **Startbasis:** Schiffe in ihrem Zielgebiet laden Bauteile, tanken und
-  laden Zorit ab (vorerst alles frei; das Zorit kommt in ihr Lager).
+  laden Zorit ab; das Zorit kommt in ihr Lager. Die Karte „Startbasis"
+  (ein Schiff dort oder ihr Zielgebiet gewählt) zeigt das Lager und bestellt
+  neue Schiffe, die sofort vollgetankt dort stehen.
+- **Preise in Zorit:** Basisschiff 1 t, Frachter 1 t, Bauteile 0,25 t je
+  Tonne; Treibstoff ist an der Startbasis frei. Eine neue Basis kostet damit
+  2 t Zorit. Damit man sich nicht festspielt: Solange keine Mine fertig ist,
+  sind Basisschiff und Bauteile frei; ein Frachter ist frei, wenn kein heiler
+  mehr da ist.
 - **Gründen:** Ein Basisschiff, das auf einem Körper außer Zorb gelandet ist,
   gründet dort eine **Mine** oder eine **Tankstelle** und wird ihr Fundament
   (es fliegt dann nicht mehr). Der Landepunkt wird zur Zone mit 5 km Radius,
@@ -259,6 +266,11 @@ rechts unten), links steht die Begegnung in 131 Tagen. Nachspielen mit `--node 3
 Angaben. Nachspielen mit `--time 22100 --camera 30,50,30000` und einem Klick
 auf den Mond.*
 
+![Startbasis](docs/screenshots/startbasis.png)
+
+*An der Startbasis: Das bestellte Basisschiff-9 steht vollgetankt bereit. Die
+Karte „Startbasis“ zeigt das Zorit im Lager und die Preise.*
+
 ![Basis](docs/screenshots/basis.png)
 
 *Zoon-Mine 1 ist fertig: Basisschiff-5 ist das Fundament, beide Frachter
@@ -351,6 +363,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
+| Seitenleiste „Startbasis“ (Schiff an der Startbasis oder ihr Zielgebiet gewählt) | Zorit im Lager, Preise; „Basisschiff bestellen“, „Frachter bestellen“ |
 | Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; je nach Lage „Mine gründen“ / „Tankstelle gründen“, „Bauteile abladen“, „Tanken“, „Zorit laden“, an der Startbasis „Bauteile laden“, „Tanken“, „Zorit abladen“ |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
