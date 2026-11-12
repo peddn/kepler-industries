@@ -1,5 +1,5 @@
 //! Leiste oben, zwischen den Seitenleisten: Spielzeit, Zeitraffer und
-//! Kamera, ganz rechts die Schalter für die Fenster Wirtschaft und Hilfe
+//! Kamera, ganz rechts die Schalter für die Fenster Entwürfe, Wirtschaft und Hilfe
 //! (`F1`). Sie wird
 //! nach den Seitenleisten gezeichnet und beginnt deshalb genau an deren
 //! Kante.
@@ -21,6 +21,8 @@ pub struct Panels {
     pub info: bool,
     /// Fenster mit dem Überblick über Basen und Fracht.
     pub economy: bool,
+    /// Fenster mit dem Schiffseditor.
+    pub designs: bool,
     /// Fenster mit der Bedienhilfe.
     pub help: bool,
     pub left: Side,
@@ -33,6 +35,7 @@ impl Default for Panels {
             ships: true,
             info: true,
             economy: false,
+            designs: false,
             help: false,
             left: Side::new(Edge::Left),
             right: Side::new(Edge::Right),
@@ -51,17 +54,25 @@ pub fn show(
         panels.help = !panels.help;
     }
     egui::Panel::top("top").show(root, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(format_time(world.time, hud::day(world)));
-            ui.separator();
-            let pause = if warp.paused { "  (Pause)" } else { "" };
-            ui.label(format!("Zeitraffer {}×{pause}", warp.factor()));
-            ui.separator();
-            let near = if rig.near { " (Nahansicht)" } else { "" };
-            ui.label(format!("Kamera: {}{near}", focus::name(world, rig.target)));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.toggle_value(&mut panels.help, "Hilfe");
-                ui.toggle_value(&mut panels.economy, "Wirtschaft");
+        // Zuerst die Schalter rechts, dann links, was daneben Platz hat: Wird
+        // es eng, kürzt sich die Angabe zur Kamera, statt in die Schalter zu
+        // laufen.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.toggle_value(&mut panels.help, "Hilfe");
+            ui.toggle_value(&mut panels.economy, "Wirtschaft");
+            ui.toggle_value(&mut panels.designs, "Entwürfe");
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.label(format_time(world.time, hud::day(world)));
+                ui.separator();
+                // Knapp gehalten: Zwischen den Seitenleisten ist wenig Platz.
+                let pause = if warp.paused { " (Pause)" } else { "" };
+                ui.label(format!("{}×{pause}", warp.factor()))
+                    .on_hover_text("Zeitraffer (Tasten , und .; Leertaste: Pause)");
+                ui.separator();
+                let near = if rig.near { " (Nahansicht)" } else { "" };
+                let camera = format!("Kamera: {}{near}", focus::name(world, rig.target));
+                ui.add(egui::Label::new(&camera).truncate())
+                    .on_hover_text(camera);
             });
         });
     });

@@ -146,3 +146,36 @@ fn ships_are_ordered_from_designs() {
     world.order_ship(2).unwrap();
     assert_eq!(world.zorit, 3_000.0 - 800.0 - 1_000.0);
 }
+
+/// Der Editor fragt, was ein Start auf dem Booster ergibt: dieselbe Planung
+/// wie im Spiel, unabhängig davon, was der Booster gerade tut.
+#[test]
+fn launch_estimate_matches_the_real_launch() {
+    let mut world = start();
+    let design = Design::freighter();
+    let full = world.launch_estimate(&design, 2_000.0).unwrap();
+    let needed = full.to_orbit.unwrap();
+    assert!((1_400.0..1_600.0).contains(&needed), "{needed}");
+    assert!(full.left().unwrap() > 2_900.0, "{:?}", full.left());
+    // Ohne Fracht bleibt mehr.
+    let empty = world.launch_estimate(&design, 0.0).unwrap();
+    assert!(empty.left().unwrap() > full.left().unwrap() + 1_000.0);
+
+    // Auch während der Booster verplant ist.
+    let ship = world.order_ship(1).unwrap();
+    let start = sim::Launch {
+        time: 100.0,
+        profile: sim::LaunchProfile::default(),
+    };
+    world.set_launch(ship, start).unwrap();
+    assert_eq!(world.launch_estimate(&design, 2_000.0), Ok(full));
+
+    // Zu schwer für den Booster: gesperrtes großes Chassis, voll.
+    let mut heavy = design.clone();
+    heavy.chassis = Chassis::Large;
+    heavy.tank = 30_000.0;
+    assert_eq!(
+        world.launch_estimate(&heavy, 2_000.0),
+        Err(sim::PlanError::BoosterNoReturn)
+    );
+}

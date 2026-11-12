@@ -17,8 +17,22 @@ ein Frachter und 4 t Bauteile (der Frachter fliegt dafür zweimal). Bestellt
 wird in der Karte „Startbasis" der Seitenleiste nach Entwürfen; sie ist zu
 Beginn offen. Ein Entwurf ist ein Chassis mit Triebwerken, optional dem
 Fundament einer Basis und einer Aufteilung des Innenraums in Tank und
-Fracht; daraus ergeben sich Flugwerte und Preis. Vorerst gibt es die beiden
-Startentwürfe „Basisschiff" und „Frachter" (der Editor für eigene folgt).
+Fracht; daraus ergeben sich Flugwerte und Preis. Zu Beginn gibt es die
+Entwürfe „Basisschiff" und „Frachter".
+
+**Schiffseditor (Fenster „Entwürfe"):** Links die Liste der Entwürfe: einen
+wählen, mit „Neu (Kopie)" einen weiteren anlegen, mit „Löschen" entfernen
+(auch die beiden vom Beginn). Rechts der gewählte Entwurf: Name, Chassis,
+Triebwerkssorte und Anzahl, Fundament und ein Regler, der den freien
+Innenraum in Tank und Fracht teilt (0,5-t-Schritte). Darunter stehen Preis,
+Massen, Schub, Δv und was nach einem Start auf dem Booster mit dem
+Standardprofil im Orbit übrig bleibt, jeweils leer und voll beladen (dafür
+wird der Start wirklich probeweise geplant). Was nicht taugt, steht als
+Warnung da (kein Triebwerk, kein Tank, zu schwer für den Booster, reicht
+nicht bis in die Umlaufbahn); bestellen lässt es sich trotzdem. Gesperrte
+Teile (Groß, Z-2, Z-3) sind sichtbar, aber nicht wählbar, bis es den
+Techtree gibt. Änderungen gelten für künftige Bestellungen; gebaute Schiffe
+bleiben, wie sie sind. Die Entwürfe gehören zum Spielstand.
 Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
 (etwa als Erstes eine Tankstelle baut oder ein Schiff verliert), steckt fest.
 
@@ -403,6 +417,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Linksklick auf ein Schiff (in der Karte oder in der Liste links) / `Tab` | Schiff wählen / nächstes Schiff |
 | Schalter „Schiffe“ und „Info“ im Kopf der linken Leiste, „Hilfe“ oben rechts | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
 | ◀ / ▶ im Kopf jeder Seitenleiste | Leiste ein- und ausklappen |
+| Schalter „Entwürfe“ oben rechts | Schiffseditor: Entwürfe anlegen, ändern, löschen und bestellen |
 | Schalter „Wirtschaft“ oben rechts | Fenster mit allen Basen (Vorrat, wann das Lager voll ist) und der Fracht an Bord der Schiffe; Klick auf eine Zeile wählt die Basis oder das Schiff |
 | Klick auf einen Node in der Karte „Manöver“ | Node wählen |
 | Regler unten in jeder Seitenleiste (Tooltip „Deckkraft“) | Wie durchscheinend diese Leiste ist (die Karte läuft dahinter weiter) |

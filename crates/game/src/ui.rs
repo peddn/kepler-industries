@@ -24,8 +24,8 @@ use crate::status_bar::{self, StatusBar};
 use crate::top_bar::{self, Panels};
 use crate::verbund::UndockChoice;
 use crate::{
-    Sim, TimeWarp, booster_card, depot, dv_bar, fracht, hud, left_bar, maneuver_card, start_card,
-    target_card, verbund, wirtschaft,
+    Sim, TimeWarp, booster_card, depot, dv_bar, entwurf, fracht, hud, left_bar, maneuver_card,
+    start_card, target_card, verbund, wirtschaft,
 };
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -201,6 +201,12 @@ impl MapPointer<'_, '_> {
     }
 }
 
+/// Laufbedingung: Niemand tippt gerade in ein Textfeld der Oberfläche; die
+/// Tasten gehören dem Spiel.
+pub fn not_typing(egui: Res<bevy_egui::input::EguiWantsInput>) -> bool {
+    !egui.wants_any_keyboard_input()
+}
+
 /// Laufbedingung: Mausrad und Ziehen gehören der Karte.
 pub fn pointer_on_map(pointer: MapPointer) -> bool {
     pointer.on_map()
@@ -223,6 +229,7 @@ pub fn draw(
     mut labels: ResMut<WorldLabels>,
     mut panels: ResMut<Panels>,
     mut map: ResMut<MapArea>,
+    mut editor: ResMut<entwurf::Editor>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if !*styled {
@@ -282,6 +289,16 @@ pub fn draw(
     // Zuletzt die Leiste oben: Sie liegt zwischen den Seitenleisten.
     top_bar::show(&mut root, world, &warp, &rig, &mut panels);
     wirtschaft::show(root.ctx(), world, &mut selected, &mut panels.economy);
+    let ordered = entwurf::show(
+        root.ctx(),
+        world,
+        &mut editor,
+        &mut panels.designs,
+        &mut notes,
+    );
+    if let Some(ordered) = ordered {
+        selected.select_vessel(ordered);
+    }
 
     // Was die Leisten frei lassen, gehört der Karte: Warnungen und
     // Beschriftungen werden darauf begrenzt gezeichnet.
