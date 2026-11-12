@@ -16,6 +16,7 @@ pub mod launch;
 pub mod log;
 pub mod maneuver;
 pub mod rendezvous;
+pub mod save;
 pub mod scenario;
 pub mod soi;
 pub mod trajectory;

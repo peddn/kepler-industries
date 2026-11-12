@@ -9,7 +9,7 @@ dieses Dokument (mit Begründung).
 
 | Crate | Aufgabe | Abhängigkeiten |
 |---|---|---|
-| `crates/sim` | Die gesamte Simulation: Himmelskörper, Bahnen, Atmosphäre, Schiffe, Zeit. Der Zustand (`World`) ist zugleich der Spielstand. | nur `glam` (f64-Mathe) und `serde` |
+| `crates/sim` | Die gesamte Simulation: Himmelskörper, Bahnen, Atmosphäre, Schiffe, Zeit. Der Zustand (`World`) ist zugleich der Spielstand. | nur `glam` (f64-Mathe), `serde` und `serde_json` (Spielstand als Text) |
 | `crates/game` | Darstellung und Eingabe mit Bevy. Liest die Simulation und treibt sie voran. | `sim`, `bevy` |
 
 `sim` kennt Bevy nicht. Dadurch kompiliert es in Sekunden, ist vollständig
@@ -117,7 +117,14 @@ ohne die Option `float_roundtrip` nicht bitgenau zurück. Jedes künftige
 Speicherformat muss Zahlen exakt erhalten. Der Spielstand trägt eine
 Versionsnummer (`SAVE_VERSION`). Ältere Spielstände müssen vorerst nicht
 laden (Entscheidung: Kompatibilität wird erst gepflegt, wenn es Spieler mit
-wertvollen Ständen gibt). Auch das Protokoll gehört dazu (`World::log`):
+wertvollen Ständen gibt); `sim::save` liest deshalb zuerst nur die
+Versionsnummer und lehnt eine andere mit einer klaren Meldung ab. Im Spiel
+(`savegame`): `F5` schreibt `spielstand.json` (erst in eine neue Datei, dann
+umbenannt; der vorherige Stand bleibt als Sicherung), `F9` lädt. Bewusst kein
+automatisches Speichern: Seit man sich festspielen kann, würde es einen guten
+Stand überschreiben. Nach dem Laden wird alles zurückgesetzt, was auf Schiffe,
+Nodes oder Zonen der alten Welt zeigt (Auswahl, Kamera-Ziel, Hinweise);
+Markierungen richten sich nach der Zahl der Schiffe und Basen. Auch das Protokoll gehört dazu (`World::log`):
 Die Einträge entstehen, wenn ein Abschnitt der Zeitleiste endet, mit dessen
 genauem Zeitpunkt, und sind deshalb wie alles andere unabhängig von der
 Schrittgröße (*Test:* `log_is_independent_of_step_size`).

@@ -12,6 +12,7 @@ mod hud;
 mod node_ui;
 mod panel;
 mod rendezvous;
+mod savegame;
 mod status_bar;
 mod verbund;
 mod view;
@@ -52,6 +53,8 @@ impl TimeWarp {
 /// Startoptionen von der Kommandozeile.
 #[derive(Resource, Default, Clone)]
 struct Options {
+    /// Diesen Spielstand laden statt neu zu beginnen.
+    load: Option<std::path::PathBuf>,
     /// Statt des Spielbeginns die Demo mit Schiffen laden (`scenario::demo`).
     demo: bool,
     /// Bild speichern und beenden.
@@ -105,6 +108,7 @@ fn parse_options() -> Options {
         let value = args.next();
         match (arg.as_str(), value) {
             ("--screenshot", Some(path)) => options.screenshot = Some(path),
+            ("--load", Some(path)) => options.load = Some(path.into()),
             ("--time", Some(t)) => options.time = t.parse().expect("--time erwartet Sekunden"),
             ("--camera", Some(c)) => {
                 let p = numbers(&c, "--camera GIER,NEIGUNG,KM");
@@ -174,6 +178,7 @@ fn parse_options() -> Options {
                      \x20         --target-body SCHIFF,KÖRPER\n\
                      \x20         --focus SCHIFF  --focus-zone ZIELGEBIET  --focus-body KÖRPER\n\
                      \x20         --near  --dock SCHIFF\n\
+                     \x20         --load DATEI (Spielstand laden; F5 speichert, F9 lädt)\n\
                      \x20         --demo (Schiffe und Zielgebiete zum Ausprobieren; die\n\
                      \x20         Schiffsnummern der anderen Optionen gelten dafür)"
                 );
@@ -188,15 +193,17 @@ fn main() {
     let options = parse_options();
 
     // Start, Nodes und Ziel gelten ab Spielbeginn; `--time` führt sie dann aus.
-    let mut world = if options.demo {
+    let mut world = if let Some(path) = &options.load {
+        savegame::read(path).unwrap_or_else(|e| {
+            eprintln!("--load: {e}");
+            std::process::exit(2);
+        })
+    } else if options.demo {
         sim::scenario::demo()
     } else {
         sim::scenario::start()
     };
-    // Spielbeginn ohne Schiffe: Die Startbasis ist gewählt, ihre Karte
-    // (Schiffe bestellen) also gleich offen.
-    let zone =
-        node_ui::SelectedZone((world.vessels.is_empty() && !world.zones.is_empty()).then_some(0));
+    let zone = savegame::initial_zone(&world);
     let mut selection = node_ui::Selection(options.select);
     // Zuerst der Start, damit Nodes danach auf seiner Bahn liegen können.
     if let Some((vessel, mut launch, kick)) = options.launch {
@@ -242,7 +249,10 @@ fn main() {
             std::process::exit(2);
         }
     }
-    world.advance_to(options.time);
+    // Ein geladener Spielstand kann schon weiter sein.
+    if options.time > world.time {
+        world.advance_to(options.time);
+    }
 
     if let Some(camera::Focus::Body(b)) = options.focus
         && b >= world.bodies.len()
@@ -332,6 +342,7 @@ fn main() {
                 .chain(),
             // Eingaben ändern die Simulation; danach wird nur noch gelesen.
             (
+                savegame::keys,
                 panel::buttons,
                 verbund::buttons,
                 fracht::buttons,

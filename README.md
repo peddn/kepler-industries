@@ -382,6 +382,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
 | Node ziehen | Node entlang seiner Bahn verschieben; spätere Nodes wandern mit. Auf einer Bahn durch die Luft kommt er nach innen gezogen auf einen späteren Umlauf („+N Umläufe“) |
 | `Entf` / `Rücktaste` | gewählten Node löschen |
+| `F5` / `F9` | Spielstand speichern / laden (siehe unten) |
 | `H` | Zeitraffer-Stopp für das gewählte Schiff an/aus: Beginnt es zu brennen, hält der Zeitraffer genau dort an und schaltet auf 1× |
 | `Esc` | Auswahl aufheben |
 | `.` / `,` | Zeitraffer schneller / langsamer (1× bis 1 000 000×) |
@@ -404,6 +405,8 @@ cargo run -p game -- --demo --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera 
 - `--focus-body KÖRPER`: Kamera auf einen Himmelskörper (0 = Zunn, 1 = Zorb,
   2 = Zoon, 3 = Zimm, 4 = Nura)
 - `--near`: Nahansicht (mit `--focus` oder `--focus-zone`)
+- `--load DATEI`: einen Spielstand laden statt neu zu beginnen
+- `--demo`: die Demo mit Schiffen laden (siehe oben)
 - `--dock SCHIFF`: Andocken an das Ziel einschalten (nach `--target`)
 - `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2, 2 = Fähre-3)
 - `--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM[,WENDEWINKEL]`: Start planen
@@ -439,6 +442,22 @@ Dasselbe ohne Andocken kurz vor der Annäherung in der Nahansicht (Bild „Nahan
 cargo run -p game -- --demo --time 21570 --launch 2,11299,120,1.5,100 --target 2,0 \
   --node 2,11612,682,0,0 --node 2,12590,102.25,0,0 --focus 2 --near --camera 50,25,6
 ```
+
+## Speichern und Laden
+
+`F5` speichert, `F9` lädt. Es gibt einen Spielstand: die Datei
+`spielstand.json` in dem Ordner, aus dem das Spiel gestartet wurde. Beim
+Speichern bleibt der vorherige Stand als `spielstand.vorher.json` erhalten,
+falls man einen guten Stand überschreibt (zum Zurückholen die Datei
+umbenennen oder mit `--load spielstand.vorher.json` starten).
+
+Gespeichert wird die ganze Welt: Zeit, Schiffe mit Bahnen und geplanten
+Manövern, Fracht, Basen, Lager, Zorit und das Protokoll. Ein Flug geht nach
+dem Laden exakt so weiter wie ohne Speichern. Kamera, Auswahl und Zeitraffer
+gehören nicht dazu; nach dem Laden ist das Spiel pausiert. Es wird nie von
+selbst gespeichert oder geladen: Das Spiel beginnt immer neu, `F9` holt den
+Stand. Spielstände älterer Versionen des Spiels werden nicht geladen (eine
+Meldung nennt die Versionen).
 
 ## Tests
 

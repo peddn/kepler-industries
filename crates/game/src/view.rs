@@ -279,9 +279,21 @@ pub fn spawn_markers(
     mut commands: Commands,
     sim: Res<Sim>,
     markers: Res<MarkerMaterials>,
-    vessels: Query<(), With<VesselMarker>>,
-    existing: Query<(), With<BaseMarker>>,
+    vessels: Query<(Entity, &VesselMarker)>,
+    existing: Query<(Entity, &BaseMarker)>,
 ) {
+    // Nach dem Laden eines Spielstands kann es weniger geben als zuvor.
+    let gone = (vessels.iter())
+        .filter(|(_, m)| m.0 >= sim.0.vessels.len())
+        .map(|(e, _)| e)
+        .chain(
+            (existing.iter())
+                .filter(|(_, m)| m.0 >= sim.0.bases.len())
+                .map(|(e, _)| e),
+        );
+    for entity in gone {
+        commands.entity(entity).despawn();
+    }
     for i in vessels.iter().count()..sim.0.vessels.len() {
         commands.spawn((
             VesselMarker(i),
