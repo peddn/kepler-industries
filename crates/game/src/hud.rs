@@ -621,6 +621,11 @@ pub fn update(
         lines.push(String::new());
         lines.extend(body_details(world, b));
     }
+    if world.vessels.is_empty() {
+        lines.push(String::new());
+        lines.push("Noch keine Schiffe: in der Karte \"Startbasis\" rechts bestellen.".into());
+        lines.push("(Karte weg? Die Raute ihres Zielgebiets anklicken; F: Kamera dorthin.)".into());
+    }
     lines.push(String::new());
     // Kurze Zeilen, damit rechts Platz für die Seitenleiste bleibt.
     lines.extend(

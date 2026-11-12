@@ -5,7 +5,7 @@
 //! `sim::base`).
 
 use crate::Sim;
-use crate::fracht::{price, tons_fine};
+use crate::fracht::tons_fine;
 use crate::hud::UiFont;
 use crate::node_ui::{SelectedZone, Selection, UiMessage};
 use crate::panel::{
@@ -14,7 +14,7 @@ use crate::panel::{
 use crate::status_bar::{StatusBar, over_status};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use sim::base::PARTS_PRICE;
+use sim::base::{PARTS_PRICE, SHIP_PRICE};
 use sim::{BaseKind, ShipKind, World};
 
 #[derive(Component)]
@@ -35,7 +35,7 @@ const KINDS: [ShipKind; 2] = [ShipKind::BaseShip, ShipKind::Freighter];
 
 /// Ist die Startbasis gewählt: ihr Zielgebiet oder ein Schiff, das dort
 /// steht?
-fn depot_selected(world: &World, zone: &SelectedZone, selection: &Selection) -> bool {
+pub fn depot_selected(world: &World, zone: &SelectedZone, selection: &Selection) -> bool {
     let by_zone = zone
         .0
         .and_then(|k| world.zones.get(k))
@@ -97,21 +97,15 @@ pub fn sync(
     for (which, mut text) in &mut texts {
         let value = match which {
             DepotText::Lines => {
-                let parts = if world.mine_ready() {
-                    format!("Bauteile: {} je Tonne", tons_fine(PARTS_PRICE * 1_000.0))
-                } else {
-                    "Bauteile frei (noch keine Mine)".into()
-                };
                 format!(
-                    "Zorit im Lager: {}\nPreise in Zorit:\n{parts}",
-                    tons_fine(world.zorit)
+                    "Zorit im Lager: {}\nPreise in Zorit:\nBauteile: {} je Tonne",
+                    tons_fine(world.zorit),
+                    tons_fine(PARTS_PRICE * 1_000.0)
                 )
             }
-            DepotText::Button(kind) => format!(
-                "{} bestellen ({})",
-                kind.label(),
-                price(world.ship_price(*kind))
-            ),
+            DepotText::Button(kind) => {
+                format!("{} bestellen ({})", kind.label(), tons_fine(SHIP_PRICE))
+            }
         };
         if text.0 != value {
             text.0 = value;

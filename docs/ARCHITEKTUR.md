@@ -754,9 +754,9 @@ man kommt und was man zurückbringt.
 - Laden, Abladen und Tanken gehen nur am Boden, ohne geplanten Start und
   ohne angedockte Schiffe: Dann ändert sich nur die Masse des stehenden
   Schiffs, keine Bahn muss neu gerechnet werden.
-- Startausstattung der Demo, schon im Orbit um Zorb (mit dem Treibstoff, der
-  nach einem Start übrig wäre): zwei Basisschiffe und zwei Frachter mit
-  zusammen 4 t Bauteilen.
+- In der Demo kreisen schon zwei Basisschiffe und zwei Frachter mit
+  zusammen 4 t Bauteilen um Zorb (mit dem Treibstoff, der nach einem Start
+  übrig wäre).
 
 **Preise und Bestellen (gebaut):** Mit dem Zorit im Lager der Startbasis
 bezahlt man dort Bauteile (0,25 t je Tonne) und bestellt Basisschiffe und
@@ -767,10 +767,14 @@ Startbasis frei.
   Bauzeit wäre wirkungslos, weil Vorspulen nichts kostet.
 - Reicht das Zorit nicht für den ganzen Frachtraum, gibt es so viele
   Bauteile, wie es bezahlt.
-- Gegen die Sackgasse (Bedingungen, keine Zeit): Solange keine Mine fertig
-  ist, sind Basisschiff und Bauteile frei; ein Frachter ist frei, wenn kein
-  heiler mehr da ist. Das lässt sich ausnutzen (freie Basisschiffe ohne Mine
-  ergeben nur Tankstellen), schadet aber nicht.
+- **Spielbeginn** (`scenario::start`): keine Schiffe, nur die Startbasis
+  mit 3 t Zorit, genau dem Preis einer Basis (Basisschiff, ein Frachter,
+  4 t Bauteile). Bewusst keine Absicherung gegen die Sackgasse: Wer damit
+  keine Mine fertig bekommt, steckt fest; das ist die Gefahr des frühen
+  Spiels.
+- **Demo** (`scenario::demo`, im Spiel `--demo`): dieselbe Welt mit festen
+  Schiffen und weiteren Zielgebieten. Sie ist die Grundlage der Tests und der
+  Beispiele im README, nicht der Spielbeginn.
 - Im Spiel: Karte „Startbasis", sobald ein Schiff gewählt ist, das dort
   steht, oder ihr Zielgebiet (dessen Raute lässt sich nur anklicken, wenn
   kein Schiff darauf steht; Schiffe haben beim Klicken Vorrang).

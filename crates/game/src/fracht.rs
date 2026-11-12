@@ -15,7 +15,7 @@ use crate::panel::{
 use crate::status_bar::{StatusBar, over_status};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use sim::base::SITE_RADIUS;
+use sim::base::{PARTS_PRICE, SITE_RADIUS};
 use sim::{BaseKind, Segment, World};
 
 #[derive(Component)]
@@ -55,12 +55,7 @@ impl Action {
         if self == Action::LoadParts {
             let v = &world.vessels[vessel];
             let room = v.params.cargo_capacity - v.cargo.total();
-            let cost = room * world.parts_price();
-            return if cost > 0.0 {
-                format!("Bauteile laden ({} Zorit)", tons_fine(cost))
-            } else {
-                "Bauteile laden (frei)".into()
-            };
+            return format!("Bauteile laden ({} Zorit)", tons_fine(room * PARTS_PRICE));
         }
         match self {
             Action::FoundMine => "Mine gründen",
@@ -72,15 +67,6 @@ impl Action {
             Action::DeliverZorit => "Zorit abladen",
         }
         .into()
-    }
-}
-
-/// Preis in Tonnen Zorit für eine Schaltfläche ("frei" bei 0).
-pub fn price(zorit: f64) -> String {
-    if zorit > 0.0 {
-        tons_fine(zorit)
-    } else {
-        "frei".into()
     }
 }
 
