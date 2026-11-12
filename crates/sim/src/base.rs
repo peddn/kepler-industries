@@ -8,8 +8,9 @@
 //!   Bauteile, tanken und laden Zorit ab. Das Zorit kommt ins Lager der
 //!   Startbasis (`World::zorit`).
 //! - **Preise:** Mit Zorit aus dem Lager bezahlt man Bauteile
-//!   (`PARTS_PRICE`) und bestellt neue Schiffe (`World::order_ship`), die
-//!   dann vollgetankt an der Startbasis stehen. Treibstoff ist dort frei.
+//!   (`PARTS_PRICE`) und bestellt neue Schiffe nach einem Entwurf
+//!   (`World::order_ship`, Preis siehe `design`), die dann vollgetankt an
+//!   der Startbasis stehen. Treibstoff ist dort frei.
 //!   Das Spiel beginnt mit einem Vorrat, der genau für eine Basis reicht
 //!   (`scenario::START_ZORIT`). Es gibt keine Absicherung: Wer damit keine
 //!   Mine fertig bekommt, steckt fest.
@@ -35,11 +36,11 @@
 //! Schiffs.
 
 use crate::body::{BodyId, SurfacePoint};
+use crate::design::DesignError;
 use crate::landing::LandingZone;
 use crate::log::{LogEntry, LogKind};
-use crate::scenario::{BASE_SHIP, FREIGHTER};
 use crate::trajectory::Segment;
-use crate::world::{Base, BaseKind, Store, VesselParams, World};
+use crate::world::{Base, BaseKind, Store, World};
 
 /// Bauteile für eine fertige Basis in kg.
 pub const BASE_KIT: f64 = 4_000.0;
@@ -54,36 +55,11 @@ pub const FUEL_STORAGE: f64 = 8_000.0;
 /// Lager fasst, hängt vom Körper ab (`Body::zorit`).
 pub const ZORIT_RATE: f64 = 100.0 / 3_600.0;
 
-/// Ein Basisschiff oder ein Frachter kostet so viel Zorit (kg).
-pub const SHIP_PRICE: f64 = 1_000.0;
 /// Ein kg Bauteile kostet so viel Zorit (kg).
 pub const PARTS_PRICE: f64 = 0.25;
 
-/// Schiffe, die man an der Startbasis bestellt.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ShipKind {
-    BaseShip,
-    Freighter,
-}
-
-impl ShipKind {
-    pub fn label(self) -> &'static str {
-        match self {
-            ShipKind::BaseShip => "Basisschiff",
-            ShipKind::Freighter => "Frachter",
-        }
-    }
-
-    pub fn params(self) -> VesselParams {
-        match self {
-            ShipKind::BaseShip => BASE_SHIP,
-            ShipKind::Freighter => FREIGHTER,
-        }
-    }
-}
-
 /// Warum ein Befehl an Fracht oder Basis nicht geht.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BaseError {
     /// Das Schiff steht nicht heil am Boden.
     NotLanded,
@@ -109,6 +85,10 @@ pub enum BaseError {
     NothingToRefuel,
     /// Zu wenig Zorit im Lager der Startbasis.
     NotEnoughZorit,
+    /// Diesen Entwurf gibt es nicht.
+    NoDesign,
+    /// Der Entwurf lässt sich nicht bauen.
+    Design(DesignError),
 }
 
 impl std::fmt::Display for BaseError {
@@ -126,6 +106,8 @@ impl std::fmt::Display for BaseError {
             BaseError::NothingToLoad => "Frachtraum voll oder Lager leer",
             BaseError::NothingToRefuel => "Tank voll oder Lager leer",
             BaseError::NotEnoughZorit => "zu wenig Zorit im Lager der Startbasis",
+            BaseError::NoDesign => "diesen Entwurf gibt es nicht",
+            BaseError::Design(error) => return write!(f, "{error}"),
         })
     }
 }
@@ -372,22 +354,28 @@ impl World {
         Ok(amount)
     }
 
-    /// Bestellt ein Schiff: Es steht sofort vollgetankt an der Startbasis
-    /// (eine Bauzeit wäre wirkungslos, Regel 14). Liefert seine Nummer.
-    pub fn order_ship(&mut self, kind: ShipKind) -> Result<usize, BaseError> {
+    /// Bestellt ein Schiff nach dem Entwurf `design` (Stelle in
+    /// `World::designs`): Es steht sofort vollgetankt an der Startbasis (eine
+    /// Bauzeit wäre wirkungslos, Regel 14) und heißt wie der Entwurf, mit
+    /// laufender Nummer. Liefert seine Nummer.
+    pub fn order_ship(&mut self, design: usize) -> Result<usize, BaseError> {
         let depot = self
             .bases
             .iter()
             .find(|b| b.kind == BaseKind::Depot)
             .ok_or(BaseError::NoBase)?;
         let (body, pad) = (depot.body, depot.location);
-        if SHIP_PRICE > self.zorit {
+        let design = self.designs.get(design).ok_or(BaseError::NoDesign)?.clone();
+        design.check(&self.unlocked).map_err(BaseError::Design)?;
+        let price = design.price();
+        if price > self.zorit {
             return Err(BaseError::NotEnoughZorit);
         }
-        self.zorit -= SHIP_PRICE;
-        let name = format!("{}-{}", kind.label(), self.ship_count() + 1);
-        let params = kind.params();
+        self.zorit -= price;
+        let name = format!("{}-{}", design.name, self.ship_count() + 1);
+        let params = design.params();
         let vessel = self.spawn_landed(&name, params, params.fuel_capacity, body, pad);
+        self.vessels[vessel].design = Some(design);
         self.log.push(LogEntry {
             time: self.time,
             vessel,

@@ -1,0 +1,148 @@
+//! Tests für Entwürfe aus Komponenten: Flugwerte, Preise und was sich bauen
+//! lässt.
+
+use sim::design::{Chassis, Design, DesignError, Engine, FOUNDATION_SPACE, Part, SPACE_STEP};
+use sim::scenario::{BASE_SHIP, FREIGHTER, start};
+use sim::{BaseError, VesselParams};
+
+/// Die Startentwürfe ergeben die abgestimmten Schiffe: Massen, Tanks und
+/// Preise wie die festen Vorlagen, der Frachter mit zwei Z-1.
+#[test]
+fn start_designs_match_the_catalogue() {
+    let freighter = Design::freighter();
+    assert_eq!(
+        freighter.params(),
+        VesselParams {
+            thrust: 500_000.0,
+            ..FREIGHTER
+        }
+    );
+    assert_eq!(freighter.cargo(), 2_000.0);
+    assert_eq!(freighter.price(), 1_000.0);
+
+    let base_ship = Design::base_ship();
+    assert_eq!(base_ship.params(), BASE_SHIP);
+    assert_eq!(base_ship.free_space(), 10_000.0 - FOUNDATION_SPACE);
+    assert_eq!(base_ship.cargo(), 0.0);
+    assert_eq!(base_ship.price(), 1_000.0);
+
+    let unlocked = Part::from_start();
+    assert_eq!(freighter.check(&unlocked), Ok(()));
+    assert_eq!(base_ship.check(&unlocked), Ok(()));
+}
+
+/// Der Innenraum teilt sich in Tank und Fracht: Was der Tank nicht nimmt,
+/// ist Frachtraum, und Masse und Preis ändern sich dabei nicht.
+#[test]
+fn interior_splits_into_tank_and_cargo() {
+    let mut design = Design::freighter();
+    let before = design.params();
+    design.tank = 10_000.0;
+    let after = design.params();
+    assert_eq!(
+        (after.fuel_capacity, after.cargo_capacity),
+        (10_000.0, 6_000.0)
+    );
+    assert_eq!(after.dry_mass, before.dry_mass);
+    assert_eq!(design.price(), 1_000.0);
+    // Ein Basisschiff mit kleinerem Tank trägt Fracht.
+    let mut base_ship = Design::base_ship();
+    base_ship.tank = 6_000.0;
+    assert_eq!(base_ship.params().cargo_capacity, 1_000.0);
+    assert!(base_ship.params().base_kit);
+}
+
+/// Triebwerke: Schub und Masse je Stück, die Sorte bestimmt die
+/// Ausströmgeschwindigkeit und den Preis.
+#[test]
+fn engines_add_thrust_mass_and_price() {
+    let mut design = Design::freighter();
+    design.engines = 1;
+    let one = design.params();
+    assert_eq!((one.thrust, one.dry_mass), (250_000.0, 2_200.0));
+    assert_eq!(design.price(), 800.0);
+    design.engine = Engine::Z3;
+    design.engines = 2;
+    let better = design.params();
+    assert_eq!(better.exhaust_velocity, 4_000.0);
+    assert_eq!((better.thrust, better.dry_mass), (500_000.0, 2_700.0));
+    assert_eq!(design.price(), 600.0 + 2.0 * 800.0);
+}
+
+/// Was sich nicht bauen lässt: zu viele Triebwerke, ein Tank außerhalb des
+/// freien Innenraums oder neben dem Raster, gesperrte Teile.
+#[test]
+fn invalid_designs_are_refused() {
+    let unlocked = Part::from_start();
+    let with = |change: fn(&mut Design)| {
+        let mut design = Design::freighter();
+        change(&mut design);
+        design.check(&unlocked)
+    };
+    assert_eq!(
+        with(|d| d.engines = 3),
+        Err(DesignError::TooManyEngines { slots: 2 })
+    );
+    assert_eq!(
+        with(|d| d.tank = 16_500.0),
+        Err(DesignError::TankOutOfRange { free: 16_000.0 })
+    );
+    assert_eq!(
+        with(|d| d.tank = -SPACE_STEP),
+        Err(DesignError::TankOutOfRange { free: 16_000.0 })
+    );
+    assert_eq!(with(|d| d.tank = 14_200.0), Err(DesignError::TankOffStep));
+    assert_eq!(
+        with(|d| d.engine = Engine::Z2),
+        Err(DesignError::Locked(Part::Engine(Engine::Z2)))
+    );
+    assert_eq!(
+        with(|d| d.chassis = Chassis::Large),
+        Err(DesignError::Locked(Part::Chassis(Chassis::Large)))
+    );
+    // Mit Fundament ist weniger Platz.
+    assert_eq!(
+        with(|d| d.foundation = true),
+        Err(DesignError::TankOutOfRange { free: 13_000.0 })
+    );
+    // Ganz ohne Tank oder ohne Triebwerk lässt es sich bauen (fliegen nicht).
+    assert_eq!(with(|d| d.tank = 0.0), Ok(()));
+    assert_eq!(with(|d| d.engines = 0), Ok(()));
+}
+
+/// Bestellen: nach einem Entwurf aus der Liste, zu seinem Preis; das Schiff
+/// merkt sich den Entwurf. Was sich nicht bauen lässt, wird nicht bestellt.
+#[test]
+fn ships_are_ordered_from_designs() {
+    let mut world = start();
+    assert_eq!(
+        world.designs,
+        vec![Design::base_ship(), Design::freighter()]
+    );
+    assert_eq!(world.unlocked, Part::from_start());
+    assert_eq!(world.order_ship(7), Err(BaseError::NoDesign));
+
+    let mut cheap = Design::freighter();
+    cheap.name = "Leichter".into();
+    cheap.engines = 1;
+    cheap.tank = 12_000.0;
+    world.designs.push(cheap.clone());
+    let ship = world.order_ship(2).unwrap();
+    let v = &world.vessels[ship];
+    assert_eq!(v.name, "Leichter-1");
+    assert_eq!(v.params, cheap.params());
+    assert_eq!(v.design, Some(cheap));
+    assert_eq!(world.zorit, 3_000.0 - 800.0);
+    assert!((world.vessel_fuel(ship) - 12_000.0).abs() < 1e-9);
+
+    world.designs[2].engine = Engine::Z2;
+    assert_eq!(
+        world.order_ship(2),
+        Err(BaseError::Design(DesignError::Locked(Part::Engine(
+            Engine::Z2
+        ))))
+    );
+    world.unlocked.push(Part::Engine(Engine::Z2));
+    world.order_ship(2).unwrap();
+    assert_eq!(world.zorit, 3_000.0 - 800.0 - 1_000.0);
+}

@@ -7,9 +7,12 @@ use sim::kepler;
 use sim::save::{from_json, to_json};
 use sim::scenario::{BASE_SHIP, BOOSTER, FREIGHTER, ZOON, ZORB, start};
 use sim::{
-    BoosterStatus, Launch, LaunchProfile, LogKind, ManeuverNode, PlanError, Segment, ShipKind,
-    SurfacePoint, VesselParams, VesselStatus, World,
+    BoosterStatus, Launch, LaunchProfile, LogKind, ManeuverNode, PlanError, Segment, SurfacePoint,
+    VesselParams, VesselStatus, World,
 };
+
+/// Der Startentwurf, wie er in `World::designs` steht.
+const BASE_SHIP_DESIGN: usize = 0;
 
 const BOOSTER_INDEX: usize = 0;
 
@@ -197,7 +200,7 @@ fn return_flight_is_saved() {
 #[test]
 fn launch_needs_the_booster() {
     let (mut world, ship) = ready_freighter();
-    let other = world.order_ship(ShipKind::BaseShip).unwrap();
+    let other = world.order_ship(BASE_SHIP_DESIGN).unwrap();
     let later = launch(5_000.0, 10.0);
     assert_eq!(world.set_launch(other, later), Err(PlanError::BoosterBusy));
     assert_eq!(

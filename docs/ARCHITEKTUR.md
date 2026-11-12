@@ -920,8 +920,13 @@ zum Schiff; es gibt genau einen.
 - *Die Demo hat keinen Booster* (die Fähre dort startet aus eigener Kraft),
   damit Tests und Beispiele bleiben, wie sie sind.
 
-**Katalog** (abgestimmtes Konzept, noch nicht gebaut; die Schiffe sind bis
-dahin feste Vorlagen mit diesen Werten):
+**Katalog** (`sim::design`; gebaut sind der Katalog, Entwürfe mit ihren
+Flugwerten und Preisen und das Bestellen nach Entwurf, noch nicht Editor,
+Umbau, Daten und Techtree). Jedes bestellte Schiff merkt sich seinen
+Entwurf (`Vessel::design`); was man bauen darf, steht in `World::unlocked`
+(bis zum Techtree: die Ausstattung vom Spielbeginn). Die Schiffe der Demo
+und der Booster sind feste Vorlagen ohne Entwurf; der Frachter der Demo hat
+noch 440 kN, damit ihre Beispiele bleiben, wie sie sind.
 
 | Chassis | Masse | Innenraum | Triebwerksplätze | Preis | frei |
 |---|---|---|---|---|---|
