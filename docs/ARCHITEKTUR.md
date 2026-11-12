@@ -874,14 +874,15 @@ zum Schiff; es gibt genau einen.
   beiden. Die Masse des Schiffs bleibt dabei gleich, und mit ihr fliegt es
   nach dem Brennschluss weiter. Der Aufstieg endet an der Ziel-Apoapsis oder
   wenn nur noch die Reserve im Tank ist: Der Booster hält immer Treibstoff
-  für 1.000 m/s zurück (B-1: knapp 1,2 t).
+  für 1.200 m/s zurück (B-1: knapp 1,5 t): 1.000 für den Boostback, 200 für
+  die Landung.
 - *Rückflug:* Beim Planen des Starts wird der Boostback gesucht: ein Stoß
   waagerecht gegen die Bewegung über dem Boden, 10 s nach der Trennung.
   Gesucht wird sein Betrag (Regula falsi; der Aufsetzpunkt wandert damit
   stetig entlang des Kurses zurück) und, weil die Drehung des Planeten den
   Booster je nach Kurs zur Seite trägt, ein Winkel dagegen
   (Sekantenverfahren). Bewertet wird jeder Versuch mit der echten Zeitleiste
-  des Boosters samt Luft und Fallschirm. Bei der Trennung (ein Ereignis mit
+  des Boosters samt Luft und Landebrennen. Bei der Trennung (ein Ereignis mit
   festem Zeitpunkt, wie der Kontakt beim Andocken) bekommt der Booster genau
   diesen Node: Vorschau = Ausführung, unabhängig von der Schrittgröße.
 - *Kein Start,* wenn er nicht innerhalb von 2 km an der Startbasis aufsetzt,
@@ -894,9 +895,15 @@ zum Schiff; es gibt genau einen.
   Schiff wird steiler geworfen und braucht mehr (Basisschiff: 1.740, mit 12°
   1.660); ein größerer Booster wirft kleine Schiffe ebenfalls steiler. Das
   Schiff braucht genug Schub: Bis zur Apoapsis sind es nur gut zwei Minuten.
-- *Bis zur Trennung* steht das Fahrzeug des Boosters an der Startbasis; erst
-  dann fliegt es selbst. Die Rückflugbahn sieht man deshalb erst ab der
-  Trennung, vorab nur das Ergebnis in der Karte „Start".
+- *Landung ohne Fallschirm:* Die Luft bremst den fallenden Booster auf rund
+  85 m/s, den Rest nimmt das automatische Landebrennen (`landing`) wenige
+  Dutzend Meter über dem Boden, mit vollem Schub in unter einer Sekunde. So
+  ist er gut fünf Minuten nach der Trennung zurück statt nach einer
+  Viertelstunde am Schirm.
+- *Bis zur Trennung* fliegt der Booster am Schiff mit (`World::vessel_state`
+  liefert für ihn die Lage des Schiffs); erst dann hat er eine eigene
+  Zeitleiste. Die Rückflugbahn sieht man deshalb erst ab der Trennung, vorab
+  nur das Ergebnis in der Karte „Start".
 - *Die Demo hat keinen Booster* (die Fähre dort startet aus eigener Kraft),
   damit Tests und Beispiele bleiben, wie sie sind.
 

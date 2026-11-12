@@ -183,7 +183,8 @@ pub const FERRY: VesselParams = VesselParams {
 
 /// Booster der Startbasis (siehe `booster`): hebt Schiffe bis etwa 19 t so
 /// hoch und schnell, dass sie mit rund 1,5 km/s eigenem Δv die Umlaufbahn
-/// erreichen, und kommt am Fallschirm zurück. Schub: das 1,5-fache des
+/// erreichen, und kommt zurück: Er landet ohne Fallschirm mit einem
+/// Landebrennen kurz über dem Boden. Schub: das 1,5-fache des
 /// Startgewichts mit einem vollen Frachter.
 pub const BOOSTER: VesselParams = VesselParams {
     dry_mass: 3_000.0,
@@ -191,7 +192,7 @@ pub const BOOSTER: VesselParams = VesselParams {
     thrust: 760_000.0,
     exhaust_velocity: 3_000.0,
     fuel_capacity: 30_000.0,
-    parachute_area: 5_000.0,
+    parachute_area: 0.0,
     cargo_capacity: 0.0,
     base_kit: false,
 };

@@ -7,7 +7,7 @@ use crate::hud;
 use crate::top_bar::Panels;
 use crate::ui::{Selected, card};
 use bevy_egui::egui;
-use sim::World;
+use sim::{BoosterStatus, World};
 
 /// Breite der Leiste in Pixeln.
 const WIDTH: f32 = 300.0;
@@ -30,8 +30,15 @@ fn ships(ui: &mut egui::Ui, world: &World, selected: &mut Selected) {
                 {
                     selected.select_vessel(i);
                 }
+                // Der Booster steigt am Schiff mit auf.
+                let place = match world.booster_status() {
+                    Some(BoosterStatus::Ascending { ship }) if world.booster == Some(i) => {
+                        format!("an {}", world.vessels[ship].name)
+                    }
+                    _ => hud::ship_body(world, i).to_owned(),
+                };
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.weak(hud::ship_body(world, i));
+                    ui.weak(place);
                 });
             });
         }

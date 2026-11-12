@@ -40,7 +40,7 @@ pub fn show(ui: &mut egui::Ui, world: &World) {
         ui.label(status);
         ui.weak(
             "Jeder Start von der Startbasis läuft mit ihm. Nach der Trennung fliegt er \
-             selbst zurück und landet am Fallschirm; steuern lässt er sich nicht.",
+             selbst zurück und landet mit einem Landebrennen; steuern lässt er sich nicht.",
         );
     });
 }

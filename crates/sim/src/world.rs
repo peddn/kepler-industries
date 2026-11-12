@@ -1068,6 +1068,11 @@ impl World {
     /// Körper und Zustand eines Schiffs zur aktuellen Zeit (angedockt: des
     /// Hauptschiffs).
     pub fn vessel_state(&self, index: usize) -> (BodyId, StateVector) {
+        // Der Booster fliegt bis zur Trennung am Schiff mit.
+        let index = match self.booster_status() {
+            Some(BoosterStatus::Ascending { ship }) if self.booster == Some(index) => ship,
+            _ => index,
+        };
         self.vessels[self.host(index)]
             .trajectory
             .state_at(&self.bodies, self.time)

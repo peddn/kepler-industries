@@ -3,7 +3,8 @@
 //! Jeder Start von der Startbasis läuft mit ihm: Schiff und Booster heben als
 //! Stapel ab, nur der Booster brennt. Bei Brennschluss trennen sie sich. Das
 //! Schiff fliegt mit seinen eigenen Werten weiter, der Booster schiebt sich
-//! waagerecht zurück (Boostback) und landet am Fallschirm an der Startbasis.
+//! waagerecht zurück (Boostback) und landet an der Startbasis: ohne
+//! Fallschirm, mit einem Landebrennen kurz über dem Boden (siehe `landing`).
 //!
 //! Der Rückflug wird beim Planen des Starts berechnet (`plan_return`); kommt
 //! der Booster nicht zurück, gibt es keinen Start. Bei der Trennung bekommt
@@ -43,9 +44,14 @@ const ASIDE_PRECISION: f64 = 200.0;
 /// Weiter als so wird der Boostback nicht zur Seite gedreht (Radiant).
 const MAX_TURN: f64 = 0.6;
 
-/// Treibstoff, den der Booster für den Rückflug zurückhält (kg).
+/// So viel Δv hält er zusätzlich für das Landebrennen zurück (m/s): Er fällt
+/// ohne Fallschirm, die Luft bremst ihn auf rund 85 m/s.
+pub const LANDING_DELTA_V: f64 = 200.0;
+
+/// Treibstoff, den der Booster für Rückflug und Landung zurückhält (kg).
 pub fn reserve(booster: &VesselParams) -> f64 {
-    booster.dry_mass * ((RETURN_DELTA_V / booster.exhaust_velocity).exp() - 1.0)
+    let delta_v = RETURN_DELTA_V + LANDING_DELTA_V;
+    booster.dry_mass * ((delta_v / booster.exhaust_velocity).exp() - 1.0)
 }
 
 /// Der Booster eines geplanten Starts: seine Werte und sein Rückflug.
@@ -153,8 +159,10 @@ pub fn plan_return(
 
     // Mehr als die Reserve hergibt, wird nicht versucht (bleibt vom Aufstieg
     // Treibstoff übrig, wäre mehr im Tank): Weit stärkere Stöße trügen den
-    // Booster um den halben Planeten.
-    let available = (params.exhaust_velocity * (mass / params.dry_mass).ln()).min(RETURN_DELTA_V);
+    // Booster um den halben Planeten. Was für das Landebrennen zurückbleiben
+    // muss, steht nicht zur Verfügung.
+    let on_board = params.exhaust_velocity * (mass / params.dry_mass).ln();
+    let available = (on_board - LANDING_DELTA_V).clamp(0.0, RETURN_DELTA_V);
     // Ohne Boostback landet er so weit vor dem Startplatz.
     let range = landing(0.0, 0.0).ok_or(PlanError::BoosterNoReturn)?.ahead;
     if range <= 0.0 {

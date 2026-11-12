@@ -1,5 +1,5 @@
 //! Tests für den Booster der Startbasis: Aufstieg als Stapel, Trennung,
-//! Boostback und Landung am Fallschirm.
+//! Boostback und Landung mit Landebrennen.
 
 use glam::DVec3;
 use sim::booster::{self, RETURN_RADIUS};
@@ -114,6 +114,18 @@ fn ship_reaches_orbit_and_booster_returns() {
     };
     assert_eq!(world.zone_at(ZORB, &point), Some(0));
     assert!(booster.back.miss < RETURN_RADIUS);
+    // Ohne Fallschirm: Er hat kurz über dem Boden gebremst und ist nach
+    // wenigen Minuten zurück.
+    let landing_burns = |world: &World| {
+        world
+            .log
+            .iter()
+            .filter(|e| e.vessel == BOOSTER_INDEX && e.kind == LogKind::LandingBurn)
+            .count()
+    };
+    assert_eq!(landing_burns(&world), 1);
+    assert_eq!(BOOSTER.parachute_area, 0.0);
+    assert!(booster.back.landing - plan.burn.end < 400.0);
 
     // Das Schiff ist auf einer Bahn über der Luft und hat genug für Zoon.
     let VesselStatus::Orbit {
