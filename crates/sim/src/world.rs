@@ -13,12 +13,13 @@ use crate::launch::{Launch, LaunchPlan};
 use crate::log::{LOG_LIMIT, LogEntry, LogKind};
 use crate::maneuver::{self, Burn, ManeuverNode, PlanError};
 use crate::rendezvous::{self, Approach, PlaneCrossing};
+use crate::task::Task;
 use crate::trajectory::{Event, Segment, Trajectory};
 use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 13;
+pub const SAVE_VERSION: u32 = 14;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -299,6 +300,12 @@ pub struct World {
     /// Was freigeschaltet ist und in Entwürfen vorkommen darf.
     #[serde(default = "Part::from_start")]
     pub unlocked: Vec<Part>,
+    /// Daten in GB: was erfüllte Aufgaben gebracht haben (siehe `task`).
+    #[serde(default)]
+    pub data: f64,
+    /// Die Aufgaben, offene und erfüllte.
+    #[serde(default)]
+    pub tasks: Vec<Task>,
 }
 
 impl World {
@@ -316,6 +323,8 @@ impl World {
             booster: None,
             designs: Vec::new(),
             unlocked: Part::from_start(),
+            data: 0.0,
+            tasks: Vec::new(),
         }
     }
 
@@ -685,8 +694,14 @@ impl World {
         }]);
     }
 
-    fn push_log(&mut self, entries: impl IntoIterator<Item = LogEntry>) {
-        self.log.extend(entries);
+    /// Trägt ins Protokoll ein, was passiert ist, und dahinter gleich, welche
+    /// Aufgaben es erfüllt (siehe `task`).
+    pub(crate) fn push_log(&mut self, entries: impl IntoIterator<Item = LogEntry>) {
+        for entry in entries {
+            let done = self.complete_tasks(&entry);
+            self.log.push(entry);
+            self.log.extend(done);
+        }
         if self.log.len() > LOG_LIMIT {
             self.log.drain(..self.log.len() - LOG_LIMIT);
         }

@@ -367,6 +367,15 @@ pub fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<Strin
                     _ => "",
                 }
             ));
+            // Welche offenen Aufgaben diese Bahn erfüllt (gezählt wird beim
+            // Brennschluss, mit derselben Prüfung).
+            for task in world.tasks_met_by(after.body(), state) {
+                let task = &world.tasks[task];
+                lines.push(format!(
+                    "Erfüllt: {} um {} (+{:.0} GB)",
+                    task.title, body.name, task.data
+                ));
+            }
         }
         Some(Segment::Integrated { burn: None, .. }) => {
             lines.push("Danach: weiter durch die Atmosphäre".into());

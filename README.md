@@ -36,6 +36,20 @@ bleiben, wie sie sind. Die Entwürfe gehören zum Spielstand.
 Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
 (etwa als Erstes eine Tankstelle baut oder ein Schiff verliert), steckt fest.
 
+**Aufgaben und Daten:** Neben Zorit gibt es Daten (in GB). Sie gehören dem
+Spieler, nicht einem Ort, und kommen von Aufgaben, die je einmal zählen: je
+Körper eine niedrige, eine hohe und eine polare Umlaufbahn, außer auf Zorb
+dazu eine Landung und eine fertige Basis (zusammen 290 GB). Orbitvorgaben
+sind Bereiche, keine Punktlandungen: „niedrig" heißt um Zorb die ganze Bahn
+zwischen 70 und 220 km, „hoch" ab 1.200 km, „polar" eine Bahnneigung von 80°
+bis 100°. Eine Umlaufbahn zählt, wenn ein Brennen auf ihr endet; ein
+Vorbeiflug zählt nicht, ein Absturz auch nicht. Die Karte „Manöver" zeigt
+beim Node schon vorab, welche offenen Aufgaben die Bahn danach erfüllt
+(„Erfüllt: …"). Eine Bahn darf mehrere Aufgaben zugleich erfüllen. Oben in
+der Leiste steht der Stand („Daten 15 GB"); ein Klick öffnet das Fenster
+„Wirtschaft" mit der Liste der Aufgaben. Ausgeben kann man Daten noch nicht
+(das wird der Techtree).
+
 **Booster:** Jeder Start von der Startbasis läuft mit dem Booster. Schiff und
 Booster heben als Stapel ab, nur der Booster brennt; das Startprofil in der
 Karte „Start" gilt für den Stapel, das Schiff verbraucht dabei nichts. Bei
@@ -418,7 +432,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Schalter „Schiffe“ und „Info“ im Kopf der linken Leiste, „Hilfe“ oben rechts | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
 | ◀ / ▶ im Kopf jeder Seitenleiste | Leiste ein- und ausklappen |
 | Schalter „Entwürfe“ oben rechts | Schiffseditor: Entwürfe anlegen, ändern, löschen und bestellen |
-| Schalter „Wirtschaft“ oben rechts | Fenster mit allen Basen (Vorrat, wann das Lager voll ist) und der Fracht an Bord der Schiffe; Klick auf eine Zeile wählt die Basis oder das Schiff |
+| „Daten … GB“ oben rechts | Stand der Daten; Klick: Fenster „Wirtschaft“ mit allen Basen (Vorrat, wann das Lager voll ist), der Fracht an Bord der Schiffe und den Aufgaben; Klick auf eine Zeile wählt die Basis oder das Schiff |
 | Klick auf einen Node in der Karte „Manöver“ | Node wählen |
 | Regler unten in jeder Seitenleiste (Tooltip „Deckkraft“) | Wie durchscheinend diese Leiste ist (die Karte läuft dahinter weiter) |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |

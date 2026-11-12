@@ -35,6 +35,7 @@ use crate::launch::{self, Launch, LaunchPlan};
 use crate::log::LogKind;
 use crate::maneuver::{self, Burn, ManeuverNode, Plan, PlanError};
 use crate::soi;
+use crate::task::Orbit;
 use crate::world::VesselParams;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -570,10 +571,12 @@ fn log_entry(bodies: &[Body], done: &Segment, next: &Segment) -> Option<LogKind>
         // Nach dem Landebrennen folgt gleich das Aufsetzen.
         Event::BurnEnd if done.landing_burn().is_some() => return None,
         Event::BurnEnd => {
-            let info = kepler::orbit_info(body.gm, &done.state_at(bodies, at));
+            let orbit = Orbit::of(body, &done.state_at(bodies, at));
             LogKind::BurnEnd {
-                apoapsis: info.apoapsis.map(altitude),
-                periapsis: altitude(info.periapsis),
+                apoapsis: orbit.apoapsis,
+                periapsis: orbit.periapsis,
+                body: done.body(),
+                inclination: orbit.inclination,
             }
         }
         Event::AtmosphereEntry => {

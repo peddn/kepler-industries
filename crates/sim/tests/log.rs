@@ -24,6 +24,8 @@ fn kinds(world: &World, vessel: usize) -> Vec<LogKind> {
 #[test]
 fn launch_and_circularize() {
     let mut world = demo();
+    // Hier geht es um die Ereignisse des Flugs, nicht um Aufgaben.
+    world.tasks.clear();
     let launch = Launch {
         time: 60.0,
         profile: LaunchProfile::default(),
@@ -71,6 +73,7 @@ fn launch_and_circularize() {
     let LogKind::BurnEnd {
         apoapsis: Some(ap),
         periapsis: pe,
+        ..
     } = kinds[3]
     else {
         panic!("Bahn nach dem Zirkularisieren");
@@ -223,6 +226,7 @@ fn log_is_saved() {
 #[test]
 fn landing_on_the_moon_is_logged_with_its_body() {
     let mut world = sim::scenario::demo();
+    world.tasks.clear();
     let moon = &world.bodies[ZOON];
     let (gm, r) = (moon.gm, moon.radius + 30_000.0);
     let near_side = world

@@ -21,6 +21,7 @@ pub mod rendezvous;
 pub mod save;
 pub mod scenario;
 pub mod soi;
+pub mod task;
 pub mod trajectory;
 pub mod transfer;
 pub mod world;
@@ -36,6 +37,7 @@ pub use launch::{Launch, LaunchPlan, LaunchProfile};
 pub use log::{LOG_LIMIT, LogEntry, LogKind};
 pub use maneuver::{Burn, ManeuverNode, Plan, PlanError};
 pub use rendezvous::{Approach, PlaneCrossing};
+pub use task::{Goal, Orbit, OrbitSpec, Task};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
 pub use transfer::{BodyApproach, Window};
 pub use world::{

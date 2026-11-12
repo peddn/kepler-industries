@@ -21,6 +21,8 @@ const FREIGHTER_DESIGN: usize = 1;
 fn on_zoon() -> (World, usize, SurfacePoint) {
     let mut world = demo();
     world.vessels.clear();
+    // Aufgaben haben ihre eigenen Tests (`task`).
+    world.tasks.clear();
     let point = SurfacePoint::from_degrees(10.0, 30.0);
     let ship = world.spawn_landed("Basisschiff", BASE_SHIP, 1_000.0, ZOON, point);
     (world, ship, point)
@@ -286,6 +288,8 @@ fn freighters_complete_the_base() {
 fn finished(kind: BaseKind, body: usize) -> (World, usize, usize) {
     let mut world = demo();
     world.vessels.clear();
+    // Aufgaben haben ihre eigenen Tests (`task`).
+    world.tasks.clear();
     let point = SurfacePoint::from_degrees(10.0, 30.0);
     let ship = world.spawn_landed("Basisschiff", BASE_SHIP, 0.0, body, point);
     let base = world.found_base(ship, kind).unwrap();
