@@ -584,11 +584,14 @@ fn lines(
     (lines, red)
 }
 
-/// Zeichnet die Anzeige links oben: reine Information, Klicks gehen
-/// hindurch an die Karte.
+/// Zeichnet die Anzeige links oben in die freie Fläche (`painter` ist auf
+/// sie begrenzt, `origin` ihre Ecke): reine Information ohne eigene Fläche,
+/// Klicks gehen hindurch an die Karte.
 #[allow(clippy::too_many_arguments)]
 pub fn show(
-    ctx: &egui::Context,
+    painter: &egui::Painter,
+    origin: egui::Pos2,
+    font: &egui::FontId,
     world: &World,
     warp: &TimeWarp,
     selection: &Selection,
@@ -598,19 +601,14 @@ pub fn show(
     rig: &CameraRig,
 ) {
     let (lines, red) = lines(world, warp, selection, selected, zone, body, rig);
-    egui::Area::new("hud".into())
-        .fixed_pos([12.0, 12.0])
-        .order(egui::Order::Background)
-        .interactable(false)
-        .show(ctx, |ui| {
-            ui.spacing_mut().item_spacing.y = 0.0;
-            for (k, line) in lines.into_iter().enumerate() {
-                let color = if red.contains(&k) {
-                    WARNING_COLOR
-                } else {
-                    egui::Color32::WHITE
-                };
-                ui.add(egui::Label::new(egui::RichText::new(line).color(color)).extend());
-            }
-        });
+    let mut at = origin + egui::vec2(12.0, 12.0);
+    for (k, line) in lines.into_iter().enumerate() {
+        let color = if red.contains(&k) {
+            WARNING_COLOR
+        } else {
+            egui::Color32::WHITE
+        };
+        painter.text(at, egui::Align2::LEFT_TOP, line, font.clone(), color);
+        at.y += font.size + 3.0;
+    }
 }

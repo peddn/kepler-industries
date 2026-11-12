@@ -206,8 +206,15 @@ pub fn draw(
         let chosen = selected_node(world, &selected.vessel, &selected.node).map(|(_, k)| k);
         dv_bar::show(&mut root, world, vessel, chosen);
     }
+    // Was die Leisten frei lassen, gehört der Karte: Anzeige und
+    // Beschriftungen werden darauf begrenzt gezeichnet.
+    let free = root.available_rect_before_wrap();
+    let painter = root.painter_at(free);
+    let font = egui::FontId::monospace(TEXT_SIZE);
     hud::show(
-        ctx,
+        &painter,
+        free.min,
+        &font,
         world,
         &warp,
         &selected.vessel,
@@ -216,9 +223,6 @@ pub fn draw(
         &selected.body,
         &rig,
     );
-
-    let painter = ctx.layer_painter(egui::LayerId::background());
-    let font = egui::FontId::monospace(TEXT_SIZE);
     for (at, text, color) in labels.0.drain(..) {
         painter.text(
             egui::pos2(at.x, at.y),

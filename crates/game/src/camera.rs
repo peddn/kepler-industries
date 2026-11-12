@@ -188,14 +188,16 @@ fn projection() -> Projection {
 pub fn spawn(commands: &mut Commands) {
     commands.spawn((
         MainCamera,
-        IsDefaultUiCamera,
         Camera3d::default(),
         projection(),
         Transform::default(),
     ));
     // Zweite Kamera mit gleichem Blick, die nur die Overlay-Ebene zeichnet. Sie
     // hat einen eigenen Tiefenpuffer, deshalb liegt das Overlay immer obenauf.
+    // Sie zeichnet zuletzt und trägt deshalb auch die Oberfläche (egui), die
+    // über allem liegt.
     commands.spawn((
+        bevy_egui::PrimaryEguiContext,
         Camera3d::default(),
         Camera {
             order: 1,

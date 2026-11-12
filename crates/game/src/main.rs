@@ -294,6 +294,11 @@ fn main() {
         ..default()
     }))
     .add_plugins(bevy_egui::EguiPlugin::default())
+    // Die Oberfläche hängt an der Overlay-Kamera (siehe `camera::spawn`).
+    .insert_resource(bevy_egui::EguiGlobalSettings {
+        auto_create_primary_context: false,
+        ..default()
+    })
     .add_systems(bevy_egui::EguiPrimaryContextPass, ui::draw)
     .insert_resource(Sim(world))
     .insert_resource(warp)

@@ -184,24 +184,12 @@ fn label(ui: &mut egui::Ui, line: &Line, day: f64) {
     ui.add(egui::Label::new(egui::RichText::new(text).color(line.color)).truncate());
 }
 
-/// Zeichnet die Leiste an den unteren Rand von `root`.
+/// Zeichnet die Leiste an den unteren Rand von `root`, aufgeklappt darüber
+/// das Protokoll (in fester Höhe, damit das übrige Bild nicht springt).
 pub fn show(root: &mut egui::Ui, world: &World, notes: &UiMessage, bar: &mut StatusBar) {
     let day = hud::day(world);
     let total = world.log.len() + notes.notes.len();
     egui::Panel::bottom("status").show(root, |ui| {
-        if bar.open {
-            let row = ui.text_style_height(&egui::TextStyle::Body);
-            egui::ScrollArea::vertical()
-                .max_height(LINES as f32 * (row + ui.spacing().item_spacing.y))
-                .auto_shrink(false)
-                .stick_to_bottom(true)
-                .show_rows(ui, row, total, |ui, range| {
-                    for line in lines(world, notes, range) {
-                        label(ui, &line, day);
-                    }
-                });
-            ui.separator();
-        }
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button(if bar.open { "▼" } else { "▲" }).clicked() {
@@ -219,4 +207,22 @@ pub fn show(root: &mut egui::Ui, world: &World, notes: &UiMessage, bar: &mut Sta
             });
         });
     });
+    if !bar.open {
+        return;
+    }
+    let row = root.text_style_height(&egui::TextStyle::Body);
+    let height = LINES as f32 * (row + root.spacing().item_spacing.y);
+    egui::Panel::bottom("log")
+        .resizable(false)
+        .exact_size(height + 2.0 * root.spacing().item_spacing.y)
+        .show(root, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .stick_to_bottom(true)
+                .show_rows(ui, row, total, |ui, range| {
+                    for line in lines(world, notes, range) {
+                        label(ui, &line, day);
+                    }
+                });
+        });
 }
