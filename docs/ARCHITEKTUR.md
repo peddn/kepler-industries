@@ -900,9 +900,12 @@ zum Schiff; es gibt genau einen.
   Dutzend Meter über dem Boden, mit vollem Schub in unter einer Sekunde. So
   ist er gut fünf Minuten nach der Trennung zurück statt nach einer
   Viertelstunde am Schirm.
-- *Bis zur Trennung* fliegt der Booster am Schiff mit (`World::vessel_state`
-  liefert für ihn die Lage des Schiffs); erst dann hat er eine eigene
-  Zeitleiste. Die Rückflugbahn sieht man deshalb erst ab der Trennung, vorab
+- *Bis zur Trennung* fliegt der Booster am Schiff mit: Die Welt liefert für
+  ihn die Lage des Schiffs (`vessel_state`), als Masse den Stapel ohne das
+  Schiff (`vessel_mass`) und einen Δv-Haushalt aus dem Plan des Starts
+  (Aufstieg und Boostback, der Rest bleibt für die Landung). Erst danach hat
+  er eine eigene Zeitleiste. An der Startbasis gelandet ist er sofort wieder
+  vollgetankt. Die Rückflugbahn sieht man deshalb erst ab der Trennung, vorab
   nur das Ergebnis in der Karte „Start".
 - *Die Demo hat keinen Booster* (die Fähre dort startet aus eigener Kraft),
   damit Tests und Beispiele bleiben, wie sie sind.

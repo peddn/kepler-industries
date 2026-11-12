@@ -89,11 +89,28 @@ fn ship_reaches_orbit_and_booster_returns() {
     assert!(world.delta_v_budget(ship).burns.len() == 1);
     assert!(booster.mass >= BOOSTER.dry_mass + booster::reserve(&BOOSTER) - 1e-6);
 
+    // Vor dem Start: voller Tank, verplant für Aufstieg und Boostback.
+    let budget = world.delta_v_budget(BOOSTER_INDEX);
+    assert_eq!(budget.available, budget.full);
+    assert_eq!(budget.burns.len(), 2);
+    assert!((budget.burns[1].1 - booster.back.node.delta_v.length()).abs() < 1e-9);
+    assert!(
+        budget.rest >= booster::LANDING_DELTA_V - 1e-6,
+        "{}",
+        budget.rest
+    );
+
     world.advance_to(plan.burn.start + 30.0);
     assert_eq!(
         world.booster_status(),
         Some(BoosterStatus::Ascending { ship })
     );
+    // Der Booster verbrennt dabei seinen Treibstoff, nicht den des Schiffs.
+    let burned = 30.0 * plan.burn.mass_flow;
+    assert!((world.vessel_fuel(BOOSTER_INDEX) - (BOOSTER.fuel_capacity - burned)).abs() < 1e-6);
+    let rising = world.delta_v_budget(BOOSTER_INDEX);
+    assert!(rising.available < budget.available && rising.burns[0].1 < budget.burns[0].1);
+    assert!((rising.rest - budget.rest).abs() < 1e-9);
     assert_eq!(world.vessel_mass(ship), full);
 
     world.advance_to(plan.burn.end + 1.0);
@@ -124,6 +141,8 @@ fn ship_reaches_orbit_and_booster_returns() {
             .count()
     };
     assert_eq!(landing_burns(&world), 1);
+    // An der Startbasis ist er sofort wieder vollgetankt.
+    assert!((world.vessel_fuel(BOOSTER_INDEX) - BOOSTER.fuel_capacity).abs() < 1e-9);
     assert_eq!(BOOSTER.parachute_area, 0.0);
     assert!(booster.back.landing - plan.burn.end < 400.0);
 
