@@ -901,6 +901,13 @@ zum Schiff; es gibt genau einen.
   Zeitleiste wie überall (`Trajectory::new_flying`, in jedem Bild neu). So
   sieht man beim Boostback den Aufsetzpunkt zur Startbasis wandern, und beim
   Aufstieg, wie hoch und wie weit es schon reicht.
+  Auf dem Booster ist es die Bahn des Schiffs allein (Brennschluss ist
+  Trennung), also mit dessen Fallschirm: Der öffnet sich unter 3 km
+  schlagartig, das gibt einen Knick, und weil Bahnen ohne die Drehung des
+  Planeten gezeichnet sind, wird aus dem langen Abstieg am Schirm eine
+  flache Linie nach Osten. Ist der Booster gewählt, entfällt diese Linie;
+  sein Weg ist der geplante Rückflug. Der Stapel selbst rechnet ohne
+  Fallschirm.
 - *Landung ohne Fallschirm:* Die Luft bremst den fallenden Booster auf rund
   85 m/s, den Rest nimmt das automatische Landebrennen (`landing`) wenige
   Dutzend Meter über dem Boden, mit vollem Schub in unter einer Sekunde. So

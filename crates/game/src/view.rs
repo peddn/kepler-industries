@@ -634,6 +634,7 @@ pub fn draw_trajectories(
         .and_then(|i| world.vessels[i].target)
         .map(|t| world.host(t));
     let points = orbit_points(rig.near);
+    let booster_chosen = world.booster.is_some() && selection.0 == world.booster;
     for (i, vessel) in world.vessels.iter().enumerate() {
         // Angedockte Schiffe fliegen mit ihrem Hauptschiff.
         if vessel.docked_to.is_some() {
@@ -645,6 +646,14 @@ pub fn draw_trajectories(
             ORBIT_COLOR
         };
         let params = world.params(i);
+        // Auf dem Booster ist die momentane Bahn die des Schiffs allein
+        // (Brennschluss ist Trennung). Ist der Booster gewählt, zählt sein
+        // Weg: der geplante Rückflug, ohne diese Linie daneben.
+        let on_booster = vessel
+            .trajectory
+            .launch()
+            .is_some_and(|plan| plan.booster.is_some());
+        let momentary = !(on_booster && booster_chosen);
         draw_trajectory(
             &mut gizmos,
             world,
@@ -653,6 +662,7 @@ pub fn draw_trajectories(
             &params,
             orbit_color,
             points,
+            momentary,
         );
     }
     // Der Rückflug des Boosters für einen geplanten Start: wie die Bahn
@@ -670,12 +680,15 @@ pub fn draw_trajectories(
             &params,
             PLANNED_COLOR,
             points,
+            false,
         );
     }
 }
 
 /// Zeichnet eine Zeitleiste ab jetzt (siehe `draw_trajectories`); `params`
-/// sind die Werte des Schiffs dazu.
+/// sind die Werte des Schiffs dazu. Mit `momentary` während eines Brennens
+/// auch die momentane Bahn.
+#[allow(clippy::too_many_arguments)]
 fn draw_trajectory(
     gizmos: &mut Gizmos,
     world: &World,
@@ -684,6 +697,7 @@ fn draw_trajectory(
     params: &VesselParams,
     orbit_color: Color,
     points: usize,
+    momentary: bool,
 ) {
     let now = world.time;
     let first_kepler = trajectory
@@ -755,7 +769,11 @@ fn draw_trajectory(
                     after_burn = true;
                     // Beim Landebrennen ginge die momentane Bahn nur in
                     // den Boden und verdeckte den Weg nach unten.
-                    if segment.start() <= now && now < segment.end() && !burn.is_landing() {
+                    if momentary
+                        && segment.start() <= now
+                        && now < segment.end()
+                        && !burn.is_landing()
+                    {
                         draw_momentary_orbit(
                             gizmos,
                             world,
@@ -801,7 +819,8 @@ fn draw_trajectory(
 
 /// Während des Brennens: die Bahn, die das Schiff hätte, wenn das Triebwerk
 /// jetzt abschaltete (wie in KSP). Sie verformt sich sichtbar von der alten zur
-/// neuen Bahn. Über der Luft ist das eine Keplerbahn, abgeschnitten am
+/// neuen Bahn. Auf dem Booster ist es die Bahn des Schiffs allein, denn
+/// Brennschluss ist Trennung. Über der Luft ist das eine Keplerbahn, abgeschnitten am
 /// Eintritt in die Luft. In der Luft ist es der Freiflug, wie ihn die
 /// Zeitleiste rechnete (mit Luftwiderstand, bis zum Boden): So sieht man
 /// etwa beim Boostback den Aufsetzpunkt zur Startbasis wandern.

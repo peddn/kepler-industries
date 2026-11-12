@@ -386,15 +386,17 @@ fn integrated(
     mut burn: Option<Burn>,
     pending: Option<&Burn>,
 ) -> Segment {
-    // Auf dem Booster zählt die Fläche des Stapels.
-    let drag_area = burn
-        .and_then(|b| b.ascent)
-        .and_then(|a| a.stack)
-        .map_or(params.drag_area, |s| s.drag_area);
+    // Auf dem Booster zählt die Fläche des Stapels, und er hat keinen
+    // Fallschirm (der des Schiffs zählt erst nach der Trennung).
+    let stack = burn.and_then(|b| b.ascent).and_then(|a| a.stack);
+    let (drag_area, parachute_area) = match stack {
+        Some(stack) => (stack.drag_area, 0.0),
+        None => (params.drag_area, params.parachute_area),
+    };
     let forces = Forces {
         body: &bodies[body_id],
         drag_area,
-        parachute_area: params.parachute_area,
+        parachute_area,
         mass,
         burn: burn.as_ref(),
     };

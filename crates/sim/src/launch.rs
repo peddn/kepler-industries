@@ -251,7 +251,13 @@ pub fn plan(
     let forces = Forces {
         body,
         drag_area,
-        parachute_area: params.parachute_area,
+        // Der Stapel hat keinen Fallschirm; der des Schiffs zählt erst nach
+        // der Trennung.
+        parachute_area: if booster.is_some() {
+            0.0
+        } else {
+            params.parachute_area
+        },
         mass: lift_mass,
         burn: Some(&burn),
     };
