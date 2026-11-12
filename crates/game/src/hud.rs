@@ -635,7 +635,7 @@ pub fn update(
             "↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff",
             "H: Zeitraffer-Stopp   , / .: Zeitraffer   Leertaste: Pause",
             "Rechte Maustaste ziehen: drehen   Mausrad: zoomen",
-            "F: Kamera auf Auswahl / Planet   N: Nahansicht",
+            "F: Kamera auf Auswahl (Node > Schiff > Planet)   N: Nahansicht",
         ]
         .map(String::from),
     );

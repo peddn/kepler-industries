@@ -369,7 +369,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Linksklick auf ein Schiff / `Tab` | Schiff wählen / nächstes Schiff |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
 | Linksklick auf den Mond | Mond wählen (eine Bahn davor geht vor: Node setzen) |
-| `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten |
+| `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten. Ist ein Node gewählt, wechselt `F` der Reihe nach: Node, sein Schiff, Planet |
 | `N` | Nahansicht an/aus (Planet unten, Zoom bis 10 m; nur mit einem Objekt im Fokus) |
 | Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Wendewinkel, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
