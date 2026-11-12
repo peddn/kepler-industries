@@ -2,18 +2,20 @@
 //! Baustelle, Tankstelle, Mine und der ganze Kreislauf.
 
 use glam::DVec3;
-use sim::base::{
-    BASE_KIT, FUEL_RATE, FUEL_STORAGE, PARTS_PRICE, SHIP_PRICE, SITE_RADIUS, ZORIT_RATE,
-};
+use sim::base::{BASE_KIT, FUEL_RATE, FUEL_STORAGE, PARTS_PRICE, SITE_RADIUS, ZORIT_RATE};
 use sim::body::SurfacePoint;
 use sim::kepler;
 use sim::scenario::{
     BASE_SHIP, FERRY, FREIGHTER, NURA, START_ZORIT, ZILL, ZOON, ZORB, demo, start,
 };
 use sim::{
-    BaseError, BaseKind, Cargo, Launch, LaunchProfile, LogKind, ManeuverNode, PlanError, Segment,
-    ShipKind, VesselParams, World,
+    BaseError, BaseKind, Cargo, Design, Launch, LaunchProfile, LogKind, ManeuverNode, PlanError,
+    Segment, VesselParams, World,
 };
+
+/// Die Startentwürfe, wie sie in `World::designs` stehen.
+const BASE_SHIP_DESIGN: usize = 0;
+const FREIGHTER_DESIGN: usize = 1;
 
 /// Demo ohne Schiffe; ein Basisschiff steht auf Zoon bei 10° Nord, 30° Ost.
 fn on_zoon() -> (World, usize, SurfacePoint) {
@@ -496,11 +498,14 @@ fn game_starts_with_zorit_for_one_base() {
     assert_eq!(world.bases[0].kind, BaseKind::Depot);
     assert_eq!(world.zones[0].name, "Startbasis");
     assert_eq!(world.zorit, START_ZORIT);
-    assert_eq!(START_ZORIT, 2.0 * SHIP_PRICE + BASE_KIT * PARTS_PRICE);
+    let prices = [Design::freighter().price(), Design::base_ship().price()];
+    assert_eq!(prices, [1_000.0, 1_000.0]);
+    assert_eq!(START_ZORIT, prices[0] + prices[1] + BASE_KIT * PARTS_PRICE);
 
-    let ship = world.order_ship(ShipKind::BaseShip).unwrap();
+    let ship = world.order_ship(BASE_SHIP_DESIGN).unwrap();
     let v = &world.vessels[ship];
     assert_eq!((v.name.as_str(), v.params), ("Basisschiff-1", BASE_SHIP));
+    assert_eq!(v.design, Some(Design::base_ship()));
     assert!((world.vessel_fuel(ship) - BASE_SHIP.fuel_capacity).abs() < 1e-9);
     assert_eq!(world.base_of(ship), Some(0));
     assert!(matches!(world.log.last().unwrap().kind, LogKind::Ordered));
@@ -513,7 +518,7 @@ fn game_starts_with_zorit_for_one_base() {
     let plan = world.vessels[ship].trajectory.launch().unwrap();
     assert!(plan.booster.is_some());
 
-    let freighter = world.order_ship(ShipKind::Freighter).unwrap();
+    let freighter = world.order_ship(FREIGHTER_DESIGN).unwrap();
     assert_eq!(world.vessels[freighter].name, "Frachter-2");
     assert_eq!(world.zorit, 1_000.0);
     // Zwei Ladungen Bauteile, dann ist das Lager leer.
@@ -521,7 +526,7 @@ fn game_starts_with_zorit_for_one_base() {
     world.vessels[freighter].cargo = Cargo::default();
     assert_eq!(world.load_parts(freighter), Ok(2_000.0));
     assert_eq!(world.zorit, 0.0);
-    for kind in [ShipKind::BaseShip, ShipKind::Freighter] {
+    for kind in [BASE_SHIP_DESIGN, FREIGHTER_DESIGN] {
         assert_eq!(world.order_ship(kind), Err(BaseError::NotEnoughZorit));
     }
 
@@ -533,7 +538,7 @@ fn game_starts_with_zorit_for_one_base() {
 #[test]
 fn zorit_pays_for_ships_and_parts() {
     let (mut world, _, _) = finished(BaseKind::Mine, ZOON);
-    for kind in [ShipKind::BaseShip, ShipKind::Freighter] {
+    for kind in [BASE_SHIP_DESIGN, FREIGHTER_DESIGN] {
         assert_eq!(world.order_ship(kind), Err(BaseError::NotEnoughZorit));
     }
     let empty = at_depot(&mut world, FREIGHTER, 0.0);
@@ -541,8 +546,8 @@ fn zorit_pays_for_ships_and_parts() {
 
     // 2,5 t Zorit: zwei Schiffe, dann reicht der Rest genau für 2 t Bauteile.
     world.zorit = 2_500.0;
-    world.order_ship(ShipKind::BaseShip).unwrap();
-    let freighter = world.order_ship(ShipKind::Freighter).unwrap();
+    world.order_ship(BASE_SHIP_DESIGN).unwrap();
+    let freighter = world.order_ship(FREIGHTER_DESIGN).unwrap();
     assert_eq!(world.zorit, 500.0);
     assert_eq!(world.load_parts(freighter), Ok(2_000.0));
     assert_eq!(world.zorit, 0.0);
@@ -551,7 +556,10 @@ fn zorit_pays_for_ships_and_parts() {
         FREIGHTER.dry_mass + FREIGHTER.fuel_capacity + 2_000.0
     );
     // Eine neue Basis kostet damit 2 t Zorit.
-    assert_eq!(SHIP_PRICE + BASE_KIT * PARTS_PRICE, 2_000.0);
+    assert_eq!(
+        Design::base_ship().price() + BASE_KIT * PARTS_PRICE,
+        2_000.0
+    );
 
     // Reicht das Zorit nicht für den ganzen Frachtraum, gibt es so viel,
     // wie es bezahlt. Tanken bleibt frei.

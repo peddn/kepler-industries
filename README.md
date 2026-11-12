@@ -14,7 +14,11 @@ und den Monden Zoon und Zill, weiter draußen Nura.
 **Spielbeginn:** Es gibt nur die Startbasis auf Zorb mit ihrem Booster, 3 t
 Zorit im Lager und keine Schiffe. Der Vorrat reicht genau für eine Basis: ein Basisschiff,
 ein Frachter und 4 t Bauteile (der Frachter fliegt dafür zweimal). Bestellt
-wird in der Karte „Startbasis" der Seitenleiste; sie ist zu Beginn offen.
+wird in der Karte „Startbasis" der Seitenleiste nach Entwürfen; sie ist zu
+Beginn offen. Ein Entwurf ist ein Chassis mit Triebwerken, optional dem
+Fundament einer Basis und einer Aufteilung des Innenraums in Tank und
+Fracht; daraus ergeben sich Flugwerte und Preis. Vorerst gibt es die beiden
+Startentwürfe „Basisschiff" und „Frachter" (der Editor für eigene folgt).
 Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
 (etwa als Erstes eine Tankstelle baut oder ein Schiff verliert), steckt fest.
 

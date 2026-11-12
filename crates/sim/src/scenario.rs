@@ -1,6 +1,7 @@
 //! Startszenario für die Vorführung.
 
 use crate::body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint, circular_period};
+use crate::design::Design;
 use crate::kepler::state_from_apsides;
 use crate::landing::LandingZone;
 use crate::world::{Base, BaseKind, VesselParams, World};
@@ -197,7 +198,9 @@ pub const BOOSTER: VesselParams = VesselParams {
     base_kit: false,
 };
 
-/// Frachter: 2 t Frachtraum. So groß, dass er voll beladen auf dem Booster
+/// Frachter der Demo (feste Werte; im Spiel kommen Schiffe aus Entwürfen,
+/// siehe `design`, der Frachter dort hat zwei Z-1 mit zusammen 500 kN):
+/// 2 t Frachtraum. So groß, dass er voll beladen auf dem Booster
 /// von Zorb startet, auf Zoon landet und ohne Tanken mit Zorit zurückkommt;
 /// auf Zorb bremsen Luft und Fallschirm.
 pub const FREIGHTER: VesselParams = VesselParams {
@@ -211,7 +214,8 @@ pub const FREIGHTER: VesselParams = VesselParams {
     base_kit: false,
 };
 
-/// Basisschiff: startet auf dem Booster von Zorb, landet einmal und wird zum
+/// Basisschiff der Demo (feste Werte, dieselben wie der Startentwurf in
+/// `design`): startet auf dem Booster von Zorb, landet einmal und wird zum
 /// Fundament einer Basis (siehe `base`). Kein Frachtraum.
 pub const BASE_SHIP: VesselParams = VesselParams {
     dry_mass: 3_000.0,
@@ -253,6 +257,7 @@ fn add_booster(world: &mut World) {
 /// Sonnensystem und Startbasis, noch ohne Booster.
 fn base_world() -> World {
     let mut world = World::new(solar_system());
+    world.designs = vec![Design::base_ship(), Design::freighter()];
     world.home = ZORB;
     world.zorit = START_ZORIT;
     let pad = SurfacePoint::from_degrees(5.0, -20.0);

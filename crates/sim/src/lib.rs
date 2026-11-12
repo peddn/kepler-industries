@@ -9,6 +9,7 @@
 pub mod base;
 pub mod body;
 pub mod booster;
+pub mod design;
 pub mod docking;
 pub mod integrator;
 pub mod kepler;
@@ -24,9 +25,10 @@ pub mod trajectory;
 pub mod transfer;
 pub mod world;
 
-pub use base::{BaseError, ShipKind};
+pub use base::BaseError;
 pub use body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint};
 pub use booster::{BoosterPlan, Return};
+pub use design::{Chassis, Design, DesignError, Engine, Part};
 pub use docking::{DockError, DockPlan, DockRequest, Docking, UndockError, UndockFuel};
 pub use kepler::StateVector;
 pub use landing::{Crash, LandingZone};

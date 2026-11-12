@@ -4,7 +4,10 @@ use glam::DVec3;
 use sim::save::{LoadError, from_json, to_json};
 use sim::scenario::{demo, start};
 use sim::world::SAVE_VERSION;
-use sim::{BaseKind, ManeuverNode, ShipKind};
+use sim::{BaseKind, ManeuverNode};
+
+/// Der Startentwurf, wie er in `World::designs` steht.
+const FREIGHTER_DESIGN: usize = 1;
 
 /// Speichern und Laden mitten im Geschehen: Die geladene Welt ist dieselbe
 /// und läuft bitgenau gleich weiter, samt geplanter Manöver, Fracht, Basen
@@ -44,7 +47,7 @@ fn loaded_game_continues_exactly() {
 #[test]
 fn start_is_saved() {
     let mut world = start();
-    world.order_ship(ShipKind::Freighter).unwrap();
+    world.order_ship(FREIGHTER_DESIGN).unwrap();
     let loaded = from_json(&to_json(&world)).unwrap();
     assert_eq!(loaded, world);
     // Der Booster und das bestellte Schiff.

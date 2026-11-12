@@ -3,6 +3,7 @@
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::booster::{self, BoosterPlan};
+use crate::design::{Design, Part};
 use crate::docking::{
     self, DOCKING_RANGE, DockError, DockRequest, SEPARATION_SPEED, UndockError, UndockFuel,
 };
@@ -17,7 +18,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 12;
+pub const SAVE_VERSION: u32 = 13;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -131,6 +132,10 @@ pub struct Vessel {
     /// frei.
     #[serde(default)]
     pub docked_to: Option<usize>,
+    /// Der Entwurf, nach dem das Schiff gebaut ist (siehe `design`); `None`
+    /// bei Schiffen mit festen Werten (Booster, Demo).
+    #[serde(default)]
+    pub design: Option<Design>,
 }
 
 /// Fracht an Bord in kg. Beide Stoffe teilen sich den Frachtraum.
@@ -288,6 +293,12 @@ pub struct World {
     /// Der Booster der Startbasis: Nummer seines Fahrzeugs (siehe `booster`).
     #[serde(default)]
     pub booster: Option<usize>,
+    /// Die Schiffsentwürfe, nach denen man bestellen kann (siehe `design`).
+    #[serde(default)]
+    pub designs: Vec<Design>,
+    /// Was freigeschaltet ist und in Entwürfen vorkommen darf.
+    #[serde(default = "Part::from_start")]
+    pub unlocked: Vec<Part>,
 }
 
 impl World {
@@ -303,6 +314,8 @@ impl World {
             zones: Vec::new(),
             log: Vec::new(),
             booster: None,
+            designs: Vec::new(),
+            unlocked: Part::from_start(),
         }
     }
 
@@ -384,6 +397,7 @@ impl World {
             cargo: Cargo::default(),
             foundation_of: None,
             docked_to: None,
+            design: None,
         });
         self.vessels.len() - 1
     }
@@ -463,6 +477,7 @@ impl World {
             cargo: Cargo::default(),
             foundation_of: None,
             docked_to: None,
+            design: None,
         });
         self.vessels.len() - 1
     }
