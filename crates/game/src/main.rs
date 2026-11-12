@@ -6,6 +6,7 @@
 mod camera;
 mod depot;
 mod dv_bar;
+mod egui_spike;
 mod focus;
 mod fracht;
 mod hud;
@@ -291,6 +292,9 @@ fn main() {
         }),
         ..default()
     }))
+    .add_plugins(bevy_egui::EguiPlugin::default())
+    .init_resource::<egui_spike::Draft>()
+    .add_systems(bevy_egui::EguiPrimaryContextPass, egui_spike::window)
     .insert_resource(Sim(world))
     .insert_resource(warp)
     .insert_resource(rig)

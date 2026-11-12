@@ -20,3 +20,6 @@ bevy = { version = "=0.20.1", default-features = false, features = [
     "ui_bevy_render",
     "png",
 ] }
+# Versuch: egui für Fenster mit Reglern und Textfeldern (Schiffseditor).
+# Ohne Zwischenablage und Browser (sparen Systembibliotheken).
+bevy_egui = { version = "0.43", default-features = false, features = ["render", "default_fonts"] }
