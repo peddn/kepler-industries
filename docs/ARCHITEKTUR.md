@@ -518,10 +518,12 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Wracks). Die Anzeige links bleibt reine Information. Klicks auf die Leiste
   gehen nicht an die Karte dahinter.
 - **Oberfläche mit egui** (`bevy_egui`; Entscheidung vor dem Schiffseditor,
-  der Regler, Listen und Textfelder braucht). Ziel: die ganze Oberfläche in
-  egui, daneben nur die 3D-Ansicht; Bevys eigenes UI fällt weg. Umgezogen ist
-  die Seitenleiste (`ui::draw`), es folgen Statusleiste, Δv-Balken und die
-  Anzeige links. Sauberer Code geht dabei vor gleichem Aussehen.
+  der Regler, Listen und Textfelder braucht). Die ganze Oberfläche ist in
+  egui, daneben gibt es nur die 3D-Ansicht; Bevys eigenes UI ist nicht mehr
+  im Build. Ein System (`ui::draw`) zeichnet alles: Statusleiste,
+  Seitenleiste, Δv-Balken, die Anzeige links und die Beschriftungen an
+  Punkten der Karte (die 3D-Ansicht trägt sie in `WorldLabels` ein). Sauberer
+  Code ging beim Umzug vor gleichem Aussehen.
   - egui zeichnet jedes Bild neu: Eine Karte ist eine Funktion, die die Welt
     liest, zeichnet und bei einem Klick ändert (`start_card::show` und so
     weiter). Aufbau vorab, Abgleich der Texte und eigene Treffer-Prüfung
@@ -533,8 +535,8 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   - Preis: ein Fremdpaket, das bei einem Bevy-Update nachziehen muss; die
     Bevy-Version ist ohnehin fest.
 - **Statusleiste mit Protokoll** ganz unten: letzte Meldung mit Spielzeit,
-  ▲ klappt die letzten Meldungen auf (12 Zeilen, Mausrad, ziehbare
-  Scrollleiste; wer hochgescrollt hat, bleibt an seiner Stelle). Protokolliert
+  ▲ klappt die letzten Meldungen auf (12 Zeilen, zum Scrollen; wer
+  hochgescrollt hat, bleibt an seiner Stelle). Protokolliert
   werden Start, Brennbeginn, Brennschluss (Ap/Pe danach), Eintritt in die
   Atmosphäre (Pe), Landung (Zielgebiet) und Absturz (Grund). Gespeichert sind
   Daten, kein Text (`LogKind`); die Anzeige formuliert selbst. Höchstens 1000

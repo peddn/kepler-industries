@@ -302,8 +302,7 @@ fn main() {
     .init_resource::<node_ui::SelectedNode>()
     .insert_resource(zone)
     .init_resource::<node_ui::SelectedBody>()
-    .init_resource::<ui::PanelShown>()
-    .init_resource::<dv_bar::BarShown>()
+    .init_resource::<ui::WorldLabels>()
     .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<status_bar::StatusBar>()
     .init_resource::<verbund::UndockChoice>()
@@ -311,22 +310,7 @@ fn main() {
     .init_resource::<node_ui::UiMessage>()
     .init_gizmo_group::<node_ui::NodeGizmos>()
     .insert_resource(ClearColor(Color::srgb(0.01, 0.01, 0.025)))
-    .add_systems(
-        Startup,
-        (
-            hud::load_font,
-            (
-                view::setup,
-                node_ui::configure_gizmos,
-                node_ui::setup_label,
-                rendezvous::setup_labels,
-                dv_bar::setup,
-                hud::setup,
-                status_bar::setup,
-            ),
-        )
-            .chain(),
-    )
+    .add_systems(Startup, ((view::setup, node_ui::configure_gizmos),).chain())
     .add_systems(
         Update,
         (
@@ -335,8 +319,6 @@ fn main() {
             (
                 focus::keys,
                 focus::follow,
-                // Vor der Kamera: über dem Protokoll scrollt das Mausrad dieses.
-                status_bar::input,
                 // Über der Oberfläche gehören Mausrad und Ziehen dieser.
                 camera::input.run_if(not(bevy_egui::input::egui_wants_any_pointer_input)),
                 camera::apply,
@@ -346,9 +328,8 @@ fn main() {
             (savegame::keys, node_ui::input, rendezvous::update).chain(),
             (view::spawn_markers, view::sync_markers, view::aim_sunlight).chain(),
             node_ui::draw,
-            node_ui::sync_label,
-            rendezvous::sync_labels,
-            dv_bar::sync,
+            node_ui::label,
+            rendezvous::labels,
             view::draw_planet_grid,
             view::draw_body_orbits,
             view::draw_trajectories,
@@ -357,7 +338,6 @@ fn main() {
             view::draw_zones,
             view::draw_touchdowns,
             rendezvous::draw,
-            (hud::update, status_bar::sync),
         )
             .chain(),
     );

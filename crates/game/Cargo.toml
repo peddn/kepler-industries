@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 sim = { path = "../sim" }
-# Nur die benötigten Teile von Bevy: 3D-Rendering, Gizmos, UI-Text, Fenster.
+# Nur die benötigten Teile von Bevy: 3D-Rendering, Gizmos, Fenster. Die
+# Oberfläche kommt von egui (unten), Bevys eigenes UI ist nicht dabei.
 # Kein Audio, kein Gamepad (spart Systembibliotheken und Kompilierzeit).
 bevy = { version = "=0.20.1", default-features = false, features = [
     "default_app",
@@ -14,10 +15,7 @@ bevy = { version = "=0.20.1", default-features = false, features = [
     "bevy_winit",
     "x11",
     "wayland",
-    "default_font",
     "3d_bevy_render",
-    "ui_api",
-    "ui_bevy_render",
     "png",
 ] }
 # Oberfläche: Fenster, Schaltflächen, Regler, Textfelder. Ohne Zwischenablage

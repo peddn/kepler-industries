@@ -10,12 +10,12 @@
 
 use crate::Sim;
 use crate::camera::{CameraRig, MainCamera, to_view};
-use crate::hud::{UiFont, km};
+use crate::hud::km;
 use crate::node_ui::{Projector, Selection};
+use crate::ui::WorldLabels;
 use crate::view;
 use bevy::math::DVec3;
 use bevy::prelude::*;
-use bevy::text::FontSize;
 use sim::{Approach, BodyApproach, BodyId, PlaneCrossing, Window, World};
 
 /// Farbe des Ziels: Bahn, Markierung, Annäherung.
@@ -170,54 +170,34 @@ pub fn draw(
 }
 
 /// Welche Beschriftung.
-#[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum Label {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Label {
     Approach,
     Ascending,
     Descending,
 }
 
-pub fn setup_labels(mut commands: Commands, font: Res<UiFont>) {
+/// Beschriftungen an den Markern: Abstand bei der Annäherung, "AN"/"DN" mit
+/// der Neigung an den Knoten. Hinter dem Planeten keine.
+pub fn labels(
+    sim: Res<Sim>,
+    info: Res<Rendezvous>,
+    rig: Res<CameraRig>,
+    camera: Single<(&Camera, &Transform), With<MainCamera>>,
+    mut labels: ResMut<WorldLabels>,
+) {
+    let (camera, transform) = *camera;
+    let projector = Projector::new(camera, transform, rig.focus, &sim.0);
     for (label, color) in [
         (Label::Approach, TARGET_COLOR),
         (Label::Ascending, NODE_COLOR),
         (Label::Descending, NODE_COLOR),
     ] {
-        commands.spawn((
-            label,
-            Text::new(""),
-            TextFont {
-                font: font.0.clone().into(),
-                font_size: FontSize::Px(14.0),
-                ..default()
-            },
-            TextColor(color),
-            Node {
-                position_type: PositionType::Absolute,
-                display: Display::None,
-                ..default()
-            },
-        ));
-    }
-}
-
-/// Beschriftungen an die Marker schieben: Abstand bei der Annäherung,
-/// "AN"/"DN" mit der Neigung an den Knoten. Hinter dem Planeten keine.
-pub fn sync_labels(
-    sim: Res<Sim>,
-    info: Res<Rendezvous>,
-    rig: Res<CameraRig>,
-    camera: Single<(&Camera, &Transform), With<MainCamera>>,
-    mut labels: Query<(&Label, &mut Node, &mut Text)>,
-) {
-    let (camera, transform) = *camera;
-    let projector = Projector::new(camera, transform, rig.focus, &sim.0);
-    for (label, mut node, mut text) in &mut labels {
         // Zielkörper: Abstand (bei einer Begegnung die Periapsis) am Schiff.
         let transfer = info
             .transfer
             .as_ref()
-            .filter(|_| *label == Label::Approach)
+            .filter(|_| label == Label::Approach)
             .and_then(|transfer| {
                 let a = transfer.approach.as_ref()?;
                 let (own, _) = transfer_points(&sim.0, transfer)?;
@@ -240,7 +220,7 @@ pub fn sync_labels(
                     }
                     Label::Ascending | Label::Descending => {
                         let plane = info.plane.as_ref()?;
-                        let (time, name) = if *label == Label::Ascending {
+                        let (time, name) = if label == Label::Ascending {
                             (plane.ascending?, "AN")
                         } else {
                             (plane.descending?, "DN")
@@ -256,15 +236,8 @@ pub fn sync_labels(
                 Some((screen, value))
             })
         });
-        let Some((screen, value)) = shown else {
-            node.display = Display::None;
-            continue;
-        };
-        node.display = Display::Flex;
-        node.left = px(screen.x + LABEL_OFFSET.x);
-        node.top = px(screen.y + LABEL_OFFSET.y);
-        if text.0 != value {
-            text.0 = value;
+        if let Some((screen, value)) = shown {
+            labels.add(screen + LABEL_OFFSET, value, color);
         }
     }
 }
