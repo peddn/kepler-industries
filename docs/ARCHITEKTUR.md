@@ -183,10 +183,13 @@ Conics, ab dem Wechsel der Einflusssphäre). Zoon entspricht dem Mun in KSP
 (Kreis über dem Äquator, 200 km, g = 1,63 m/s², 12.000 km Abstand, Umlauf
 38,6 h, Einflusssphäre 2.430 km) und ist gebunden: Rotation und Umlauf haben
 dieselbe Dauer, Länge 0° zeigt immer zum Planeten (bei einer Ellipse
-schwankte der Planet dabei am Himmel, Libration). Zimm ähnelt Minmus (60 km,
-g = 0,49 m/s², große Halbachse 47.000 km, Neigung 6°, Einflusssphäre
-2.250 km), ist aber leicht elliptisch (Exzentrizität 0,1) und dreht sich
-frei.
+schwankte der Planet dabei am Himmel, Libration). Zill ist klein, aber extrem
+dicht (100 km, g = 5,75 m/s², große Halbachse 47.000 km, Exzentrizität 0,25,
+Neigung 15°, Einflusssphäre 9.050 km) und dreht sich frei. Er ist bewusst
+das schwerere Ziel nach Zoon: Für Landung und Start zählt das Produkt aus
+Schwerkraft und Radius (Fluchtgeschwindigkeit am Boden 1.070 m/s, Zoon
+810 m/s); Körper sind durch Radius und Schwerkraft festgelegt, die Dichte
+ist frei (und wie überall in diesem Maßstab weit über echten Werten).
 
 **Wechsel der Einflusssphäre** (`soi.rs`): An der Grenze endet ein Abschnitt
 (`SoiEntry`, `SoiExit`), der nächste läuft um den anderen Körper weiter, ein
@@ -421,7 +424,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 ## Getroffene Spielentscheidungen
 
 - 3D, kleine Planeten (Kerbin-Größe), **keine Raketenstufen**.
-- **Namen:** Der Heimatplanet heißt Zorb, seine Monde Zoon und Zimm, der
+- **Namen:** Der Heimatplanet heißt Zorb, seine Monde Zoon und Zill, der
   zweite Planet Nura, die Sonne Zunn,
   die Bewohner Zorbels. Die Namen der Himmelskörper stehen nur im Szenario
   (`Body::name`), alle Anzeigen lesen sie von dort; alte Spielstände
@@ -752,7 +755,7 @@ man kommt und was man zurückbringt.
   wirkungslos; auch eine schlecht gelegene Mine liefe voll. Knapp sind nur
   die Flüge, die Leistung der Schiffe und endliche Mengen. Die Häufigkeit von
   Zorit bestimmt deshalb, wie viel das Lager einer Mine fasst (`Body::zorit`:
-  Zoon 1 t, Zimm 2 t, Nura 4 t), also den Ertrag pro Abholung. Später ersetzt
+  Zoon 1 t, Zill 2 t, Nura 4 t), also den Ertrag pro Abholung. Später ersetzt
   die Rohstoffkarte diese eine Zahl je Körper; reiche Stellen sollen dort
   liegen, wo das Hinkommen teuer ist. Endliche Vorkommen bleiben eine Option.
 - **Schiffe als Werte**, noch ohne Chassis und Module: Der Frachter (2 t
@@ -768,7 +771,7 @@ man kommt und was man zurückbringt.
 **Preise und Bestellen (gebaut):** Mit dem Zorit im Lager der Startbasis
 bezahlt man dort Bauteile (0,25 t je Tonne) und bestellt Basisschiffe und
 Frachter (je 1 t; `World::order_ship`). Eine neue Basis kostet damit 2 t
-Zorit: zwei Abholungen auf Zoon, eine auf Zimm. Treibstoff ist an der
+Zorit: zwei Abholungen auf Zoon, eine auf Zill. Treibstoff ist an der
 Startbasis frei.
 - Ein bestelltes Schiff steht sofort vollgetankt an der Startbasis: Eine
   Bauzeit wäre wirkungslos, weil Vorspulen nichts kostet.
@@ -785,6 +788,25 @@ Startbasis frei.
 - Im Spiel: Karte „Startbasis", sobald ein Schiff gewählt ist, das dort
   steht, oder ihr Zielgebiet (dessen Raute lässt sich nur anklicken, wenn
   kein Schiff darauf steht; Schiffe haben beim Klicken Vorrang).
+
+**Reichweiten** (Δv in m/s ab niedriger Bahn um Zorb; Zoon und die Landung
+auf Nura in der Simulation gemessen, der Rest gerechnet, ohne
+Kurskorrekturen):
+
+| Ziel | Hinflug | Landung | Summe | Rückflug bis in Zorbs Luft |
+|---|---|---|---|---|
+| Zoon | 845 | 910 | 1.760 | 1.000 |
+| Zill | 900 bis 930 | 1.100 bis 1.200 | 2.100 bis 2.300 | 1.150 |
+| Nura | 1.090 | 30 | 1.150 | 1.750 |
+
+Im Orbit haben nach dem Start von Zorb das Basisschiff rund 2.300 und der
+Frachter mit 2 t Bauteilen rund 3.000 übrig; vollgetankt an einer Tankstelle
+auf Zoon über 5.900 und 6.500. Teuer macht ein Ziel nicht die Entfernung,
+sondern Landen ohne Luft in tiefer Schwerkraft. Daraus die Stufen: Zoon
+geht direkt, Zill braucht eine Tankstelle (oder später bessere Triebwerke).
+Nura ist beim Hinflug am billigsten, weil Luft und Fallschirm die Landung
+übernehmen (der Fallschirm hält im Modell bei jeder Geschwindigkeit); teuer
+sind dort Rückflug, Startfenster und Flugzeit.
 
 **Daten** sind später der zweite Zähler auf Zorb (bestimmen, *was* man bauen
 kann; Zorit, *wie viel*). Sie sind keine Fracht: Sie werden gefunkt, und jede
@@ -880,7 +902,7 @@ nichts verloren geht.
    Statusleiste mit Protokoll ✓, Andocken ✓ (Angleichen, Anflug, Verbund),
    Abdocken ✓
 7. Mond: auf Schienen ✓ (Bahnelemente wie KSP, Einflusssphäre, wählen,
-   Kamera, zweiter Mond Zimm), Wechsel
+   Kamera, zweiter Mond Zill), Wechsel
    der Einflusssphäre ✓ (Zeichnung wie KSP), Landen und Starten auf Zoon ✓
    (Wendewinkel, Zielgebiete), Landebrennen ✓, Sonne ✓ (Zunn als Wurzel,
    zweiter Planet Nura, Flüge zwischen Planeten, Licht aus ihrer Richtung)

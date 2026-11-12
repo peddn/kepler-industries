@@ -8,7 +8,7 @@ use sim::base::{
 use sim::body::SurfacePoint;
 use sim::kepler;
 use sim::scenario::{
-    BASE_SHIP, FERRY, FREIGHTER, NURA, START_ZORIT, ZIMM, ZOON, ZORB, demo, start,
+    BASE_SHIP, FERRY, FREIGHTER, NURA, START_ZORIT, ZILL, ZOON, ZORB, demo, start,
 };
 use sim::{
     BaseError, BaseKind, Cargo, Launch, LaunchProfile, LogKind, ManeuverNode, PlanError, Segment,
@@ -344,7 +344,7 @@ fn fuel_station_makes_fuel() {
 #[test]
 fn mine_yield_depends_on_the_body() {
     let world = demo();
-    let stores = [ZORB, ZOON, ZIMM, NURA].map(|b| world.bodies[b].zorit);
+    let stores = [ZORB, ZOON, ZILL, NURA].map(|b| world.bodies[b].zorit);
     assert_eq!(stores, [0.0, 1_000.0, 2_000.0, 4_000.0]);
 
     let (mut world, base, ship) = finished(BaseKind::Mine, ZOON);

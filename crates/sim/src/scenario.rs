@@ -11,7 +11,7 @@ use std::f64::consts::PI;
 pub const ZUNN: BodyId = 0;
 pub const ZORB: BodyId = 1;
 pub const ZOON: BodyId = 2;
-pub const ZIMM: BodyId = 3;
+pub const ZILL: BodyId = 3;
 pub const NURA: BodyId = 4;
 
 /// Zunn, die Sonne, wie Kerbol in KSP: 261.600 km Radius, Masse wie Kerbol,
@@ -78,28 +78,31 @@ pub fn moon(parent: BodyId, planet: &Body) -> Body {
     }
 }
 
-/// Zimm, der zweite, äußere Mond von Zorb (`parent`), ähnlich Minmus in KSP:
-/// klein (60 km Radius, g = 0,49 m/s², ohne Luft), weit draußen und schräg.
-/// Anders als Minmus leicht elliptisch: 42.300 bis 51.700 km vom
-/// Mittelpunkt des Planeten (große Halbachse 47.000 km, Exzentrizität 0,1,
-/// Umlauf wie Minmus 1.077.311 s, knapp 50 Tage des Planeten), Neigung 6°,
-/// Einflusssphäre etwa 2.250 km. Dreht sich frei (wie Minmus in 40.400 s).
+/// Zill, der zweite, äußere Mond von Zorb (`parent`): klein, aber extrem
+/// dicht (100 km Radius, g = 5,75 m/s², ohne Luft; Fluchtgeschwindigkeit am
+/// Boden rund 1.070 m/s, mehr als bei Zoon), weit draußen, schräg und
+/// deutlich elliptisch: 35.250 bis 58.750 km vom Mittelpunkt des Planeten
+/// (große Halbachse 47.000 km, Exzentrizität 0,25, Umlauf 1.077.311 s, knapp
+/// 50 Tage des Planeten), Neigung 15°, Einflusssphäre etwa 9.050 km. Dreht
+/// sich frei (in 40.400 s). Das anspruchsvollere Ziel nach Zoon: teurer zu
+/// landen und zu verlassen, und man muss den richtigen Punkt seiner Bahn
+/// treffen.
 pub fn outer_moon(parent: BodyId) -> Body {
-    let radius = 60_000.0;
+    let radius = 100_000.0;
     Body {
-        name: "Zimm".into(),
-        gm: 0.491 * radius * radius,
+        name: "Zill".into(),
+        gm: 5.75 * radius * radius,
         radius,
         rotation_period: 40_400.0,
         atmosphere: Atmosphere::NONE,
         orbit: Some(BodyOrbit {
             parent,
             semi_major_axis: 47_000_000.0,
-            eccentricity: 0.1,
-            inclination: 6f64.to_radians(),
+            eccentricity: 0.25,
+            inclination: 15f64.to_radians(),
             ascending_node: 78f64.to_radians(),
             argument_of_periapsis: 38f64.to_radians(),
-            mean_anomaly: 0.9,
+            mean_anomaly: 2.2,
         }),
         zorit: 2_000.0,
     }

@@ -9,7 +9,7 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 ## Stand
 
 Die Sonne Zunn mit zwei Planeten: Zorb, Heimat der Zorbels, mit Atmosphäre
-und den Monden Zoon und Zimm, weiter draußen Nura.
+und den Monden Zoon und Zill, weiter draußen Nura.
 
 **Spielbeginn:** Es gibt nur die Startbasis auf Zorb mit 3 t Zorit im Lager
 und keine Schiffe. Der Vorrat reicht genau für eine Basis: ein Basisschiff,
@@ -52,7 +52,7 @@ Basis" der Seitenleiste.
 - **Tankstelle:** stellt Treibstoff her (180 kg pro Stunde, Lager 8 t);
   Schiffe in der Zone tanken.
 - **Mine:** baut Zorit ab (100 kg pro Stunde); Frachter in der Zone laden es.
-  Wie viel ihr Lager fasst, hängt vom Körper ab (Zoon 1 t, Zimm 2 t, Nura
+  Wie viel ihr Lager fasst, hängt vom Körper ab (Zoon 1 t, Zill 2 t, Nura
   4 t): Das ist die Menge pro Abholung. Weil Vorspulen nichts kostet, zählt
   der Ertrag pro Flug, nicht pro Stunde.
 
@@ -157,16 +157,25 @@ es auf der Nahseite (Zorb im Zenit) und der Fernseite. Zurück geht es mit
 einem Start von Zoon (Voreinstellung siehe oben, die 30-km-Bahn kostet etwa
 670 m/s).
 
-Weiter draußen kreist der kleine Mond Zimm, ähnlich Minmus in KSP: 60 km
-Radius, Schwerkraft 0,49 m/s², keine Luft, auf einer leicht elliptischen,
-um 6° geneigten Bahn (42.300 bis 51.700 km vom Planeten, Umlauf knapp 50
-Tage, Einflusssphäre etwa 2.250 km). Monde laufen wie in KSP auf festen
+Weiter draußen kreist der Mond Zill: klein, aber extrem dicht (100 km
+Radius, Schwerkraft 5,75 m/s², keine Luft), auf einer deutlich elliptischen,
+um 15° geneigten Bahn (35.250 bis 58.750 km vom Planeten, Umlauf knapp 50
+Tage, Einflusssphäre etwa 9.050 km). Er ist das anspruchsvollere Ziel nach
+Zoon: Landen und Wegkommen kosten mehr (Fluchtgeschwindigkeit am Boden rund
+1.070 m/s, bei Zoon 810 m/s), und man muss den richtigen Punkt seiner Bahn
+treffen. Hinflug und Landung kosten ab niedriger Bahn um Zorb rund 2.100 bis
+2.300 m/s (Zoon: 1.760), der Rückflug rund 1.150: Das Basisschiff schafft
+das direkt von Zorb nicht mehr sicher, der Frachter kommt mit Zorit nicht
+ohne Tanken zurück. Dafür ist eine Tankstelle da (auf Zoon als
+Zwischenstopp oder auf Zill selbst). Monde laufen wie in KSP auf festen
 Keplerbahnen aus sechs Bahnelementen (große Halbachse, Exzentrizität,
 Neigung, aufsteigender Knoten, Argument der Periapsis, mittlere Anomalie);
-die Karte zeigt die Ellipse, die Mondkarte Abstand und Neigung. Weil Zimms
-Bahn geneigt ist, trifft man ihn aus der Äquatorebene nur in der Nähe der
-Knoten: Mondfähre-4 mit 924 m/s prograd nach 122.100 s
-(`--node 3,122100,924,0,0`) fliegt in etwa 570 km Höhe an ihm vorbei.
+die Karte zeigt die Ellipse, die Mondkarte Abstand und Neigung. Weil Zills
+Bahn geneigt ist, steht er meist weit über oder unter der Äquatorebene:
+Mondfähre-4 mit 936 m/s prograd nach 880 s (`--demo --node 3,880,936,0,0`)
+erreicht nach gut 4 Tagen seine Einflusssphäre, fliegt aber in rund
+6.700 km Höhe vorbei. Näher kommt man mit einer Ankunft nahe einem der
+Knoten seiner Bahn oder mit einer Kurskorrektur unterwegs.
 
 Zorb kreist wie Kerbin um die Sonne Zunn (13,6 Mio. km, ein Jahr hat 426
 Tage). Seine Einflusssphäre reicht etwa 84.000 km weit; wer sie verlässt, ist
@@ -403,7 +412,7 @@ cargo run -p game -- --demo --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera 
 - `--focus SCHIFF` / `--focus-zone ZIELGEBIET`: Kamera auf ein Schiff bzw.
   Zielgebiet (0 = Startbasis, 1 = Übungsfeld, 2 = Messfeld Ost)
 - `--focus-body KÖRPER`: Kamera auf einen Himmelskörper (0 = Zunn, 1 = Zorb,
-  2 = Zoon, 3 = Zimm, 4 = Nura)
+  2 = Zoon, 3 = Zill, 4 = Nura)
 - `--near`: Nahansicht (mit `--focus` oder `--focus-zone`)
 - `--load DATEI`: einen Spielstand laden statt neu zu beginnen
 - `--demo`: die Demo mit Schiffen laden (siehe oben)
