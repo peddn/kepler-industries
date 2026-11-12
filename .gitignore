@@ -1,1 +1,3 @@
 /target
+# Spielstände (F5 im Spiel)
+/spielstand*.json
