@@ -1,16 +1,14 @@
-//! Textanzeige: Spielzeit, Zeitraffer, Zustand der Schiffe, Bedienhilfe.
+//! Texte der Oberfläche: Zeiten, Strecken und Orte als Text, Zustand und
+//! Vorschau der Schiffe, Daten von Zielgebieten und Himmelskörpern, Warnungen
+//! und die Bedienhilfe. Gezeichnet wird in den Leisten (`ui`, `left_bar`,
+//! `top_bar`); nur die Warnungen stehen als Text über der Karte.
 
-use crate::TimeWarp;
-use crate::camera::CameraRig;
-use crate::focus;
-use crate::node_ui::{self, SelectedBody, SelectedNode, SelectedZone, Selection};
 use crate::rendezvous::distance_text;
 use bevy_egui::egui;
 use sim::body::{body_state, orbital_period, sphere_of_influence};
 use sim::{
     Crash, Event, LandingBurn, Plan, Segment, SurfacePoint, Touchdown, VesselStatus, World, kepler,
 };
-use std::ops::Range;
 
 const WARNING_COLOR: egui::Color32 = egui::Color32::from_rgb(255, 89, 77);
 
@@ -74,7 +72,7 @@ fn next_sphere_change(world: &World, trajectory: &sim::Trajectory) -> Option<Str
 }
 
 /// Angaben zu einem gewählten Mond.
-fn body_details(world: &World, b: usize) -> Vec<String> {
+pub fn body_details(world: &World, b: usize) -> Vec<String> {
     let body = &world.bodies[b];
     let gravity = body.gm / (body.radius * body.radius);
     let mut lines = vec![format!(
@@ -160,56 +158,66 @@ pub(crate) fn place(point: &SurfacePoint) -> String {
     )
 }
 
-/// Kenndaten und Manöverkette des gewählten Schiffs; `chosen` ist der
-/// gewählte Node. Dazu die Zeilen, die rot erscheinen (ungültige Nodes; sie
-/// stehen immer am Ende der Kette, also zusammen).
-fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<String>, Range<usize>) {
+/// Lage und Vorschau des gewählten Schiffs: Zeitraffer-Stopp, nächster
+/// Wechsel der Einflusssphäre, vorausgesagte Landung. (Treibstoff zeigt der
+/// Δv-Balken, Start, Ziel und Manöver ihre Karten, Gefahren `warnings`.)
+pub fn info_lines(world: &World, i: usize) -> Vec<String> {
     let vessel = &world.vessels[i];
-    let trajectory = &vessel.trajectory;
-    let mut lines = vec![
-        format!(
-            "{}: Treibstoff {:.1} kg, Δv {:.0} m/s",
-            vessel.name,
-            world.vessel_fuel(i),
-            world.vessel_delta_v(i)
-        ),
-        format!(
-            "Zeitraffer-Stopp bei Brennbeginn: {} (H)",
-            if vessel.halt_warp_at_burn {
-                "an"
-            } else {
-                "aus"
-            }
-        ),
-    ];
-    lines.extend(next_sphere_change(world, trajectory));
-    // Nodes gehen im Flug und am Boden mit geplantem Start (danach).
-    let launch = trajectory.launch();
-    let can_plan = launch.is_some() || !matches!(trajectory.current(), Segment::Surface { .. });
-    if let Some(plan) = launch
-        && plan.burn.start > world.time
-    {
-        lines.push(format!(
-            "Start in {} (Einstellungen rechts)",
-            format_span(plan.burn.start - world.time, day(world))
-        ));
-    }
-    let nodes = trajectory.nodes();
-    let mut warning = 0..0;
-    if nodes.is_empty() {
-        if can_plan {
-            lines.push("Linksklick auf die Bahn setzt einen Node.".into());
-        }
-    } else {
-        // Im Spiel ist vorerst jede Kette scharf; nicht scharf nur über `--node`.
-        lines.push(if trajectory.armed() {
-            "Manöverkette:".into()
+    let mut lines = vec![format!(
+        "Zeitraffer-Stopp bei Brennbeginn: {} (H)",
+        if vessel.halt_warp_at_burn {
+            "an"
         } else {
-            "Manöverkette (nicht scharf: rückt bei Brennbeginn einen Umlauf weiter):".into()
-        });
-        for (k, node) in nodes.iter().enumerate() {
+            "aus"
+        }
+    )];
+    lines.extend(next_sphere_change(world, &vessel.trajectory));
+    if world.touchdown(i).is_some_and(|t| t.landing.is_ok()) {
+        lines.extend(touchdown_lines(world, i));
+    }
+    lines
+}
+
+/// Was dem gewählten Schiff droht oder nicht geht: Absturz, ungültige Nodes,
+/// Nodes, für die der Treibstoff nicht reicht, Andocken unmöglich.
+pub fn warnings(world: &World, i: usize) -> Vec<String> {
+    let trajectory = &world.vessels[i].trajectory;
+    let mut lines = Vec::new();
+    if world.touchdown(i).is_some_and(|t| t.landing.is_err()) {
+        lines.extend(touchdown_lines(world, i));
+    }
+    for (k, node) in trajectory.nodes().iter().enumerate() {
+        match node.plan {
+            Ok(plan) if plan.burn.delta_v() < plan.node.delta_v.length() - 0.05 => {
+                lines.push(format!(
+                    "Node {}: Treibstoff reicht nur für {:.0} m/s!",
+                    k + 1,
+                    plan.burn.delta_v()
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => lines.push(format!("Node {} ungültig: {e}", k + 1)),
+        }
+    }
+    if let Some(docking) = trajectory.docking()
+        && let Err(e) = &docking.plan
+    {
+        let name = &world.vessels[world.host(docking.target)].name;
+        lines.push(format!("Andocken an {name}: {e}"));
+    }
+    lines
+}
+
+/// Die Manöverkette des Schiffs, eine Zeile je Node; `chosen` ist der
+/// gewählte. Leer ohne Nodes.
+pub fn chain_lines(world: &World, i: usize, chosen: Option<usize>) -> Vec<String> {
+    let nodes = world.vessels[i].trajectory.nodes();
+    nodes
+        .iter()
+        .enumerate()
+        .map(|(k, node)| {
             let marker = if chosen == Some(k) { ">" } else { " " };
-            lines.push(match node.plan {
+            match node.plan {
                 Ok(plan) => {
                     let when = if plan.burn.start > world.time {
                         format!(
@@ -222,63 +230,17 @@ fn selected_details(world: &World, i: usize, chosen: Option<usize>) -> (Vec<Stri
                     let after = world
                         .revolutions_before_node(i, k)
                         .filter(|&n| n > 0)
-                        .map_or(String::new(), |n| match n {
-                            1 => "  nach 1 Umlauf".into(),
-                            n => format!("  nach {n} Umläufen"),
-                        });
+                        .map_or(String::new(), |n| format!("  +{n} U."));
                     format!(
-                        "{marker} {}  {when:<12} Δv {:6.1} m/s{after}",
+                        "{marker} {}  {when:<12} {:6.1} m/s{after}",
                         k + 1,
                         plan.node.delta_v.length()
                     )
                 }
-                Err(e) => {
-                    if warning.is_empty() {
-                        warning = lines.len()..lines.len();
-                    }
-                    warning.end = lines.len() + 1;
-                    format!("{marker} {}  ungültig: {e}", k + 1)
-                }
-            });
-        }
-        if let Some(k) = chosen
-            && let Ok(plan) = nodes[k].plan
-        {
-            lines.extend(node_details(world, i, k, &plan));
-        }
-    }
-    if let Some(docking) = trajectory.docking() {
-        let name = &world.vessels[world.host(docking.target)].name;
-        lines.push(match &docking.plan {
-            Ok(plan) => {
-                let when = if plan.matching.burn.start > world.time {
-                    format!(
-                        "Angleichen in {}",
-                        format_span(plan.matching.burn.start - world.time, day(world))
-                    )
-                } else {
-                    "Anflug läuft".into()
-                };
-                format!(
-                    "Andocken an {name}: {when}, Δv {:.0} + {:.0} m/s, Kontakt in {}",
-                    plan.matching.node.delta_v.length(),
-                    plan.approach_delta_v,
-                    format_span(plan.contact - world.time, day(world))
-                )
+                Err(_) => format!("{marker} {}  ungültig", k + 1),
             }
-            Err(e) => {
-                // Rot, wenn es an die roten Node-Zeilen anschließt (oder allein).
-                if warning.is_empty() {
-                    warning = lines.len()..lines.len() + 1;
-                } else if warning.end == lines.len() {
-                    warning.end += 1;
-                }
-                format!("Andocken an {name}: {e}")
-            }
-        });
-    }
-    lines.extend(touchdown_lines(world, i));
-    (lines, warning)
+        })
+        .collect()
 }
 
 /// Wo ein Bodenkontakt liegt: im Zielgebiet, sonst Abstand zum nächsten
@@ -358,7 +320,7 @@ pub(crate) fn touchdown_lines(world: &World, i: usize) -> Vec<String> {
 }
 
 /// Einzelheiten zum gewählten Node.
-fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
+pub fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
     let vessel = &world.vessels[i];
     let dv = plan.node.delta_v;
     let burn = &plan.burn;
@@ -371,27 +333,17 @@ fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
         "Brennt".into()
     };
     let mut lines = vec![
-        String::new(),
+        format!("Node {}: Δv {:.1} m/s", k + 1, dv.length()),
+        format!("  prograd {:.1}", dv.x),
+        format!("  normal  {:.1}", dv.y),
+        format!("  radial  {:.1}", dv.z),
+        when,
+        format!("Dauer {:.1} s", burn.duration()),
         format!(
-            "Node {}: Δv {:.1} m/s (prograd {:.1}, normal {:.1}, radial {:.1})",
-            k + 1,
-            dv.length(),
-            dv.x,
-            dv.y,
-            dv.z
-        ),
-        format!(
-            "{when}, Dauer {:.1} s, Treibstoff danach {:.1} kg",
-            burn.duration(),
+            "Treibstoff danach {:.0} kg",
             burn.end_mass() - world.params(i).dry_mass
         ),
     ];
-    if burn.delta_v() < dv.length() - 0.05 {
-        lines.push(format!(
-            "Treibstoff reicht nur für {:.0} m/s!",
-            burn.delta_v()
-        ));
-    }
     match vessel.trajectory.segment_after(burn) {
         Some(after @ Segment::Kepler { state, end, .. }) => {
             // Der Körper der Bahn danach (das Brennen kann die Sphäre wechseln).
@@ -403,14 +355,14 @@ fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
                 format!(" um {}", body.name)
             };
             lines.push(format!(
-                "Danach{around}: Ap {}  Pe {}{}",
+                "Danach{around}:\n  Ap {}  Pe {}{}",
                 info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
                 km(info.periapsis - body.radius),
                 match end {
                     Some((_, e)) if e.is_descent() && body.atmosphere.exists() => {
-                        "  – führt in die Atmosphäre!"
+                        "\n  führt in die Atmosphäre!"
                     }
-                    Some((_, e)) if e.is_descent() => "  – führt auf den Boden!",
+                    Some((_, e)) if e.is_descent() => "\n  führt auf den Boden!",
                     _ => "",
                 }
             ));
@@ -423,192 +375,146 @@ fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<String> {
     lines
 }
 
-/// Die Zeilen der Anzeige links und welche davon rot sind (Warnung).
-fn lines(
-    world: &World,
-    warp: &TimeWarp,
-    selection: &Selection,
-    selected: &SelectedNode,
-    zone: &SelectedZone,
-    body: &SelectedBody,
-    rig: &CameraRig,
-) -> (Vec<String>, Range<usize>) {
-    let mut lines = vec![format!(
-        "{}    Zeitraffer {}×{}    Kamera: {}{}",
-        format_time(world.time, day(world)),
-        warp.factor(),
-        if warp.paused { "  (Pause)" } else { "" },
-        focus::name(world, rig.target),
-        if rig.near { " (Nahansicht)" } else { "" }
-    )];
-    lines.push(String::new());
-    for (i, vessel) in world.vessels.iter().enumerate() {
-        let status = match world.vessel_status(i) {
-            VesselStatus::Orbit {
-                periapsis_altitude,
-                apoapsis_altitude,
-                descending,
-            } => {
-                let body = &world.bodies[world.vessel_state(i).0];
-                let around = if world.vessel_state(i).0 == world.home {
-                    String::new()
-                } else {
-                    format!(" um {}", body.name)
-                };
-                let warning = match (descending, body.atmosphere.exists()) {
-                    (false, _) => "",
-                    (true, true) => "  – Bahn führt in die Atmosphäre!",
-                    (true, false) => "  – Bahn führt auf den Boden!",
-                };
-                format!(
-                    "Orbit{around}  Ap {}  Pe {}{warning}",
-                    apoapsis_altitude.map_or("–".into(), km),
-                    km(periapsis_altitude),
-                )
-            }
-            VesselStatus::Atmosphere { altitude } => {
-                format!("In der Atmosphäre, Höhe {}", km(altitude))
-            }
-            VesselStatus::Burning { remaining } => {
-                let (body_id, state) = world.vessel_state(i);
-                let body = &world.bodies[body_id];
-                if world.vessels[i]
-                    .trajectory
-                    .current()
-                    .landing_burn()
-                    .is_some()
-                {
-                    format!(
-                        "Landebrennen, noch {remaining:.1} s  Höhe {}  {:.0} m/s zum Boden",
-                        height(state.position.length() - body.radius),
-                        sim::landing::ground_speed(body, &state)
-                    )
-                } else {
-                    // Momentane Bahn: ändert sich während des Brennens laufend.
-                    let info = kepler::orbit_info(body.gm, &state);
-                    format!(
-                        "Brennt, noch {remaining:.1} s  Ap {}  Pe {}",
-                        info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
-                        km(info.periapsis - body.radius)
-                    )
-                }
-            }
-            VesselStatus::Landed { point } => {
-                match world.zone_at(world.vessel_state(i).0, &point) {
-                    Some(k) => format!("Gelandet in {}", world.zones[k].name),
-                    None => format!(
-                        "Gelandet bei {}{} (außerhalb)",
-                        place(&point),
-                        on_body(world, i)
-                    ),
-                }
-            }
-            VesselStatus::Wreck { point } => match world.zone_at(world.vessel_state(i).0, &point) {
-                Some(k) => format!("Wrack in {}", world.zones[k].name),
-                None => format!("Wrack bei {}{}", place(&point), on_body(world, i)),
-            },
-            VesselStatus::Approaching { distance } => {
-                format!("Anflug zum Andocken, noch {}", distance_text(distance))
-            }
-            VesselStatus::Docked { host } => {
-                format!("angedockt an {}", world.vessels[host].name)
-            }
-        };
-        let marker = if selection.0 == Some(i) { ">" } else { " " };
-        // Ein Verbund trägt die Namen seiner Teile.
-        let name = std::iter::once(vessel.name.as_str())
-            .chain(
-                world
-                    .parts(i)
-                    .into_iter()
-                    .map(|k| world.vessels[k].name.as_str()),
-            )
-            .collect::<Vec<_>>()
-            .join(" + ");
-        lines.push(format!("{marker} {name:<9} {status}"));
-    }
-    let mut red = 0..0;
-    if let Some(i) = selection.0 {
-        let chosen = node_ui::selected_node(world, selection, selected).map(|(_, k)| k);
-        lines.push(String::new());
-        let (details, warning) = selected_details(world, i, chosen);
-        red = lines.len() + warning.start..lines.len() + warning.end;
-        lines.extend(details);
-    }
-    if let Some(k) = zone.0 {
-        let z = &world.zones[k];
-        lines.push(String::new());
-        let on = match z.body {
-            0 => String::new(),
-            b => format!(" auf {}", world.bodies[b].name),
-        };
-        lines.push(format!(
-            "Zielgebiet {}{on}: {}, Radius {}",
-            z.name,
-            place(&z.center),
-            km(z.radius)
-        ));
-        let landed: Vec<&str> = (0..world.vessels.len())
-            .filter(|&i| match world.vessel_status(i) {
-                VesselStatus::Landed { point } => world.zone_at(z.body, &point) == Some(k),
-                _ => false,
-            })
-            .map(|i| world.vessels[i].name.as_str())
-            .collect();
-        if !landed.is_empty() {
-            lines.push(format!("Gelandet: {}", landed.join(", ")));
-        }
-    }
-    if let Some(b) = body.0 {
-        lines.push(String::new());
-        lines.extend(body_details(world, b));
-    }
-    if world.vessels.is_empty() {
-        lines.push(String::new());
-        lines.push("Noch keine Schiffe: in der Karte \"Startbasis\" rechts bestellen.".into());
-        lines.push("(Karte weg? Die Raute ihres Zielgebiets anklicken; F: Kamera dorthin.)".into());
-    }
-    lines.push(String::new());
-    // Kurze Zeilen, damit rechts Platz für die Seitenleiste bleibt.
-    lines.extend(
-        [
-            "Linksklick: Schiff / Zielgebiet / Mond / Node wählen, Node setzen",
-            "Griffe ziehen: Δv (Umschalt: fein)   Node ziehen: verschieben (Strg: ohne Griffe)",
-            "↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff",
-            "H: Zeitraffer-Stopp   , / .: Zeitraffer   Leertaste: Pause",
-            "Rechte Maustaste ziehen: drehen   Mausrad: zoomen",
-            "F: Kamera auf Auswahl (Node > Schiff > Planet)   N: Nahansicht",
-        ]
-        .map(String::from),
-    );
-    (lines, red)
+/// Name eines Schiffs; ein Verbund trägt die Namen seiner Teile.
+pub fn ship_name(world: &World, i: usize) -> String {
+    std::iter::once(world.vessels[i].name.as_str())
+        .chain(
+            world
+                .parts(i)
+                .into_iter()
+                .map(|k| world.vessels[k].name.as_str()),
+        )
+        .collect::<Vec<_>>()
+        .join(" + ")
 }
 
-/// Zeichnet die Anzeige links oben in die freie Fläche (`painter` ist auf
-/// sie begrenzt, `origin` ihre Ecke): reine Information ohne eigene Fläche,
-/// Klicks gehen hindurch an die Karte.
-#[allow(clippy::too_many_arguments)]
-pub fn show(
+/// Zustand eines Schiffs in einer Zeile (für die Liste der Schiffe).
+pub fn ship_status(world: &World, i: usize) -> String {
+    match world.vessel_status(i) {
+        VesselStatus::Orbit {
+            periapsis_altitude,
+            apoapsis_altitude,
+            descending,
+        } => {
+            let body = &world.bodies[world.vessel_state(i).0];
+            let around = if world.vessel_state(i).0 == world.home {
+                String::new()
+            } else {
+                format!(" um {}", body.name)
+            };
+            let warning = match (descending, body.atmosphere.exists()) {
+                (false, _) => "",
+                (true, true) => "  – Bahn führt in die Atmosphäre!",
+                (true, false) => "  – Bahn führt auf den Boden!",
+            };
+            format!(
+                "Orbit{around}  Ap {}  Pe {}{warning}",
+                apoapsis_altitude.map_or("–".into(), km),
+                km(periapsis_altitude),
+            )
+        }
+        VesselStatus::Atmosphere { altitude } => {
+            format!("In der Atmosphäre, Höhe {}", km(altitude))
+        }
+        VesselStatus::Burning { remaining } => {
+            let (body_id, state) = world.vessel_state(i);
+            let body = &world.bodies[body_id];
+            if world.vessels[i]
+                .trajectory
+                .current()
+                .landing_burn()
+                .is_some()
+            {
+                format!(
+                    "Landebrennen, noch {remaining:.1} s  Höhe {}  {:.0} m/s zum Boden",
+                    height(state.position.length() - body.radius),
+                    sim::landing::ground_speed(body, &state)
+                )
+            } else {
+                // Momentane Bahn: ändert sich während des Brennens laufend.
+                let info = kepler::orbit_info(body.gm, &state);
+                format!(
+                    "Brennt, noch {remaining:.1} s  Ap {}  Pe {}",
+                    info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
+                    km(info.periapsis - body.radius)
+                )
+            }
+        }
+        VesselStatus::Landed { point } => match world.zone_at(world.vessel_state(i).0, &point) {
+            Some(k) => format!("Gelandet in {}", world.zones[k].name),
+            None => format!(
+                "Gelandet bei {}{} (außerhalb)",
+                place(&point),
+                on_body(world, i)
+            ),
+        },
+        VesselStatus::Wreck { point } => match world.zone_at(world.vessel_state(i).0, &point) {
+            Some(k) => format!("Wrack in {}", world.zones[k].name),
+            None => format!("Wrack bei {}{}", place(&point), on_body(world, i)),
+        },
+        VesselStatus::Approaching { distance } => {
+            format!("Anflug zum Andocken, noch {}", distance_text(distance))
+        }
+        VesselStatus::Docked { host } => {
+            format!("angedockt an {}", world.vessels[host].name)
+        }
+    }
+}
+
+/// Daten eines Zielgebiets und wer dort gelandet ist.
+pub fn zone_lines(world: &World, k: usize) -> Vec<String> {
+    let z = &world.zones[k];
+    let on = match z.body {
+        0 => String::new(),
+        b => format!(" auf {}", world.bodies[b].name),
+    };
+    let mut lines = vec![
+        format!("Zielgebiet {}{on}", z.name),
+        format!("{}, Radius {}", place(&z.center), km(z.radius)),
+    ];
+    let landed: Vec<&str> = (0..world.vessels.len())
+        .filter(|&i| match world.vessel_status(i) {
+            VesselStatus::Landed { point } => world.zone_at(z.body, &point) == Some(k),
+            _ => false,
+        })
+        .map(|i| world.vessels[i].name.as_str())
+        .collect();
+    if !landed.is_empty() {
+        lines.push(format!("Gelandet: {}", landed.join(", ")));
+    }
+    lines
+}
+
+/// Bedienhilfe (Fenster "Hilfe").
+pub const HELP: [&str; 9] = [
+    "Linksklick: Schiff, Zielgebiet, Mond oder Node wählen; auf die Bahn: Node setzen",
+    "Griffe ziehen: Δv ändern (Umschalt: fein)",
+    "Node ziehen: verschieben (Strg: ohne Griffe)",
+    "↑/↓: Node wählen   Entf: Node löschen   Tab: nächstes Schiff   Esc: nichts wählen",
+    "H: Zeitraffer-Stopp bei Brennbeginn   , / .: Zeitraffer   Leertaste: Pause",
+    "Rechte Maustaste ziehen: drehen   Mausrad: zoomen",
+    "F: Kamera auf Auswahl (Node > Schiff > Planet)   N: Nahansicht",
+    "F5: speichern   F9: laden",
+    "F1: diese Hilfe",
+];
+
+/// Zeichnet die Warnungen zum gewählten Schiff rot in die freie Fläche
+/// `free` der Karte (auf sie ist `painter` begrenzt), umbrochen auf ihre
+/// Breite. Sie nehmen keine Klicks an und bleiben sichtbar, auch wenn die
+/// Leisten zu sind.
+pub fn show_warnings(
     painter: &egui::Painter,
-    origin: egui::Pos2,
+    free: egui::Rect,
     font: &egui::FontId,
-    world: &World,
-    warp: &TimeWarp,
-    selection: &Selection,
-    selected: &SelectedNode,
-    zone: &SelectedZone,
-    body: &SelectedBody,
-    rig: &CameraRig,
+    lines: Vec<String>,
 ) {
-    let (lines, red) = lines(world, warp, selection, selected, zone, body, rig);
-    let mut at = origin + egui::vec2(12.0, 12.0);
-    for (k, line) in lines.into_iter().enumerate() {
-        let color = if red.contains(&k) {
-            WARNING_COLOR
-        } else {
-            egui::Color32::WHITE
-        };
-        painter.text(at, egui::Align2::LEFT_TOP, line, font.clone(), color);
-        at.y += font.size + 3.0;
+    const MARGIN: f32 = 12.0;
+    let mut at = free.min + egui::vec2(MARGIN, MARGIN);
+    for line in lines {
+        let width = free.width() - 2.0 * MARGIN;
+        let text = painter.layout(line, font.clone(), WARNING_COLOR, width);
+        let height = text.size().y;
+        painter.galley(at, text, WARNING_COLOR);
+        at.y += height + 3.0;
     }
 }

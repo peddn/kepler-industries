@@ -3,10 +3,13 @@
 //! keinen Abgleich von Texten; eine Karte ist eine Funktion, die die Welt
 //! liest, zeichnet und bei einem Klick ändert.
 //!
-//! Aufbau des Bildes: unten die Statusleiste mit dem Protokoll, rechts die
-//! Seitenleiste mit allem, was man bedienen kann (je nach Lage als Karte),
-//! unten links davon der Δv-Balken, links oben die Anzeige (reine
-//! Information), dazu Beschriftungen an Punkten der Karte (`WorldLabels`).
+//! Aufbau des Bildes: oben eine Leiste mit Zeit, Zeitraffer, Kamera und den
+//! Schaltern für die Bereiche; unten die Statusleiste mit dem Protokoll; links
+//! die Leiste mit reiner Information (Schiffe, Auswahl); rechts die
+//! Seitenleiste mit allem, was man bedienen kann (je nach Lage als Karte);
+//! dazwischen unten der Δv-Balken. Über der Karte selbst stehen nur
+//! Warnungen zum gewählten Schiff und die Beschriftungen an ihren Punkten
+//! (`WorldLabels`).
 //!
 //! Klicks auf die Oberfläche gehen nicht an die Karte dahinter: Die Eingabe
 //! der 3D-Ansicht fragt egui (`EguiWantsInput`).
@@ -17,8 +20,12 @@ use crate::node_ui::{
 };
 use crate::rendezvous::Rendezvous;
 use crate::status_bar::{self, StatusBar};
+use crate::top_bar::{self, Panels};
 use crate::verbund::UndockChoice;
-use crate::{Sim, TimeWarp, depot, dv_bar, fracht, hud, start_card, target_card, verbund};
+use crate::{
+    Sim, TimeWarp, depot, dv_bar, fracht, hud, left_bar, maneuver_card, start_card, target_card,
+    verbund,
+};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use sim::{Segment, World};
@@ -140,10 +147,20 @@ fn intact(world: &World, selection: &Selection) -> Option<usize> {
 /// Was gerade gewählt ist.
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct Selected<'w> {
-    vessel: ResMut<'w, Selection>,
-    node: Res<'w, SelectedNode>,
-    zone: Res<'w, SelectedZone>,
-    body: Res<'w, SelectedBody>,
+    pub vessel: ResMut<'w, Selection>,
+    pub node: ResMut<'w, SelectedNode>,
+    pub zone: ResMut<'w, SelectedZone>,
+    pub body: ResMut<'w, SelectedBody>,
+}
+
+impl Selected<'_> {
+    /// Wählt ein Schiff (und nichts sonst).
+    pub fn select_vessel(&mut self, vessel: usize) {
+        self.vessel.0 = Some(vessel);
+        self.node.0 = None;
+        self.zone.0 = None;
+        self.body.0 = None;
+    }
 }
 
 /// Zeichnet die Oberfläche.
@@ -161,6 +178,7 @@ pub fn draw(
     mut choice: ResMut<UndockChoice>,
     mut message: ResMut<UiMessage>,
     mut labels: ResMut<WorldLabels>,
+    mut panels: ResMut<Panels>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     if !*styled {
@@ -175,7 +193,9 @@ pub fn draw(
             .layer_id(egui::LayerId::background())
             .max_rect(ctx.viewport_rect()),
     );
+    top_bar::show(&mut root, world, &warp, &rig, &mut panels);
     status_bar::show(&mut root, world, &message, &mut status);
+    left_bar::show(&mut root, world, &mut selected, &panels);
 
     let mut notes = Notes {
         message: &mut message,
@@ -192,6 +212,11 @@ pub fn draw(
                 egui::ScrollArea::vertical().show(ui, |ui| {
                     if let Some(vessel) = vessel {
                         start_card::show(ui, world, vessel, &mut notes);
+                        let chosen = selected_node(world, &selected.vessel, &selected.node);
+                        let chosen = chosen.map(|(_, k)| k);
+                        if let Some(time) = maneuver_card::show(ui, world, vessel, chosen) {
+                            selected.node.0 = Some(time);
+                        }
                         target_card::show(ui, world, vessel, &rendezvous, &mut notes);
                         verbund::show(ui, world, vessel, &mut choice, &mut notes);
                         fracht::show(ui, world, vessel, &mut notes);
@@ -206,23 +231,14 @@ pub fn draw(
         let chosen = selected_node(world, &selected.vessel, &selected.node).map(|(_, k)| k);
         dv_bar::show(&mut root, world, vessel, chosen);
     }
-    // Was die Leisten frei lassen, gehört der Karte: Anzeige und
+    // Was die Leisten frei lassen, gehört der Karte: Warnungen und
     // Beschriftungen werden darauf begrenzt gezeichnet.
     let free = root.available_rect_before_wrap();
     let painter = root.painter_at(free);
     let font = egui::FontId::monospace(TEXT_SIZE);
-    hud::show(
-        &painter,
-        free.min,
-        &font,
-        world,
-        &warp,
-        &selected.vessel,
-        &selected.node,
-        &selected.zone,
-        &selected.body,
-        &rig,
-    );
+    if let Some(vessel) = selected.vessel.0 {
+        hud::show_warnings(&painter, free, &font, hud::warnings(world, vessel));
+    }
     for (at, text, color) in labels.0.drain(..) {
         painter.text(
             egui::pos2(at.x, at.y),

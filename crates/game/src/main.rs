@@ -9,12 +9,15 @@ mod dv_bar;
 mod focus;
 mod fracht;
 mod hud;
+mod left_bar;
+mod maneuver_card;
 mod node_ui;
 mod rendezvous;
 mod savegame;
 mod start_card;
 mod status_bar;
 mod target_card;
+mod top_bar;
 mod ui;
 mod verbund;
 mod view;
@@ -308,6 +311,7 @@ fn main() {
     .insert_resource(zone)
     .init_resource::<node_ui::SelectedBody>()
     .init_resource::<ui::WorldLabels>()
+    .init_resource::<top_bar::Panels>()
     .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<status_bar::StatusBar>()
     .init_resource::<verbund::UndockChoice>()

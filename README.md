@@ -375,7 +375,9 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Rechte Maustaste ziehen | Kamera drehen |
 | Mausrad | Zoomen (über dem aufgeklappten Protokoll: scrollen) |
 | ▲ / ▼ rechts in der Statusleiste | Protokoll auf- und zuklappen (mit Mausrad oder Scrollleiste blättern) |
-| Linksklick auf ein Schiff / `Tab` | Schiff wählen / nächstes Schiff |
+| Linksklick auf ein Schiff (in der Karte oder in der Liste links) / `Tab` | Schiff wählen / nächstes Schiff |
+| Schalter oben rechts: Schiffe, Info, Hilfe | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
+| Klick auf einen Node in der Karte „Manöver“ | Node wählen |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
 | Linksklick auf den Mond | Mond wählen (eine Bahn davor geht vor: Node setzen) |
 | `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten. Ist ein Node gewählt, wechselt `F` der Reihe nach: Node, sein Schiff, Planet |
@@ -480,5 +482,5 @@ in Sekunden.
 ## Aufbau
 
 - `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Start, Landung, Rendezvous, Fracht und Basen, Zeitleiste, Spielstand)
-- `crates/game`: Darstellung und Eingabe mit Bevy; die Oberfläche (Anzeige links, Seitenleiste rechts, Δv-Balken, Statusleiste) mit egui
+- `crates/game`: Darstellung und Eingabe mit Bevy; die Oberfläche (Leisten oben, links und rechts, Δv-Balken, Statusleiste) mit egui
 - `docs/ARCHITEKTUR.md`: Regeln, Physikmodell, Entscheidungen, Merkliste

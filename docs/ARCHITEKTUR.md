@@ -516,16 +516,30 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Stücke zählen, deren Enden außerhalb des Bildes liegen. Die Planetenkugel
   ist auf etwa 6 m genau, Zielgebiete und Aufsetzkreuz liegen 2 m, das
   Gitter 10 m über dem Boden. Später kommen hier die Modelle der Schiffe hin.
-- **Seitenleiste rechts** für alles, was man bedient, als Karten je nach Lage
-  („Start“ bei einem gelandeten Schiff, „Ziel“ bei jedem Schiff außer
-  Wracks). Die Anzeige links bleibt reine Information. Klicks auf die Leiste
-  gehen nicht an die Karte dahinter.
+- **Aufbau des Bildes:** Über der Karte steht kein Text außer Warnungen und
+  Beschriftungen an ihren Punkten; alles andere liegt in Leisten.
+  - *Leiste oben:* Spielzeit, Zeitraffer, Kamera; rechts Schalter, die
+    Bereiche ein- und ausblenden (Schiffe, Info, Hilfe).
+  - *Leiste links, reine Information* (ausblendbar): die Liste der Schiffe
+    (ein Klick wählt) und die Angaben zur Auswahl (Schiff, Zielgebiet,
+    Himmelskörper).
+  - *Seitenleiste rechts, alles zum Bedienen,* als Karten je nach Lage:
+    „Start“ bei einem gelandeten Schiff, „Manöver“ mit der Kette der Nodes,
+    „Ziel“ bei jedem Schiff außer Wracks, dazu Verbund, Fracht & Basis und
+    Startbasis.
+  - *Warnungen* zum gewählten Schiff (Absturz, ungültige Nodes, zu wenig
+    Treibstoff für einen Node, Andocken unmöglich) stehen rot über der
+    Karte, damit sie auch bei ausgeblendeten Leisten zu sehen sind.
+  - *Nichts doppelt:* Treibstoff und Δv zeigt nur der Δv-Balken, den
+    geplanten Start nur die Karte „Start“, Annäherung und Andocken nur die
+    Karte „Ziel“.
+  - *Hilfe* ist ein Fenster (Schalter oben oder `F1`).
 - **Oberfläche mit egui** (`bevy_egui`; Entscheidung vor dem Schiffseditor,
   der Regler, Listen und Textfelder braucht). Die ganze Oberfläche ist in
   egui, daneben gibt es nur die 3D-Ansicht; Bevys eigenes UI ist nicht mehr
   im Build. Ein System (`ui::draw`) zeichnet alles: Statusleiste,
-  Seitenleiste, Δv-Balken, die Anzeige links und die Beschriftungen an
-  Punkten der Karte (die 3D-Ansicht trägt sie in `WorldLabels` ein). Sauberer
+  die Leisten oben, links und rechts, Δv-Balken, Warnungen und die
+  Beschriftungen an Punkten der Karte (die 3D-Ansicht trägt sie in `WorldLabels` ein). Sauberer
   Code ging beim Umzug vor gleichem Aussehen.
   - egui zeichnet jedes Bild neu: Eine Karte ist eine Funktion, die die Welt
     liest, zeichnet und bei einem Klick ändert (`start_card::show` und so
