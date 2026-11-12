@@ -22,6 +22,7 @@ mod top_bar;
 mod ui;
 mod verbund;
 mod view;
+mod wirtschaft;
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk};

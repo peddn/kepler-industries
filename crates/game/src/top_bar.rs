@@ -1,5 +1,6 @@
 //! Leiste oben, zwischen den Seitenleisten: Spielzeit, Zeitraffer und
-//! Kamera, ganz rechts der Schalter für das Hilfe-Fenster (`F1`). Sie wird
+//! Kamera, ganz rechts die Schalter für die Fenster Wirtschaft und Hilfe
+//! (`F1`). Sie wird
 //! nach den Seitenleisten gezeichnet und beginnt deshalb genau an deren
 //! Kante.
 
@@ -18,6 +19,8 @@ pub struct Panels {
     pub ships: bool,
     /// Angaben zur Auswahl in der linken Leiste.
     pub info: bool,
+    /// Fenster mit dem Überblick über Basen und Fracht.
+    pub economy: bool,
     /// Fenster mit der Bedienhilfe.
     pub help: bool,
     pub left: Side,
@@ -29,6 +32,7 @@ impl Default for Panels {
         Self {
             ships: true,
             info: true,
+            economy: false,
             help: false,
             left: Side::new(Edge::Left),
             right: Side::new(Edge::Right),
@@ -57,6 +61,7 @@ pub fn show(
             ui.label(format!("Kamera: {}{near}", focus::name(world, rig.target)));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.toggle_value(&mut panels.help, "Hilfe");
+                ui.toggle_value(&mut panels.economy, "Wirtschaft");
             });
         });
     });

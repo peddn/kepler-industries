@@ -519,7 +519,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
 - **Aufbau des Bildes:** Über der Karte steht kein Text außer Warnungen und
   Beschriftungen an ihren Punkten; alles andere liegt in Leisten.
   - *Leiste oben,* zwischen den Seitenleisten: Spielzeit, Zeitraffer,
-    Kamera; ganz rechts der Schalter für die Hilfe. Sie wird nach den
+    Kamera; ganz rechts die Schalter für die Fenster. Sie wird nach den
     Seitenleisten angelegt und beginnt deshalb von selbst an deren Kante.
   - *Δv-Balken* unten über die ganze Breite, die Seitenleisten stehen
     darüber.
@@ -544,7 +544,16 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   - *Nichts doppelt:* Treibstoff und Δv zeigt nur der Δv-Balken, den
     geplanten Start nur die Karte „Start“, Annäherung und Andocken nur die
     Karte „Ziel“.
-  - *Hilfe* ist ein Fenster (Schalter oben oder `F1`).
+  - *Fenster* (Schalter oben rechts) für alles, was nicht an der Auswahl
+    hängt: die Hilfe (auch `F1`) und die Wirtschaft (`wirtschaft.rs`). Die
+    Wirtschaft ist reine Anzeige: je Basis Vorrat und Stand ("voll in …",
+    aus dem geschlossen gerechneten Lager), dazu die Fracht an Bord. Sie
+    zeigt bewusst keine Summe der Förderraten (ein volles Lager fördert
+    nichts; der Durchsatz hängt an den Frachtern) und keine Preise (die
+    stehen in der Karte „Startbasis“). Später tritt an die Stelle des
+    Schalters die Anzeige der Daten (in GB): Klick öffnet das Fenster,
+    Überfahren zeigt die Stoffe im Lager der Startbasis.
+  - *Einheiten:* Lager und Fracht in Tonnen, der Tank eines Schiffs in kg.
 - **Oberfläche mit egui** (`bevy_egui`; Entscheidung vor dem Schiffseditor,
   der Regler, Listen und Textfelder braucht). Die ganze Oberfläche ist in
   egui, daneben gibt es nur die 3D-Ansicht; Bevys eigenes UI ist nicht mehr

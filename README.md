@@ -378,6 +378,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Linksklick auf ein Schiff (in der Karte oder in der Liste links) / `Tab` | Schiff wählen / nächstes Schiff |
 | Schalter „Schiffe“ und „Info“ im Kopf der linken Leiste, „Hilfe“ oben rechts | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
 | ◀ / ▶ im Kopf jeder Seitenleiste | Leiste ein- und ausklappen |
+| Schalter „Wirtschaft“ oben rechts | Fenster mit allen Basen (Vorrat, wann das Lager voll ist) und der Fracht an Bord der Schiffe; Klick auf eine Zeile wählt die Basis oder das Schiff |
 | Klick auf einen Node in der Karte „Manöver“ | Node wählen |
 | Regler unten in jeder Seitenleiste (Tooltip „Deckkraft“) | Wie durchscheinend diese Leiste ist (die Karte läuft dahinter weiter) |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
