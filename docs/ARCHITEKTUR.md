@@ -850,14 +850,86 @@ Kurskorrekturen):
 | Zill | 900 bis 930 | 1.100 bis 1.200 | 2.100 bis 2.300 | 1.150 |
 | Nura | 1.090 | 30 | 1.150 | 1.750 |
 
-Im Orbit haben nach dem Start von Zorb das Basisschiff rund 2.300 und der
-Frachter mit 2 t Bauteilen rund 3.000 übrig; vollgetankt an einer Tankstelle
-auf Zoon über 5.900 und 6.500. Teuer macht ein Ziel nicht die Entfernung,
+Im Orbit haben nach dem Start von Zorb (auf dem Booster, siehe unten) das
+Basisschiff rund 2.150 und der Frachter mit 2 t Bauteilen rund 3.000 übrig;
+mit vollem Tank rund 3.850 und 4.500. Teuer macht ein Ziel nicht die Entfernung,
 sondern Landen ohne Luft in tiefer Schwerkraft. Daraus die Stufen: Zoon
 geht direkt, Zill braucht eine Tankstelle (oder später bessere Triebwerke).
 Nura ist beim Hinflug am billigsten, weil Luft und Fallschirm die Landung
 übernehmen (der Fallschirm hält im Modell bei jeder Geschwindigkeit); teuer
 sind dort Rückflug, Startfenster und Flugzeit.
+
+**Booster** (`sim::booster`; gebaut): Jeder Start von der Startbasis läuft
+als Stapel aus Schiff und Booster. Der Booster gehört zur Startbasis, nicht
+zum Schiff; es gibt genau einen.
+
+- *Warum:* Er trennt zwei Aufgaben. Der Booster hebt das Schiff aus Zorbs
+  Schwerkraft und Luft, das Schiff ist für die Reise gebaut (halb so große
+  Tanks wie davor). Daraus werden zwei Wege für Upgrades: bessere Booster
+  tragen schwerere Schiffe, bessere Triebwerke geben Reichweite.
+  Wirtschaftlich spart er vorerst nichts (Treibstoff an der Startbasis ist
+  frei, Schiffe gehen nicht verloren).
+- *Aufstieg:* Das Brennen beim Start trägt Schub, Verbrauch und Masse des
+  Stapels (`Ascent::stack`); es zählt die größere Widerstandsfläche der
+  beiden. Die Masse des Schiffs bleibt dabei gleich, und mit ihr fliegt es
+  nach dem Brennschluss weiter. Der Aufstieg endet an der Ziel-Apoapsis oder
+  wenn nur noch die Reserve im Tank ist: Der Booster hält immer Treibstoff
+  für 1.000 m/s zurück (B-1: knapp 1,2 t).
+- *Rückflug:* Beim Planen des Starts wird der Boostback gesucht: ein Stoß
+  waagerecht gegen die Bewegung über dem Boden, 10 s nach der Trennung.
+  Gesucht wird sein Betrag (Regula falsi; der Aufsetzpunkt wandert damit
+  stetig entlang des Kurses zurück) und, weil die Drehung des Planeten den
+  Booster je nach Kurs zur Seite trägt, ein Winkel dagegen
+  (Sekantenverfahren). Bewertet wird jeder Versuch mit der echten Zeitleiste
+  des Boosters samt Luft und Fallschirm. Bei der Trennung (ein Ereignis mit
+  festem Zeitpunkt, wie der Kontakt beim Andocken) bekommt der Booster genau
+  diesen Node: Vorschau = Ausführung, unabhängig von der Schrittgröße.
+- *Kein Start,* wenn er nicht innerhalb von 2 km an der Startbasis aufsetzt,
+  wenn er unterwegs ist oder für ein anderes Schiff verplant. Grenzen
+  (gemessen mit dem B-1): Schiffe bis etwa 19 t; Kurse von Nord über Ost bis
+  Süd gehen mit 10° Wendewinkel, nach Westen reicht die Reserve bei 100 km
+  Ziel-Apoapsis nicht (Drehung des Planeten gegen sich).
+- *Was das Schiff noch braucht:* rund 1.500 m/s bis in die Bahn (voller
+  Frachter, 10° Wendewinkel), statt 3.600 aus eigener Kraft. Ein leichteres
+  Schiff wird steiler geworfen und braucht mehr (Basisschiff: 1.740, mit 12°
+  1.660); ein größerer Booster wirft kleine Schiffe ebenfalls steiler. Das
+  Schiff braucht genug Schub: Bis zur Apoapsis sind es nur gut zwei Minuten.
+- *Bis zur Trennung* steht das Fahrzeug des Boosters an der Startbasis; erst
+  dann fliegt es selbst. Die Rückflugbahn sieht man deshalb erst ab der
+  Trennung, vorab nur das Ergebnis in der Karte „Start".
+- *Die Demo hat keinen Booster* (die Fähre dort startet aus eigener Kraft),
+  damit Tests und Beispiele bleiben, wie sie sind.
+
+**Katalog** (abgestimmtes Konzept, noch nicht gebaut; die Schiffe sind bis
+dahin feste Vorlagen mit diesen Werten):
+
+| Chassis | Masse | Innenraum | Triebwerksplätze | Preis | frei |
+|---|---|---|---|---|---|
+| Klein | 1.200 kg | 10 t | 1 | 0,4 t | von Anfang an |
+| Mittel | 1.900 kg | 16 t | 2 | 0,6 t | von Anfang an |
+| Groß | 3.800 kg | 32 t | 4 | 1,2 t | 20 GB, braucht B-2 |
+
+| Triebwerk | Schub | Ausströmgeschw. | Masse | Preis | frei |
+|---|---|---|---|---|---|
+| Z-1 | 250 kN | 3.200 m/s | 300 kg | 0,2 t | von Anfang an |
+| Z-2 | 250 kN | 3.600 m/s | 350 kg | 0,4 t | 30 GB |
+| Z-3 | 250 kN | 4.000 m/s | 400 kg | 0,8 t | 80 GB, braucht Z-2 |
+
+| Booster | Leermasse | Treibstoff | Schub | trägt | frei |
+|---|---|---|---|---|---|
+| B-1 | 3 t | 30 t | 760 kN | etwa 19 t | von Anfang an |
+| B-2 | 6 t | 60 t | 1.520 kN | etwa 38 t (geschätzt) | 30 GB, 3 t Zorit |
+
+Der Innenraum teilt sich per Regler in Tank und Fracht (0,5-t-Schritte, nur
+an der Startbasis änderbar). Feste Einbauten belegen zuerst Platz: das
+Fundament wiegt 1.500 kg und belegt 3 t (0,4 t Zorit). Ein Schiff trägt nur
+eine Sorte Triebwerk. Startentwürfe: Frachter = Mittel + 2 × Z-1, 14 t Tank,
+2 t Fracht; Basisschiff = Klein + Z-1 + Fundament, 7 t Tank; beide 1 t Zorit,
+beide löschbar. Ein Basisschiff mit freiem Innenraum darf Fracht tragen.
+Entdeckungen geben Daten in GB (erste Umlaufbahn / Landung / Basis: Zorb
+5 / – / –, Zoon 5 / 10 / 15, Zill 10 / 20 / 30, Nura 15 / 30 / 45; zusammen
+185, der Techtree kostet 160). Umbau am gelandeten Schiff an der Startbasis,
+das alte Teil wird voll in Zorit erstattet.
 
 **Daten** sind später der zweite Zähler auf Zorb (bestimmen, *was* man bauen
 kann; Zorit, *wie viel*). Sie sind keine Fracht: Sie werden gefunkt, und jede

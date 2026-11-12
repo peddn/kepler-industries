@@ -578,6 +578,11 @@ impl World {
         Ok(Some(self.vessels[booster].params))
     }
 
+    /// Zahl der Schiffe; der Booster zählt nicht dazu.
+    pub fn ship_count(&self) -> usize {
+        self.vessels.len() - usize::from(self.booster.is_some())
+    }
+
     /// Wo der Booster gerade ist (für die Anzeige).
     pub fn booster_status(&self) -> Option<BoosterStatus> {
         let booster = self.booster?;

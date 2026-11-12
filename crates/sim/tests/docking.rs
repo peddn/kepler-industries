@@ -3,19 +3,11 @@
 use glam::DVec3;
 use sim::docking::{CONTACT_SPEED, DOCKING_RANGE, SEPARATION_SPEED, angular_velocity};
 use sim::kepler;
-use sim::scenario::{FERRY, SATELLITE, ZORB};
+use sim::scenario::{FERRY, SATELLITE, ZORB, demo};
 use sim::{
     BudgetItem, DockError, Launch, LaunchProfile, LogKind, ManeuverNode, Segment, UndockError,
     VesselStatus, World,
 };
-
-/// Das Demo-Szenario ohne Booster: Hier startet die Fähre aus eigener Kraft
-/// (wie überall außerhalb der Startbasis).
-fn demo() -> World {
-    let mut world = sim::scenario::demo();
-    world.booster = None;
-    world
-}
 
 const RELAIS: usize = 0;
 const FERRY_ID: usize = 2;

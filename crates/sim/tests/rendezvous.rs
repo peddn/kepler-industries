@@ -157,8 +157,6 @@ fn no_target_or_no_orbit() {
 #[test]
 fn approach_only_in_flight() {
     let mut world = sim::scenario::demo();
-    // Ohne Booster: Die Fähre startet aus eigener Kraft.
-    world.booster = None;
     world.set_target(2, Some(0));
     assert_eq!(world.approach(2), None);
     let liftoff = 11_299.0;

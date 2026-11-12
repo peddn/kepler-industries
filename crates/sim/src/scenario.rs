@@ -273,7 +273,9 @@ fn base_world() -> World {
     world
 }
 
-/// Für Tests und zum Ausprobieren (`--demo`): wie `start`, aber mit leerem
+/// Für Tests und zum Ausprobieren (`--demo`): wie `start`, aber ohne Booster
+/// (die Fähre an der Startbasis startet aus eigener Kraft, wie überall
+/// sonst; die Beispiele mit ihr bleiben so, wie sie sind), mit leerem
 /// Lager, weiteren Zielgebieten und Schiffen. Zwei Satelliten: einer stabil
 /// oberhalb der Atmosphäre, einer zu tief abgesetzt. Ohne Eingriff bremst die
 /// Luft ihn bei jedem Durchgang ab, bis er abstürzt. Mit einem Manöver an der
@@ -389,7 +391,5 @@ pub fn demo() -> World {
         });
     }
 
-    // Zuletzt, damit die Schiffe ihre Nummern behalten.
-    add_booster(&mut world);
     world
 }

@@ -24,8 +24,8 @@ use crate::status_bar::{self, StatusBar};
 use crate::top_bar::{self, Panels};
 use crate::verbund::UndockChoice;
 use crate::{
-    Sim, TimeWarp, depot, dv_bar, fracht, hud, left_bar, maneuver_card, start_card, target_card,
-    verbund, wirtschaft,
+    Sim, TimeWarp, booster_card, depot, dv_bar, fracht, hud, left_bar, maneuver_card, start_card,
+    target_card, verbund, wirtschaft,
 };
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -260,7 +260,9 @@ pub fn draw(
             PANEL_WIDTH,
             |_| {},
             |ui| {
-                if let Some(vessel) = vessel {
+                if vessel.is_some() && vessel == world.booster {
+                    booster_card::show(ui, world);
+                } else if let Some(vessel) = vessel {
                     start_card::show(ui, world, vessel, &mut notes);
                     let chosen = selected_node(world, &selected.vessel, &selected.node);
                     let chosen = chosen.map(|(_, k)| k);

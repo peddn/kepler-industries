@@ -3,19 +3,11 @@
 
 use glam::DVec3;
 use sim::kepler::state_from_apsides;
-use sim::scenario::{FERRY, SATELLITE, ZORB, home_planet, moon};
+use sim::scenario::{FERRY, SATELLITE, ZORB, demo, home_planet, moon};
 use sim::{
     Crash, Launch, LaunchProfile, LogKind, ManeuverNode, StateVector, VesselParams, VesselStatus,
     World,
 };
-
-/// Das Demo-Szenario ohne Booster: Hier startet die Fähre aus eigener Kraft
-/// (wie überall außerhalb der Startbasis).
-fn demo() -> World {
-    let mut world = sim::scenario::demo();
-    world.booster = None;
-    world
-}
 
 /// Ein Schiff auf einer Kreisbahn in 100 km Höhe.
 fn in_orbit(params: VesselParams, fuel: f64) -> World {

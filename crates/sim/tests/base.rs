@@ -19,7 +19,6 @@ use sim::{
 fn on_zoon() -> (World, usize, SurfacePoint) {
     let mut world = demo();
     world.vessels.clear();
-    world.booster = None;
     let point = SurfacePoint::from_degrees(10.0, 30.0);
     let ship = world.spawn_landed("Basisschiff", BASE_SHIP, 1_000.0, ZOON, point);
     (world, ship, point)
@@ -380,7 +379,7 @@ fn mine_yield_depends_on_the_body() {
 /// Aufstieg von der Startbasis auf dem Booster und Zirkularisieren: so viel
 /// Δv bleibt im Orbit übrig.
 fn left_in_orbit(params: VesselParams, parts: f64) -> f64 {
-    let mut world = demo();
+    let mut world = start();
     let ship = at_depot(&mut world, params, 0.0);
     world.refuel(ship).unwrap();
     world.zorit = 1_000.0;

@@ -2,18 +2,10 @@
 
 use glam::DVec3;
 use sim::kepler::time_to_apoapsis;
-use sim::scenario::{ZOON, ZORB};
+use sim::scenario::{ZOON, ZORB, demo};
 use sim::{
     Crash, LOG_LIMIT, Launch, LaunchProfile, LogEntry, LogKind, ManeuverNode, Segment, World,
 };
-
-/// Das Demo-Szenario ohne Booster: Hier startet die Fähre aus eigener Kraft
-/// (wie überall außerhalb der Startbasis).
-fn demo() -> World {
-    let mut world = sim::scenario::demo();
-    world.booster = None;
-    world
-}
 
 const FERRY: usize = 2;
 
@@ -230,7 +222,7 @@ fn log_is_saved() {
 /// Landung im Zielgebiet auf Zoon: Das Protokoll nennt Körper und Gebiet.
 #[test]
 fn landing_on_the_moon_is_logged_with_its_body() {
-    let mut world = demo();
+    let mut world = sim::scenario::demo();
     let moon = &world.bodies[ZOON];
     let (gm, r) = (moon.gm, moon.radius + 30_000.0);
     let near_side = world

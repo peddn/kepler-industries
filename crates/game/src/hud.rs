@@ -7,7 +7,8 @@ use crate::rendezvous::distance_text;
 use bevy_egui::egui;
 use sim::body::{body_state, orbital_period, sphere_of_influence};
 use sim::{
-    Crash, Event, LandingBurn, Plan, Segment, SurfacePoint, Touchdown, VesselStatus, World, kepler,
+    BoosterStatus, Crash, Event, LandingBurn, Plan, Segment, SurfacePoint, Touchdown, VesselStatus,
+    World, kepler,
 };
 
 const WARNING_COLOR: egui::Color32 = egui::Color32::from_rgb(255, 89, 77);
@@ -433,6 +434,17 @@ pub fn ship_name(world: &World, i: usize) -> String {
 /// Zustand eines Schiffs in einer Zeile (die Zahlen dazu stehen in
 /// `flight_data`).
 pub fn ship_status(world: &World, i: usize) -> String {
+    // Der Booster steht bis zur Trennung an der Startbasis; was er dort
+    // gerade tut, sagt mehr als "gelandet".
+    if world.booster == Some(i)
+        && !matches!(
+            world.booster_status(),
+            Some(BoosterStatus::Returning) | None
+        )
+        && let Some(status) = crate::booster_card::status(world)
+    {
+        return status;
+    }
     match world.vessel_status(i) {
         VesselStatus::Orbit { descending, .. } => {
             let body = &world.bodies[world.vessel_state(i).0];

@@ -11,12 +11,31 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 Die Sonne Zunn mit zwei Planeten: Zorb, Heimat der Zorbels, mit Atmosphäre
 und den Monden Zoon und Zill, weiter draußen Nura.
 
-**Spielbeginn:** Es gibt nur die Startbasis auf Zorb mit 3 t Zorit im Lager
-und keine Schiffe. Der Vorrat reicht genau für eine Basis: ein Basisschiff,
+**Spielbeginn:** Es gibt nur die Startbasis auf Zorb mit ihrem Booster, 3 t
+Zorit im Lager und keine Schiffe. Der Vorrat reicht genau für eine Basis: ein Basisschiff,
 ein Frachter und 4 t Bauteile (der Frachter fliegt dafür zweimal). Bestellt
 wird in der Karte „Startbasis" der Seitenleiste; sie ist zu Beginn offen.
 Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
 (etwa als Erstes eine Tankstelle baut oder ein Schiff verliert), steckt fest.
+
+**Booster:** Jeder Start von der Startbasis läuft mit dem Booster. Schiff und
+Booster heben als Stapel ab, nur der Booster brennt; das Startprofil in der
+Karte „Start" gilt für den Stapel, das Schiff verbraucht dabei nichts. Bei
+Brennschluss trennen sie sich: Das Schiff fliegt allein weiter und bringt
+sich mit einem Node an der Apoapsis selbst in die Umlaufbahn (rund 1.500 m/s,
+den Node setzt man vorab auf der Vorschau; bis zur Apoapsis sind es nur gut
+zwei Minuten). Der Booster schiebt sich von selbst zurück und landet nach
+einer Viertelstunde am Fallschirm an der Startbasis; steuern lässt er sich
+nicht. Die Karte „Start" zeigt vorab seinen Boostback und wann er zurück ist.
+Es gibt nur diesen einen Booster. Kein Start, solange er unterwegs oder für
+ein anderes Schiff verplant ist, und keiner, wenn er nicht zurückkäme: mit
+einem zu schweren Schiff (er trägt etwa 19 t, ein voller Frachter wiegt
+18,5 t) oder bei zu flachem Aufstieg (Wendewinkel kleiner wählen). Ein
+leichtes Schiff wirft er steiler nach oben; es braucht dann etwas mehr
+eigenes Δv, oder man wählt einen größeren Wendewinkel. Überall sonst, auch
+auf Zorb außerhalb der Startbasis, starten Schiffe aus eigener Kraft. Die
+Schiffe sind dafür klein: Der Frachter fasst 14 t Treibstoff, das Basisschiff
+7 t.
 
 **Demo (`--demo`):** Zum Ausprobieren und für alle Beispiele in diesem README,
 die Schiffe mit Nummer nennen (`--node`, `--select`, `--launch`, `--target`
@@ -27,7 +46,8 @@ Basisschiffe und zwei beladene Frachter. „Relais-1" kreist stabil oberhalb
 der Atmosphäre. „Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang
 durch die Luft abgebremst (orange) und stürzt nach einigen Umläufen ab, außer
 man rettet sie mit einem Manöver. „Fähre-3" steht an der Startbasis und kann
-starten. „Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator,
+starten (die Demo hat keinen Booster, sie startet aus eigener Kraft; so
+bleiben die Beispiele unten, wie sie sind). „Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator,
 bereit für den Flug zum Mond.
 
 **Fracht und Basen (der Kreislauf der Wirtschaft):** Es gibt drei Stoffe:
@@ -385,7 +405,8 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Linksklick auf den Mond | Mond wählen (eine Bahn davor geht vor: Node setzen) |
 | `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten. Ist ein Node gewählt, wechselt `F` der Reihe nach: Node, sein Schiff, Planet |
 | `N` | Nahansicht an/aus (Planet unten, Zoom bis 10 m; nur mit einem Objekt im Fokus) |
-| Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Wendewinkel, Ziel-Apoapsis (`Umschalt`: feine Schritte) |
+| Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Wendewinkel, Ziel-Apoapsis (`Umschalt`: feine Schritte); an der Startbasis mit Booster: zeigt Trennung, Boostback und Rückkehr |
+| Seitenleiste „Booster“ (Booster gewählt) | Wo der Booster gerade ist und wann er zurück ist |
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |

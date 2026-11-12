@@ -18,7 +18,7 @@ const VALUE_SIZE: f32 = 16.0;
 /// stehen bei ihrem Verbund.
 fn ships(ui: &mut egui::Ui, world: &World, selected: &mut Selected) {
     card(ui, "Schiffe", |ui| {
-        if world.vessels.is_empty() {
+        if world.ship_count() == 0 {
             ui.weak("Noch keine. Bestellen: rechts in der Karte \"Startbasis\".");
         }
         for i in (0..world.vessels.len()).filter(|&i| world.vessels[i].docked_to.is_none()) {

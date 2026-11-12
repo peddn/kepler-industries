@@ -385,9 +385,7 @@ impl World {
             return Err(BaseError::NotEnoughZorit);
         }
         self.zorit -= SHIP_PRICE;
-        // Der Booster zählt nicht als Schiff.
-        let ships = self.vessels.len() - usize::from(self.booster.is_some());
-        let name = format!("{}-{}", kind.label(), ships + 1);
+        let name = format!("{}-{}", kind.label(), self.ship_count() + 1);
         let params = kind.params();
         let vessel = self.spawn_landed(&name, params, params.fuel_capacity, body, pad);
         self.log.push(LogEntry {

@@ -3,6 +3,7 @@
 //! Dieses Crate stellt nur dar und nimmt Eingaben an. Die Simulation lebt
 //! vollständig im Crate `sim`; hier wird sie nur gelesen und vorangetrieben.
 
+mod booster_card;
 mod camera;
 mod depot;
 mod dv_bar;
