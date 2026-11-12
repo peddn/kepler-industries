@@ -17,14 +17,15 @@ use crate::Sim;
 use crate::camera::{CameraRig, Focus, MainCamera, OVERLAY_LAYER, dir_to_view, to_view};
 use crate::dv_bar::{BarShown, over_bar};
 use crate::hud::UiFont;
-use crate::panel::{PanelShown, over_panel};
 use crate::status_bar::{StatusBar, over_status};
+use crate::ui::PanelShown;
 use crate::view::{self, orbit_points};
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy::text::FontSize;
 use bevy::window::PrimaryWindow;
+use bevy_egui::input::EguiWantsInput;
 use sim::body::body_state;
 use sim::{BodyId, ManeuverNode, Plan, PlanError, Segment, Trajectory, World, maneuver};
 
@@ -478,9 +479,12 @@ pub fn input(
     keys: Res<ButtonInput<KeyCode>>,
     real_time: Res<Time<Real>>,
     mut rig: ResMut<CameraRig>,
-    shown: Res<PanelShown>,
-    bar: Res<BarShown>,
-    status: Res<StatusBar>,
+    (shown, egui, bar, status): (
+        Res<PanelShown>,
+        Res<EguiWantsInput>,
+        Res<BarShown>,
+        Res<StatusBar>,
+    ),
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<MainCamera>>,
 ) {
@@ -551,7 +555,7 @@ pub fn input(
     let projector = Projector::new(camera, transform, rig.focus, world);
 
     // Klicks auf Seitenleiste, Δv-Balken und Statusleiste gehören diesen.
-    let over_ui = over_panel(&shown, &window, cursor)
+    let over_ui = egui.wants_any_pointer_input()
         || over_bar(&bar, &shown, &window, cursor)
         || over_status(&status, &window, cursor);
     if buttons.just_pressed(MouseButton::Left) && !over_ui {

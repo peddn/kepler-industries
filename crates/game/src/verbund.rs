@@ -5,15 +5,10 @@
 //! vorgeschlagen ist eine Aufteilung nach Tankgröße. Darunter steht, was beide
 //! danach haben. "Abdocken" führt es jetzt aus (`World::undock`).
 
-use crate::Sim;
-use crate::hud::{UiFont, km};
-use crate::node_ui::{Selection, UiMessage};
-use crate::panel::{
-    BORDER_COLOR, BUTTON_COLOR, CARD_COLOR, Panel, PanelButton, button_node, physical_cursor, text,
-};
-use crate::status_bar::{StatusBar, over_status};
+use crate::hud::km;
+use crate::ui::{Notes, card, stepper, wide_button};
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
+use bevy_egui::egui;
 use sim::docking::SEPARATION_SPEED;
 use sim::{World, kepler};
 
@@ -29,34 +24,6 @@ pub struct UndockChoice {
     part: Option<usize>,
     /// Mitgenommener Treibstoff in kg; `None`: der Vorschlag.
     fuel: Option<f64>,
-}
-
-#[derive(Component)]
-pub struct VerbundCard;
-
-/// Texte der Karte.
-#[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum VerbundText {
-    Part,
-    Fuel,
-    Result,
-}
-
-/// Schaltflächen der Karte.
-#[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum VerbundButton {
-    /// Anderes Teil (−1/+1).
-    Part(i32),
-    /// Treibstoff (−1/+1).
-    Fuel(i32),
-    Undock,
-}
-
-/// Die an das gewählte Schiff angedockten Schiffe (leer: kein Verbund).
-fn parts(world: &World, selection: &Selection) -> Option<(usize, Vec<usize>)> {
-    let host = selection.0?;
-    let parts = world.parts(host);
-    (!parts.is_empty()).then_some((host, parts))
 }
 
 /// Gewähltes Teil und Treibstoff, passend zum gewählten Verbund.
@@ -76,107 +43,50 @@ fn current(world: &World, choice: &mut UndockChoice, host: usize, parts: &[usize
     (part, fuel)
 }
 
-pub fn setup(mut commands: Commands, font: Res<UiFont>, panel: Single<Entity, With<Panel>>) {
-    let font = font.into_inner();
-    let button = |sign: VerbundButton, width: Val| {
-        (
-            PanelButton,
-            sign,
-            button_node(width),
-            BackgroundColor(BUTTON_COLOR),
-            BorderColor::all(BORDER_COLOR),
-        )
-    };
-    let row = || Node {
-        flex_direction: FlexDirection::Row,
-        align_items: AlignItems::Center,
-        column_gap: px(6),
-        ..default()
-    };
-    let grow = || Node {
-        flex_grow: 1.0,
-        ..default()
-    };
-    let card = commands
-        .spawn((
-            VerbundCard,
-            Node {
-                flex_direction: FlexDirection::Column,
-                padding: UiRect::all(px(10)),
-                row_gap: px(8),
-                border: UiRect::all(px(1)),
-                display: Display::None,
-                ..default()
-            },
-            BackgroundColor(CARD_COLOR),
-            BorderColor::all(BORDER_COLOR),
-        ))
-        .with_children(|card| {
-            card.spawn(text(font, "Verbund", 16.0));
-            card.spawn(row()).with_children(|row| {
-                row.spawn(button(VerbundButton::Part(-1), px(32)))
-                    .with_child(text(font, "◄", 14.0));
-                row.spawn((
-                    VerbundText::Part,
-                    text(font, "", 14.0),
-                    TextLayout::justify(Justify::Center),
-                    grow(),
-                ));
-                row.spawn(button(VerbundButton::Part(1), px(32)))
-                    .with_child(text(font, "►", 14.0));
-            });
-            card.spawn(text(font, "Treibstoff mitnehmen", 14.0));
-            card.spawn(row()).with_children(|row| {
-                row.spawn(button(VerbundButton::Fuel(-1), px(32)))
-                    .with_child(text(font, "−", 14.0));
-                row.spawn((
-                    VerbundText::Fuel,
-                    text(font, "", 14.0),
-                    TextLayout::justify(Justify::Center),
-                    grow(),
-                ));
-                row.spawn(button(VerbundButton::Fuel(1), px(32)))
-                    .with_child(text(font, "+", 14.0));
-            });
-            card.spawn((VerbundText::Result, text(font, "", 14.0)));
-            card.spawn(button(VerbundButton::Undock, percent(100)))
-                .with_child(text(font, "Abdocken", 14.0));
-        })
-        .id();
-    commands.entity(*panel).add_child(card);
-}
-
-/// Karte zeigen oder verstecken und die Texte setzen.
-pub fn sync(
-    sim: Res<Sim>,
-    selection: Res<Selection>,
-    mut choice: ResMut<UndockChoice>,
-    mut card: Single<&mut Node, With<VerbundCard>>,
-    mut texts: Query<(&VerbundText, &mut Text)>,
+pub fn show(
+    ui: &mut egui::Ui,
+    world: &mut World,
+    host: usize,
+    choice: &mut UndockChoice,
+    notes: &mut Notes,
 ) {
-    let world = &sim.0;
-    let Some((host, parts)) = parts(world, &selection) else {
-        card.display = Display::None;
+    let parts = world.parts(host);
+    if parts.is_empty() {
         return;
-    };
-    card.display = Display::Flex;
-    let (part, fuel) = current(world, &mut choice, host, &parts);
-    let range = world.undock_fuel(part).expect("angedockt");
-    let (part_dv, host_dv) = world.undock_delta_v(part, fuel);
-    // Ein Stoß gegen die Flugrichtung lässt das Schiff pro Umlauf etwa
-    // 3 · Umlaufzeit · Stoß vorauslaufen.
-    let (body, state) = world.vessel_state(host);
-    let drift =
-        kepler::period(world.bodies[body].gm, &state).map(|period| 3.0 * period * SEPARATION_SPEED);
-    for (which, mut text) in &mut texts {
-        let value = match which {
-            VerbundText::Part => world.vessels[part].name.clone(),
-            VerbundText::Fuel => format!(
-                "{fuel:.0} kg ({:.0}–{:.0})",
-                range.min.floor(),
-                range.max.floor()
-            ),
-            VerbundText::Result => [
+    }
+    card(ui, "Verbund", |ui| {
+        let (part, fuel) = current(world, choice, host, &parts);
+        let step = stepper(ui, ["◄", "►"], world.vessels[part].name.as_str().into());
+        if step != 0 {
+            let k = parts.iter().position(|&p| p == part).unwrap_or(0) as i32;
+            choice.part = Some(parts[(k + step).rem_euclid(parts.len() as i32) as usize]);
+            choice.fuel = None;
+        }
+        let (part, fuel_now) = current(world, choice, host, &parts);
+        let fuel = if step == 0 { fuel } else { fuel_now };
+        let range = world.undock_fuel(part).expect("angedockt");
+
+        ui.label("Treibstoff mitnehmen");
+        let text = format!(
+            "{fuel:.0} kg ({:.0}–{:.0})",
+            range.min.floor(),
+            range.max.floor()
+        );
+        let sign = stepper(ui, ["−", "+"], text.into());
+        if sign != 0 {
+            let fine = ui.input(|input| input.modifiers.shift);
+            let step = if fine { FINE_STEP } else { STEP };
+            choice.fuel = Some((fuel + sign as f64 * step).clamp(range.min, range.max));
+        }
+
+        let (part_dv, host_dv) = world.undock_delta_v(part, fuel);
+        // Ein Stoß gegen die Flugrichtung lässt das Schiff pro Umlauf etwa
+        // 3 · Umlaufzeit · Stoß vorauslaufen.
+        let (body, state) = world.vessel_state(host);
+        let drift = kepler::period(world.bodies[body].gm, &state)
+            .map(|period| 3.0 * period * SEPARATION_SPEED);
+        ui.label(
+            [
                 format!("{} danach:", world.vessels[part].name),
                 format!("  {fuel:.0} kg, Δv {part_dv:.0} m/s"),
                 format!("{} danach:", world.vessels[host].name),
@@ -187,63 +97,9 @@ pub fn sync(
                 }),
             ]
             .join("\n"),
-        };
-        if text.0 != value {
-            text.0 = value;
+        );
+        if wide_button(ui, "Abdocken") && notes.check(world.undock(part, fuel)).is_some() {
+            *choice = UndockChoice::default();
         }
-    }
-}
-
-/// Klicks auf die Schaltflächen der Karte.
-#[allow(clippy::too_many_arguments)]
-pub fn buttons(
-    mut sim: ResMut<Sim>,
-    selection: Res<Selection>,
-    mut choice: ResMut<UndockChoice>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    keys: Res<ButtonInput<KeyCode>>,
-    real_time: Res<Time<Real>>,
-    mut message: ResMut<UiMessage>,
-    window: Single<&Window, With<PrimaryWindow>>,
-    status: Res<StatusBar>,
-    buttons: Query<(&VerbundButton, &ComputedNode, &UiGlobalTransform)>,
-) {
-    if !mouse.just_pressed(MouseButton::Left) {
-        return;
-    }
-    if window
-        .cursor_position()
-        .is_some_and(|c| over_status(&status, &window, c))
-    {
-        return;
-    }
-    let world = &mut sim.0;
-    let (Some((host, parts)), Some(cursor)) = (parts(world, &selection), physical_cursor(&window))
-    else {
-        return;
-    };
-    let Some((button, ..)) = buttons
-        .iter()
-        .find(|(_, node, transform)| node.contains_point(**transform, cursor))
-    else {
-        return;
-    };
-    let (part, fuel) = current(world, &mut choice, host, &parts);
-    match *button {
-        VerbundButton::Part(step) => {
-            let k = parts.iter().position(|&p| p == part).unwrap_or(0) as i32;
-            choice.part = Some(parts[(k + step).rem_euclid(parts.len() as i32) as usize]);
-            choice.fuel = None;
-        }
-        VerbundButton::Fuel(sign) => {
-            let fine = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-            let step = if fine { FINE_STEP } else { STEP };
-            let range = world.undock_fuel(part).expect("angedockt");
-            choice.fuel = Some((fuel + sign as f64 * step).clamp(range.min, range.max));
-        }
-        VerbundButton::Undock => match world.undock(part, fuel) {
-            Ok(()) => *choice = UndockChoice::default(),
-            Err(e) => message.say(e.to_string(), world.time, real_time.elapsed_secs_f64()),
-        },
-    }
+    });
 }

@@ -54,10 +54,14 @@ pub struct StatusBar {
     grab: Option<f32>,
 }
 
+/// Höhe der Leiste samt aufgeklapptem Bereich.
+pub fn height(bar: &StatusBar) -> f32 {
+    STATUS_HEIGHT + if bar.open { AREA_HEIGHT } else { 0.0 }
+}
+
 /// Liegt der Mauszeiger auf der Leiste oder dem aufgeklappten Bereich?
 pub fn over_status(bar: &StatusBar, window: &Window, cursor: Vec2) -> bool {
-    let height = STATUS_HEIGHT + if bar.open { AREA_HEIGHT } else { 0.0 };
-    cursor.y >= window.height() - height
+    cursor.y >= window.height() - height(bar)
 }
 
 /// Eine Zeile der Anzeige.

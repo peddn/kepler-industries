@@ -1,4 +1,4 @@
-//! Karte "Fracht & Basis" in der Seitenleiste (siehe `sim::base`).
+//! Karte "Fracht & Basis" der Seitenleiste (siehe `sim::base`).
 //!
 //! Sie erscheint für Schiffe mit Frachtraum, für Basisschiffe und für jedes
 //! Schiff, das im Umkreis einer Basis steht. Sie zeigt Fracht, Baustelle und
@@ -6,35 +6,10 @@
 //! Startbasis laden, tanken und Zorit abladen, mit dem Basisschiff gründen,
 //! an der Baustelle abladen, an der Tankstelle tanken, an der Mine laden.
 
-use crate::Sim;
-use crate::hud::UiFont;
-use crate::node_ui::{Selection, UiMessage};
-use crate::panel::{
-    BORDER_COLOR, BUTTON_COLOR, CARD_COLOR, Panel, PanelButton, button_node, physical_cursor, text,
-};
-use crate::status_bar::{StatusBar, over_status};
-use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
+use crate::ui::{Notes, card, wide_button};
+use bevy_egui::egui;
 use sim::base::{PARTS_PRICE, SITE_RADIUS};
-use sim::{BaseKind, Segment, World};
-
-#[derive(Component)]
-pub struct FrachtCard;
-
-/// Texte der Karte: die Zeilen und die Beschriftungen der Schaltflächen.
-#[derive(Component, Clone, Copy, PartialEq, Eq)]
-pub enum FrachtText {
-    Lines,
-    Button(usize),
-}
-
-/// Schaltfläche der Karte mit ihrer Nummer; sie tut, was `actions` an
-/// dieser Stelle nennt.
-#[derive(Component)]
-pub struct FrachtButton(usize);
-
-/// So viele Schaltflächen hat die Karte höchstens.
-const BUTTONS: usize = 3;
+use sim::{BaseError, BaseKind, Segment, World};
 
 /// Was eine Schaltfläche tut.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -212,143 +187,52 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
     lines
 }
 
-pub fn setup(mut commands: Commands, font: Res<UiFont>, panel: Single<Entity, With<Panel>>) {
-    let font = font.into_inner();
-    let card = commands
-        .spawn((
-            FrachtCard,
-            Node {
-                flex_direction: FlexDirection::Column,
-                padding: UiRect::all(px(10)),
-                row_gap: px(8),
-                border: UiRect::all(px(1)),
-                display: Display::None,
-                ..default()
-            },
-            BackgroundColor(CARD_COLOR),
-            BorderColor::all(BORDER_COLOR),
-        ))
-        .with_children(|card| {
-            card.spawn(text(font, "Fracht & Basis", 16.0));
-            card.spawn((FrachtText::Lines, text(font, "", 14.0)));
-            for k in 0..BUTTONS {
-                card.spawn((
-                    PanelButton,
-                    FrachtButton(k),
-                    button_node(percent(100)),
-                    BackgroundColor(BUTTON_COLOR),
-                    BorderColor::all(BORDER_COLOR),
-                ))
-                .with_child((FrachtText::Button(k), text(font, "", 14.0)));
+impl Action {
+    /// Führt die Aktion aus; die Meldung dazu (leer: steht schon im
+    /// Protokoll).
+    fn run(self, world: &mut World, vessel: usize) -> Result<String, BaseError> {
+        let name = world.vessels[vessel].name.clone();
+        Ok(match self {
+            Action::FoundMine => {
+                world.found_base(vessel, BaseKind::Mine)?;
+                String::new()
             }
-        })
-        .id();
-    commands.entity(*panel).add_child(card);
-}
-
-/// Karte zeigen oder verstecken und die Texte setzen.
-pub fn sync(
-    sim: Res<Sim>,
-    selection: Res<Selection>,
-    mut card: Single<&mut Node, With<FrachtCard>>,
-    mut buttons: Query<(&FrachtButton, &mut Node), Without<FrachtCard>>,
-    mut texts: Query<(&FrachtText, &mut Text)>,
-) {
-    let world = &sim.0;
-    let shown = selection
-        .0
-        .map(|i| (i, lines(world, i)))
-        .filter(|(_, lines)| !lines.is_empty());
-    let Some((vessel, lines)) = shown else {
-        card.display = Display::None;
-        return;
-    };
-    card.display = Display::Flex;
-    let actions = actions(world, vessel);
-    for (button, mut node) in &mut buttons {
-        node.display = if button.0 < actions.len() {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
-    for (which, mut text) in &mut texts {
-        let value = match which {
-            FrachtText::Lines => lines.join("\n"),
-            FrachtText::Button(k) => actions
-                .get(*k)
-                .map_or(String::new(), |a| a.label(world, vessel)),
-        };
-        if text.0 != value {
-            text.0 = value;
-        }
-    }
-}
-
-/// Klick auf eine Schaltfläche der Karte.
-#[allow(clippy::too_many_arguments)]
-pub fn buttons(
-    mut sim: ResMut<Sim>,
-    selection: Res<Selection>,
-    mouse: Res<ButtonInput<MouseButton>>,
-    real_time: Res<Time<Real>>,
-    mut message: ResMut<UiMessage>,
-    window: Single<&Window, With<PrimaryWindow>>,
-    status: Res<StatusBar>,
-    buttons: Query<(&FrachtButton, &ComputedNode, &UiGlobalTransform)>,
-) {
-    if !mouse.just_pressed(MouseButton::Left) {
-        return;
-    }
-    if window
-        .cursor_position()
-        .is_some_and(|c| over_status(&status, &window, c))
-    {
-        return;
-    }
-    let world = &mut sim.0;
-    let (Some(vessel), Some(cursor)) = (selection.0, physical_cursor(&window)) else {
-        return;
-    };
-    let actions = actions(world, vessel);
-    let Some(action) = buttons
-        .iter()
-        .find(|(_, node, transform)| node.contains_point(**transform, cursor))
-        .and_then(|(button, ..)| actions.get(button.0).copied())
-    else {
-        return;
-    };
-    let name = world.vessels[vessel].name.clone();
-    let done = match action {
-        // Gründen steht schon im Protokoll.
-        Action::FoundMine => world
-            .found_base(vessel, BaseKind::Mine)
-            .map(|_| String::new()),
-        Action::FoundStation => world
-            .found_base(vessel, BaseKind::FuelStation)
-            .map(|_| String::new()),
-        Action::Unload => world
-            .unload(vessel)
-            .map(|kg| format!("{name}: {} Bauteile abgeladen", tons(kg))),
-        Action::Refuel => world
-            .refuel(vessel)
-            .map(|kg| format!("{name}: {kg:.0} kg getankt")),
-        Action::LoadZorit => world
-            .load_zorit(vessel)
-            .map(|kg| format!("{name}: {} Zorit geladen", tons(kg))),
-        Action::LoadParts => world
-            .load_parts(vessel)
-            .map(|kg| format!("{name}: {} Bauteile geladen", tons(kg))),
-        Action::DeliverZorit => world.deliver_zorit(vessel).map(|kg| {
-            format!(
+            Action::FoundStation => {
+                world.found_base(vessel, BaseKind::FuelStation)?;
+                String::new()
+            }
+            Action::Unload => format!("{name}: {} Bauteile abgeladen", tons(world.unload(vessel)?)),
+            Action::Refuel => format!("{name}: {:.0} kg getankt", world.refuel(vessel)?),
+            Action::LoadZorit => {
+                format!("{name}: {} Zorit geladen", tons(world.load_zorit(vessel)?))
+            }
+            Action::LoadParts => format!(
+                "{name}: {} Bauteile geladen",
+                tons(world.load_parts(vessel)?)
+            ),
+            Action::DeliverZorit => format!(
                 "{name}: {} Zorit abgeladen, im Lager {}",
-                tons(kg),
+                tons(world.deliver_zorit(vessel)?),
                 tons_fine(world.zorit)
-            )
-        }),
-    };
-    let text = done.unwrap_or_else(|e| e.to_string());
-    if !text.is_empty() {
-        message.say(text, world.time, real_time.elapsed_secs_f64());
+            ),
+        })
     }
+}
+
+pub fn show(ui: &mut egui::Ui, world: &mut World, vessel: usize, notes: &mut Notes) {
+    let lines = lines(world, vessel);
+    if lines.is_empty() {
+        return;
+    }
+    card(ui, "Fracht & Basis", |ui| {
+        ui.label(lines.join("\n"));
+        for action in actions(world, vessel) {
+            if wide_button(ui, action.label(world, vessel))
+                && let Some(text) = notes.check(action.run(world, vessel))
+                && !text.is_empty()
+            {
+                notes.say(text);
+            }
+        }
+    });
 }

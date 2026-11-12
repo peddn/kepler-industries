@@ -10,10 +10,12 @@ mod focus;
 mod fracht;
 mod hud;
 mod node_ui;
-mod panel;
 mod rendezvous;
 mod savegame;
+mod start_card;
 mod status_bar;
+mod target_card;
+mod ui;
 mod verbund;
 mod view;
 
@@ -291,6 +293,8 @@ fn main() {
         }),
         ..default()
     }))
+    .add_plugins(bevy_egui::EguiPlugin::default())
+    .add_systems(bevy_egui::EguiPrimaryContextPass, ui::draw)
     .insert_resource(Sim(world))
     .insert_resource(warp)
     .insert_resource(rig)
@@ -298,7 +302,7 @@ fn main() {
     .init_resource::<node_ui::SelectedNode>()
     .insert_resource(zone)
     .init_resource::<node_ui::SelectedBody>()
-    .init_resource::<panel::PanelShown>()
+    .init_resource::<ui::PanelShown>()
     .init_resource::<dv_bar::BarShown>()
     .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<status_bar::StatusBar>()
@@ -316,9 +320,6 @@ fn main() {
                 node_ui::configure_gizmos,
                 node_ui::setup_label,
                 rendezvous::setup_labels,
-                // Die Karten "Verbund" und "Fracht & Basis" hängen sich in
-                // die Seitenleiste.
-                (panel::setup, verbund::setup, fracht::setup, depot::setup).chain(),
                 dv_bar::setup,
                 hud::setup,
                 status_bar::setup,
@@ -336,27 +337,17 @@ fn main() {
                 focus::follow,
                 // Vor der Kamera: über dem Protokoll scrollt das Mausrad dieses.
                 status_bar::input,
-                camera::input,
+                // Über der Oberfläche gehören Mausrad und Ziehen dieser.
+                camera::input.run_if(not(bevy_egui::input::egui_wants_any_pointer_input)),
                 camera::apply,
             )
                 .chain(),
             // Eingaben ändern die Simulation; danach wird nur noch gelesen.
-            (
-                savegame::keys,
-                panel::buttons,
-                verbund::buttons,
-                fracht::buttons,
-                depot::buttons,
-                node_ui::input,
-                rendezvous::update,
-            )
-                .chain(),
+            (savegame::keys, node_ui::input, rendezvous::update).chain(),
             (view::spawn_markers, view::sync_markers, view::aim_sunlight).chain(),
             node_ui::draw,
             node_ui::sync_label,
             rendezvous::sync_labels,
-            (panel::sync, verbund::sync, fracht::sync, depot::sync),
-            panel::hover,
             dv_bar::sync,
             view::draw_planet_grid,
             view::draw_body_orbits,
