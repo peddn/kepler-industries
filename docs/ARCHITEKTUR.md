@@ -895,6 +895,12 @@ zum Schiff; es gibt genau einen.
   Schiff wird steiler geworfen und braucht mehr (Basisschiff: 1.740, mit 12°
   1.660); ein größerer Booster wirft kleine Schiffe ebenfalls steiler. Das
   Schiff braucht genug Schub: Bis zur Apoapsis sind es nur gut zwei Minuten.
+- *Momentane Bahn in der Luft:* Während eines Brennens zeichnet die Karte
+  die Bahn, die das Schiff hätte, wenn das Triebwerk jetzt abschaltete. Über
+  der Luft ist das eine Keplerbahn, in der Luft der Freiflug aus derselben
+  Zeitleiste wie überall (`Trajectory::new_flying`, in jedem Bild neu). So
+  sieht man beim Boostback den Aufsetzpunkt zur Startbasis wandern, und beim
+  Aufstieg, wie hoch und wie weit es schon reicht.
 - *Landung ohne Fallschirm:* Die Luft bremst den fallenden Booster auf rund
   85 m/s, den Rest nimmt das automatische Landebrennen (`landing`) wenige
   Dutzend Meter über dem Boden, mit vollem Schub in unter einer Sekunde. So
@@ -905,8 +911,9 @@ zum Schiff; es gibt genau einen.
   Schiff (`vessel_mass`) und einen Δv-Haushalt aus dem Plan des Starts
   (Aufstieg und Boostback, der Rest bleibt für die Landung). Erst danach hat
   er eine eigene Zeitleiste. An der Startbasis gelandet ist er sofort wieder
-  vollgetankt. Die Rückflugbahn sieht man deshalb erst ab der Trennung, vorab
-  nur das Ergebnis in der Karte „Start".
+  vollgetankt. Seinen Rückflug zeichnet die Karte bis zur Trennung als
+  Vorschau aus dem Plan (`World::booster_preview`, neu gerechnet nur, wenn
+  sich der Start ändert); bei der Trennung übernimmt er genau diese Bahn.
 - *Die Demo hat keinen Booster* (die Fähre dort startet aus eigener Kraft),
   damit Tests und Beispiele bleiben, wie sie sind.
 

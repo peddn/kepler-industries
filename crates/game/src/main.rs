@@ -315,6 +315,7 @@ fn main() {
     .init_resource::<node_ui::SelectedBody>()
     .init_resource::<ui::WorldLabels>()
     .init_resource::<ui::MapArea>()
+    .init_resource::<view::BoosterPreview>()
     .init_resource::<top_bar::Panels>()
     .init_resource::<rendezvous::Rendezvous>()
     .init_resource::<status_bar::StatusBar>()
@@ -345,7 +346,7 @@ fn main() {
             rendezvous::labels,
             view::draw_planet_grid,
             view::draw_body_orbits,
-            view::draw_trajectories,
+            (view::update_booster_preview, view::draw_trajectories).chain(),
             view::draw_burn_points,
             view::draw_soi_changes,
             view::draw_zones,

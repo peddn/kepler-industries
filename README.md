@@ -26,7 +26,8 @@ sich mit einem Node an der Apoapsis selbst in die Umlaufbahn (rund 1.500 m/s,
 den Node setzt man vorab auf der Vorschau; bis zur Apoapsis sind es nur gut
 zwei Minuten). Der Booster schiebt sich von selbst zurück und landet gut
 fünf Minuten später an der Startbasis: ohne Fallschirm, mit einem kurzen
-Landebrennen dicht über dem Boden. Steuern lässt er sich nicht. Die Karte „Start" zeigt vorab seinen Boostback und wann er zurück ist.
+Landebrennen dicht über dem Boden. Steuern lässt er sich nicht. Die Karte „Start" zeigt vorab seinen Boostback und wann er zurück ist, die
+Karte der Welt seinen Rückflug als geplante Bahn.
 Es gibt nur diesen einen Booster. Kein Start, solange er unterwegs oder für
 ein anderes Schiff verplant ist, und keiner, wenn er nicht zurückkäme: mit
 einem zu schweren Schiff (er trägt etwa 19 t, ein voller Frachter wiegt

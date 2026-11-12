@@ -435,11 +435,13 @@ fn closest_on_segment(ray: &Ray3d, a: Vec3, b: Vec3) -> f32 {
 }
 
 /// Lässt sich die Kette des Schiffs gerade ändern? Nicht während des
-/// Brennens, am Boden nur mit geplantem Start.
+/// Brennens, am Boden nur mit geplantem Start, beim Booster nie (er fliegt
+/// selbst).
 fn editable(world: &World, i: usize) -> bool {
     let trajectory = &world.vessels[i].trajectory;
     let current = trajectory.current();
-    !current.is_burn()
+    world.booster != Some(i)
+        && !current.is_burn()
         && !matches!(current, Segment::Approach { .. })
         && (trajectory.launch().is_some() || !matches!(current, Segment::Surface { .. }))
 }

@@ -16,7 +16,10 @@ use bevy::prelude::*;
 use sim::body::{body_state, sphere_of_influence};
 use sim::integrator::Sample;
 use sim::soi;
-use sim::{BodyId, Event, Segment, SurfacePoint, Trajectory, VesselStatus, World, kepler};
+use sim::{
+    BodyId, BoosterStatus, Event, LaunchPlan, Segment, SurfacePoint, Trajectory, VesselParams,
+    VesselStatus, World, kepler,
+};
 
 /// Aktuelle Bahn.
 const ORBIT_COLOR: Color = Color::srgb(0.35, 0.75, 1.0);
@@ -622,10 +625,10 @@ pub fn draw_trajectories(
     sim: Res<Sim>,
     rig: Res<CameraRig>,
     selection: Res<Selection>,
+    preview: Res<BoosterPreview>,
     mut gizmos: Gizmos,
 ) {
     let world = &sim.0;
-    let now = world.time;
     let target = selection
         .0
         .and_then(|i| world.vessels[i].target)
@@ -641,117 +644,156 @@ pub fn draw_trajectories(
         } else {
             ORBIT_COLOR
         };
-        let trajectory = &vessel.trajectory;
-        let first_kepler = trajectory
-            .segments()
-            .find(|s| matches!(s, Segment::Kepler { .. }));
-        let mut horizon = now + span(world, first_kepler);
-        if let Some(burn) = trajectory.burns().last() {
-            let after = span(world, trajectory.segment_after(burn));
-            horizon = horizon.max(burn.end + after);
-        }
+        let params = world.params(i);
+        draw_trajectory(
+            &mut gizmos,
+            world,
+            &rig,
+            &vessel.trajectory,
+            &params,
+            orbit_color,
+            points,
+        );
+    }
+    // Der Rückflug des Boosters für einen geplanten Start: wie die Bahn
+    // nach einem geplanten Manöver. Bei der Trennung übernimmt der Booster
+    // genau diese Bahn.
+    if let Some((_, _, trajectory)) = &preview.0
+        && let Some(booster) = world.booster
+    {
+        let params = world.vessels[booster].params;
+        draw_trajectory(
+            &mut gizmos,
+            world,
+            &rig,
+            trajectory,
+            &params,
+            PLANNED_COLOR,
+            points,
+        );
+    }
+}
 
-        let mut after_burn = false;
-        let mut switched = false;
-        for (segment, anchor) in trajectory.segments().zip(anchors(world, trajectory)) {
-            // Nach einem Wechsel der Einflusssphäre das neue Stück noch ganz.
-            if switched {
-                horizon = horizon.max(segment.start() + span(world, Some(segment)));
+/// Zeichnet eine Zeitleiste ab jetzt (siehe `draw_trajectories`); `params`
+/// sind die Werte des Schiffs dazu.
+fn draw_trajectory(
+    gizmos: &mut Gizmos,
+    world: &World,
+    rig: &CameraRig,
+    trajectory: &Trajectory,
+    params: &VesselParams,
+    orbit_color: Color,
+    points: usize,
+) {
+    let now = world.time;
+    let first_kepler = trajectory
+        .segments()
+        .find(|s| matches!(s, Segment::Kepler { .. }));
+    let mut horizon = now + span(world, first_kepler);
+    if let Some(burn) = trajectory.burns().last() {
+        let after = span(world, trajectory.segment_after(burn));
+        horizon = horizon.max(burn.end + after);
+    }
+
+    let mut after_burn = false;
+    let mut switched = false;
+    for (segment, anchor) in trajectory.segments().zip(anchors(world, trajectory)) {
+        // Nach einem Wechsel der Einflusssphäre das neue Stück noch ganz.
+        if switched {
+            horizon = horizon.max(segment.start() + span(world, Some(segment)));
+        }
+        switched = matches!(
+            segment.end_event(),
+            Some(Event::SoiEntry(_) | Event::SoiExit)
+        );
+        if segment.start() >= horizon {
+            break;
+        }
+        let from = segment.start().max(now);
+        let place = |p: DVec3| to_view(anchor + p, rig.focus);
+        match segment {
+            Segment::Kepler {
+                start, state, end, ..
+            } => {
+                let body = &world.bodies[segment.body()];
+                // Eine geschlossene Bahn einmal ganz, eine offene bis zum
+                // Wechsel der Einflusssphäre (ohne: drei Stunden weit).
+                let span = kepler_span(world, segment, state);
+                // Vor einem geplanten Brennen die alte Bahn trotzdem
+                // ganz (nicht, wenn sie den Mond erreichen kann: Die
+                // Begegnung stünde nicht in diesem Abschnitt).
+                let end = match end {
+                    Some((_, Event::BurnStart))
+                        if !soi::reaches_moon(&world.bodies, segment.body(), state) =>
+                    {
+                        let inbound =
+                            kepler::time_to_radius_inbound(body.gm, state, body.boundary_radius())
+                                .map_or(f64::INFINITY, |dt| start + dt);
+                        soi::exit_time(&world.bodies, segment.body(), *start, state)
+                            .map_or(inbound, |exit| exit.min(inbound))
+                    }
+                    _ => segment.end(),
+                };
+                let to = end.min(from + span).min(horizon.max(from));
+                let color = if after_burn {
+                    PLANNED_COLOR
+                } else {
+                    orbit_color
+                };
+                // Pro Umlauf `points` Stützpunkte, für Teilstücke anteilig.
+                let n = ((points as f64 * (to - from) / span).ceil() as usize).max(16);
+                gizmos.linestrip(
+                    (0..=n).map(|i| {
+                        let t = from + (to - from) * i as f64 / n as f64;
+                        place(segment.state_at(&world.bodies, t).position)
+                    }),
+                    color,
+                );
             }
-            switched = matches!(
-                segment.end_event(),
-                Some(Event::SoiEntry(_) | Event::SoiExit)
-            );
-            if segment.start() >= horizon {
-                break;
+            Segment::Integrated { samples, burn, .. } => {
+                let color = if let Some(burn) = burn {
+                    after_burn = true;
+                    // Beim Landebrennen ginge die momentane Bahn nur in
+                    // den Boden und verdeckte den Weg nach unten.
+                    if segment.start() <= now && now < segment.end() && !burn.is_landing() {
+                        draw_momentary_orbit(
+                            gizmos,
+                            world,
+                            params,
+                            segment,
+                            now,
+                            anchor - rig.focus,
+                            points,
+                            rig.near,
+                        );
+                    }
+                    BURN_COLOR
+                } else {
+                    ATMOSPHERE_PATH_COLOR
+                };
+                let every = if rig.near { 1 } else { samples.len() / 400 };
+                draw_samples(
+                    gizmos,
+                    world,
+                    segment,
+                    samples,
+                    from,
+                    anchor - rig.focus,
+                    color,
+                    every,
+                );
             }
-            let from = segment.start().max(now);
-            let place = |p: DVec3| to_view(anchor + p, rig.focus);
-            match segment {
-                Segment::Kepler {
-                    start, state, end, ..
-                } => {
-                    let body = &world.bodies[segment.body()];
-                    // Eine geschlossene Bahn einmal ganz, eine offene bis zum
-                    // Wechsel der Einflusssphäre (ohne: drei Stunden weit).
-                    let span = kepler_span(world, segment, state);
-                    // Vor einem geplanten Brennen die alte Bahn trotzdem
-                    // ganz (nicht, wenn sie den Mond erreichen kann: Die
-                    // Begegnung stünde nicht in diesem Abschnitt).
-                    let end = match end {
-                        Some((_, Event::BurnStart))
-                            if !soi::reaches_moon(&world.bodies, segment.body(), state) =>
-                        {
-                            let inbound = kepler::time_to_radius_inbound(
-                                body.gm,
-                                state,
-                                body.boundary_radius(),
-                            )
-                            .map_or(f64::INFINITY, |dt| start + dt);
-                            soi::exit_time(&world.bodies, segment.body(), *start, state)
-                                .map_or(inbound, |exit| exit.min(inbound))
-                        }
-                        _ => segment.end(),
-                    };
-                    let to = end.min(from + span).min(horizon.max(from));
-                    let color = if after_burn {
-                        PLANNED_COLOR
-                    } else {
-                        orbit_color
-                    };
-                    // Pro Umlauf `points` Stützpunkte, für Teilstücke anteilig.
-                    let n = ((points as f64 * (to - from) / span).ceil() as usize).max(16);
-                    gizmos.linestrip(
-                        (0..=n).map(|i| {
-                            let t = from + (to - from) * i as f64 / n as f64;
-                            place(segment.state_at(&world.bodies, t).position)
-                        }),
-                        color,
-                    );
-                }
-                Segment::Integrated { samples, burn, .. } => {
-                    let color = if let Some(burn) = burn {
-                        after_burn = true;
-                        // Beim Landebrennen ginge die momentane Bahn nur in
-                        // den Boden und verdeckte den Weg nach unten.
-                        if segment.start() <= now && now < segment.end() && !burn.is_landing() {
-                            draw_momentary_orbit(
-                                &mut gizmos,
-                                world,
-                                segment,
-                                now,
-                                anchor - rig.focus,
-                                points,
-                            );
-                        }
-                        BURN_COLOR
-                    } else {
-                        ATMOSPHERE_PATH_COLOR
-                    };
-                    let every = if rig.near { 1 } else { samples.len() / 400 };
-                    draw_samples(
-                        &mut gizmos,
-                        world,
-                        segment,
-                        samples,
-                        from,
-                        anchor - rig.focus,
-                        color,
-                        every,
-                    );
-                }
-                Segment::Surface { .. } => {}
-                Segment::Approach { .. } => {
-                    // Anflug zum Andocken: kurz und langsam, fein gezeichnet.
-                    let (a, b) = (from, segment.end());
-                    gizmos.linestrip(
-                        (0..=64).map(|i| {
-                            let t = a + (b - a) * i as f64 / 64.0;
-                            place(segment.state_at(&world.bodies, t).position)
-                        }),
-                        TARGET_COLOR,
-                    );
-                }
+            Segment::Surface { .. } => {}
+            Segment::Approach { .. } => {
+                // Anflug zum Andocken: kurz und langsam, fein gezeichnet.
+                let (a, b) = (from, segment.end());
+                gizmos.linestrip(
+                    (0..=64).map(|i| {
+                        let t = a + (b - a) * i as f64 / 64.0;
+                        place(segment.state_at(&world.bodies, t).position)
+                    }),
+                    TARGET_COLOR,
+                );
             }
         }
     }
@@ -759,20 +801,62 @@ pub fn draw_trajectories(
 
 /// Während des Brennens: die Bahn, die das Schiff hätte, wenn das Triebwerk
 /// jetzt abschaltete (wie in KSP). Sie verformt sich sichtbar von der alten zur
-/// neuen Bahn. Abgeschnitten am Eintritt in die Luft; in der Luft gar nicht,
-/// dort zählt der berechnete Weg.
+/// neuen Bahn. Über der Luft ist das eine Keplerbahn, abgeschnitten am
+/// Eintritt in die Luft. In der Luft ist es der Freiflug, wie ihn die
+/// Zeitleiste rechnete (mit Luftwiderstand, bis zum Boden): So sieht man
+/// etwa beim Boostback den Aufsetzpunkt zur Startbasis wandern.
+#[allow(clippy::too_many_arguments)]
 fn draw_momentary_orbit(
     gizmos: &mut Gizmos,
     world: &World,
+    params: &VesselParams,
     segment: &Segment,
     now: f64,
     offset: DVec3,
     points: usize,
+    near: bool,
 ) {
     let body = &world.bodies[segment.body()];
     let state = segment.state_at(&world.bodies, now);
     let boundary = body.boundary_radius();
     if state.position.length() < boundary {
+        let mass = segment.mass_at(now);
+        let coast = Trajectory::new_flying(&world.bodies, params, segment.body(), now, state, mass);
+        for piece in coast.segments() {
+            match piece {
+                Segment::Kepler { .. } if piece.end().is_finite() => {
+                    let (from, to) = (piece.start(), piece.end());
+                    gizmos.linestrip(
+                        (0..=64).map(|i| {
+                            let t = from + (to - from) * i as f64 / 64.0;
+                            dir_to_view(piece.state_at(&world.bodies, t).position + offset)
+                        }),
+                        ORBIT_COLOR,
+                    );
+                }
+                Segment::Integrated { samples, .. } => {
+                    let every = if near { 1 } else { samples.len() / 400 };
+                    draw_samples(
+                        gizmos,
+                        world,
+                        piece,
+                        samples,
+                        piece.start(),
+                        offset,
+                        ORBIT_COLOR,
+                        every,
+                    );
+                }
+                // Am Boden, auf einer offenen Bahn oder bei einem anderen
+                // Körper: Hier endet, was sich sinnvoll zeigen lässt.
+                _ => break,
+            }
+            if piece.body() != segment.body()
+                || matches!(piece.end_event(), Some(Event::SoiEntry(_) | Event::SoiExit))
+            {
+                break;
+            }
+        }
         return;
     }
     let span = kepler::period(body.gm, &state).unwrap_or(3.0 * 3600.0);
@@ -786,6 +870,29 @@ fn draw_momentary_orbit(
         }),
         ORBIT_COLOR,
     );
+}
+
+/// Der Rückflug des Boosters für den geplanten Start eines Schiffs (siehe
+/// `sim::booster`): das Schiff, sein Startplan und die Zeitleiste dazu.
+/// Gerechnet wird nur, wenn sich der Plan ändert.
+#[derive(Resource, Default)]
+pub struct BoosterPreview(Option<(usize, LaunchPlan, Trajectory)>);
+
+pub fn update_booster_preview(sim: Res<Sim>, mut preview: ResMut<BoosterPreview>) {
+    let world = &sim.0;
+    let planned = match world.booster_status() {
+        Some(BoosterStatus::Reserved { ship } | BoosterStatus::Ascending { ship }) => world.vessels
+            [ship]
+            .trajectory
+            .launch()
+            .map(|plan| (ship, *plan)),
+        _ => None,
+    };
+    let current = preview.0.as_ref().map(|(ship, plan, _)| (*ship, *plan));
+    if planned != current {
+        preview.0 =
+            planned.and_then(|(ship, plan)| Some((ship, plan, world.booster_preview(ship)?)));
+    }
 }
 
 /// Stützpunkte eines vorausberechneten Abschnitts, jeder `every`-te.

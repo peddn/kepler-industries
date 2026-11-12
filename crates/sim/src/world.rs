@@ -609,6 +609,25 @@ impl World {
             .set_landed_mass(params.dry_mass + params.fuel_capacity);
     }
 
+    /// Der Rückflug des Boosters für den geplanten Start von `ship`: die
+    /// Zeitleiste, die er bei der Trennung bekommt (für die Vorschau).
+    pub fn booster_preview(&self, ship: usize) -> Option<Trajectory> {
+        let trajectory = &self.vessels[ship].trajectory;
+        let plan = trajectory.launch()?;
+        let booster = plan.booster?;
+        let end = plan.burn.end;
+        let (body, state) = trajectory.predicted_state(&self.bodies, end)?;
+        booster::flight(
+            &self.bodies,
+            &booster.params,
+            body,
+            end,
+            state,
+            booster.mass,
+            booster.back.node,
+        )
+    }
+
     /// Wo der Booster gerade ist (für die Anzeige).
     pub fn booster_status(&self) -> Option<BoosterStatus> {
         let booster = self.booster?;
