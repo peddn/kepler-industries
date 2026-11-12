@@ -1,6 +1,8 @@
 //! Kamerafokus: `F` richtet die Kamera auf die Auswahl (gewählter Node, sonst
 //! Schiff, sonst Zielgebiet oder Mond, ohne Auswahl den Planeten); steht sie
-//! schon darauf, geht sie zurück zum Planeten. `N` schaltet die Nahansicht.
+//! schon darauf, geht sie weiter: vom Node zu seinem Schiff, sonst zurück zum
+//! Planeten. Mit gewähltem Node wechselt `F` also Node → Schiff → Planet.
+//! `N` schaltet die Nahansicht.
 //!
 //! Der Fokus ist unabhängig von der Auswahl: Die Kamera bleibt auf ihrem
 //! Objekt und folgt ihm, bis man wieder `F` drückt. So kann man z. B. ein
@@ -104,6 +106,19 @@ pub fn name(world: &World, focus: Focus) -> String {
     }
 }
 
+/// Wohin `F` geht: auf die Auswahl (`wanted`); steht die Kamera schon dort
+/// (`current`), eine Stufe weiter. Ein gewählter Node hat zwei Stufen, damit
+/// man auch mit Node sein Schiff in den Fokus bekommt: Node → Schiff →
+/// Planet (`home`).
+fn next_focus(wanted: Focus, current: Focus, home: Focus) -> Focus {
+    match wanted {
+        Focus::Node { vessel, .. } if current == wanted => Focus::Vessel(vessel),
+        Focus::Node { vessel, .. } if current == Focus::Vessel(vessel) => home,
+        _ if current == wanted => home,
+        _ => wanted,
+    }
+}
+
 /// Tasten `F` und `N`.
 #[allow(clippy::too_many_arguments)]
 pub fn keys(
@@ -119,11 +134,7 @@ pub fn keys(
 ) {
     if keys.just_pressed(KeyCode::KeyF) {
         let wanted = focus_of_selection(&sim.0, &selection, &selected, &zone, &body);
-        let target = if wanted == rig.target {
-            rig.home()
-        } else {
-            wanted
-        };
+        let target = next_focus(wanted, rig.target, rig.home());
         rig.set_target(target);
     }
     if keys.just_pressed(KeyCode::KeyN) {
@@ -166,4 +177,32 @@ pub fn follow(sim: Res<Sim>, drag: Res<Drag>, mut rig: ResMut<CameraRig>) {
         }
     }
     (rig.focus, rig.center) = position(world, rig.target).unwrap_or((DVec3::ZERO, DVec3::ZERO));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `F` mit gewähltem Node: Node, dann sein Schiff, dann der Planet, dann
+    /// wieder von vorn. Ohne Node: Auswahl und Planet im Wechsel.
+    #[test]
+    fn f_cycles_node_vessel_planet() {
+        let home = Focus::Body(1);
+        let node = Focus::Node {
+            vessel: 2,
+            time: 600.0,
+        };
+        let ship = Focus::Vessel(2);
+        assert_eq!(next_focus(node, home, home), node);
+        assert_eq!(next_focus(node, node, home), ship);
+        assert_eq!(next_focus(node, ship, home), home);
+        // Von woanders (anderes Schiff, Zielgebiet) immer zuerst zum Node.
+        assert_eq!(next_focus(node, Focus::Vessel(0), home), node);
+        assert_eq!(next_focus(node, Focus::Zone(0), home), node);
+
+        assert_eq!(next_focus(ship, home, home), ship);
+        assert_eq!(next_focus(ship, ship, home), home);
+        assert_eq!(next_focus(Focus::Zone(0), ship, home), Focus::Zone(0));
+        assert_eq!(next_focus(home, home, home), home);
+    }
 }
