@@ -34,6 +34,8 @@ pub enum LogKind {
     LandingBurn,
     /// Das Basisschiff hat die Basis mit dieser Nummer gegründet.
     BaseFounded { base: usize },
+    /// Das Schiff wurde bestellt und steht an der Startbasis.
+    Ordered,
     /// Alle Bauteile sind da: Die Basis ist fertig.
     BaseCompleted { base: usize },
     /// Brennschluss und die Bahn danach (Apoapsis `None` bei offener Bahn).

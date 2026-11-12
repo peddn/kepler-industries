@@ -4,6 +4,7 @@
 //! vollständig im Crate `sim`; hier wird sie nur gelesen und vorangetrieben.
 
 mod camera;
+mod depot;
 mod dv_bar;
 mod focus;
 mod fracht;
@@ -51,6 +52,8 @@ impl TimeWarp {
 /// Startoptionen von der Kommandozeile.
 #[derive(Resource, Default, Clone)]
 struct Options {
+    /// Statt des Spielbeginns die Demo mit Schiffen laden (`scenario::demo`).
+    demo: bool,
     /// Bild speichern und beenden.
     screenshot: Option<String>,
     /// Spielzeit in s, bis zu der vor dem Start vorgerechnet wird.
@@ -93,6 +96,10 @@ fn parse_options() -> Options {
         // Schalter ohne Wert.
         if arg == "--near" {
             options.near = true;
+            continue;
+        }
+        if arg == "--demo" {
+            options.demo = true;
             continue;
         }
         let value = args.next();
@@ -166,7 +173,9 @@ fn parse_options() -> Options {
                      \x20         --launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM  --target SCHIFF,ZIEL\n\
                      \x20         --target-body SCHIFF,KÖRPER\n\
                      \x20         --focus SCHIFF  --focus-zone ZIELGEBIET  --focus-body KÖRPER\n\
-                     \x20         --near  --dock SCHIFF"
+                     \x20         --near  --dock SCHIFF\n\
+                     \x20         --demo (Schiffe und Zielgebiete zum Ausprobieren; die\n\
+                     \x20         Schiffsnummern der anderen Optionen gelten dafür)"
                 );
                 std::process::exit(2);
             }
@@ -179,7 +188,15 @@ fn main() {
     let options = parse_options();
 
     // Start, Nodes und Ziel gelten ab Spielbeginn; `--time` führt sie dann aus.
-    let mut world = sim::scenario::demo();
+    let mut world = if options.demo {
+        sim::scenario::demo()
+    } else {
+        sim::scenario::start()
+    };
+    // Spielbeginn ohne Schiffe: Die Startbasis ist gewählt, ihre Karte
+    // (Schiffe bestellen) also gleich offen.
+    let zone =
+        node_ui::SelectedZone((world.vessels.is_empty() && !world.zones.is_empty()).then_some(0));
     let mut selection = node_ui::Selection(options.select);
     // Zuerst der Start, damit Nodes danach auf seiner Bahn liegen können.
     if let Some((vessel, mut launch, kick)) = options.launch {
@@ -269,7 +286,7 @@ fn main() {
     .insert_resource(rig)
     .insert_resource(selection)
     .init_resource::<node_ui::SelectedNode>()
-    .init_resource::<node_ui::SelectedZone>()
+    .insert_resource(zone)
     .init_resource::<node_ui::SelectedBody>()
     .init_resource::<panel::PanelShown>()
     .init_resource::<dv_bar::BarShown>()
@@ -291,7 +308,7 @@ fn main() {
                 rendezvous::setup_labels,
                 // Die Karten "Verbund" und "Fracht & Basis" hängen sich in
                 // die Seitenleiste.
-                (panel::setup, verbund::setup, fracht::setup).chain(),
+                (panel::setup, verbund::setup, fracht::setup, depot::setup).chain(),
                 dv_bar::setup,
                 hud::setup,
                 status_bar::setup,
@@ -318,20 +335,16 @@ fn main() {
                 panel::buttons,
                 verbund::buttons,
                 fracht::buttons,
+                depot::buttons,
                 node_ui::input,
                 rendezvous::update,
             )
                 .chain(),
-            (
-                view::spawn_base_markers,
-                view::sync_markers,
-                view::aim_sunlight,
-            )
-                .chain(),
+            (view::spawn_markers, view::sync_markers, view::aim_sunlight).chain(),
             node_ui::draw,
             node_ui::sync_label,
             rendezvous::sync_labels,
-            (panel::sync, verbund::sync, fracht::sync),
+            (panel::sync, verbund::sync, fracht::sync, depot::sync),
             panel::hover,
             dv_bar::sync,
             view::draw_planet_grid,

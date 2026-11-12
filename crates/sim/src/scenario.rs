@@ -210,17 +210,18 @@ pub const BASE_SHIP: VesselParams = VesselParams {
 const FREIGHTER_FUEL_IN_ORBIT: f64 = 6_900.0;
 const BASE_SHIP_FUEL_IN_ORBIT: f64 = 3_100.0;
 
-/// Das Sonnensystem (`solar_system`), auf Zorb eine Startbasis, zwei
-/// Satelliten: einer stabil oberhalb der Atmosphäre, einer zu tief abgesetzt. Ohne Eingriff bremst die Luft ihn bei
-/// jedem Durchgang ab, bis er abstürzt. Mit einem Manöver an der Apoapsis
-/// lässt er sich retten. Dazu eine Fähre an der Startbasis, die starten kann,
-/// und eine vollgetankte Fähre im Orbit für den Flug zum Mond.
-pub fn demo() -> World {
+/// Zorit im Lager der Startbasis zu Spielbeginn (kg): genau, was eine Basis
+/// kostet. Ein Basisschiff, ein Frachter und 4 t Bauteile (der Frachter
+/// fliegt dafür zweimal).
+pub const START_ZORIT: f64 = 3_000.0;
+
+/// Spielbeginn: das Sonnensystem (`solar_system`), auf Zorb die Startbasis
+/// mit ihrem Zielgebiet und `START_ZORIT` im Lager. Keine Schiffe: Man
+/// bestellt, was man braucht (siehe `base`).
+pub fn start() -> World {
     let mut world = World::new(solar_system());
     world.home = ZORB;
-    let planet = &world.bodies[ZORB];
-    let (gm, r) = (planet.gm, planet.radius);
-
+    world.zorit = START_ZORIT;
     let pad = SurfacePoint::from_degrees(5.0, -20.0);
     world.bases.push(Base {
         name: "Startbasis".into(),
@@ -231,6 +232,28 @@ pub fn demo() -> World {
         delivered: 0.0,
         store: None,
     });
+    world.zones.push(LandingZone {
+        name: "Startbasis".into(),
+        body: ZORB,
+        center: pad,
+        radius: ZONE_RADIUS,
+    });
+    world
+}
+
+/// Für Tests und zum Ausprobieren (`--demo`): wie `start`, aber mit leerem
+/// Lager, weiteren Zielgebieten und Schiffen. Zwei Satelliten: einer stabil
+/// oberhalb der Atmosphäre, einer zu tief abgesetzt. Ohne Eingriff bremst die
+/// Luft ihn bei jedem Durchgang ab, bis er abstürzt. Mit einem Manöver an der
+/// Apoapsis lässt er sich retten. Dazu eine Fähre an der Startbasis, die
+/// starten kann, eine vollgetankte Fähre im Orbit für den Flug zum Mond und
+/// dahinter zwei Basisschiffe und zwei beladene Frachter.
+pub fn demo() -> World {
+    let mut world = start();
+    world.zorit = 0.0;
+    let planet = &world.bodies[ZORB];
+    let (gm, r) = (planet.gm, planet.radius);
+    let pad = world.bases[0].location;
 
     let stable = state_from_apsides(
         gm,
@@ -316,12 +339,11 @@ pub fn demo() -> World {
         world.load_cargo(vessel, cargo);
     }
 
-    // Zielgebiete: an der Startbasis, eines etwa 60 km östlich zum Üben eines
-    // Hops (Kurs 90°, Ziel-Apoapsis rund 27 km) und eines weit weg im Osten,
-    // zum Anfliegen aus dem Orbit.
+    // Weitere Zielgebiete: eines etwa 60 km östlich der Startbasis zum Üben
+    // eines Hops (Kurs 90°, Ziel-Apoapsis rund 27 km) und eines weit weg im
+    // Osten, zum Anfliegen aus dem Orbit.
     // Auf Zoon: die Nahseite (Zorb im Zenit) und die Fernseite.
     for (name, body, point) in [
-        ("Startbasis", ZORB, pad),
         ("Übungsfeld", ZORB, SurfacePoint::from_degrees(4.94, -14.2)),
         ("Messfeld Ost", ZORB, SurfacePoint::from_degrees(2.0, 60.0)),
         ("Nahseite", ZOON, SurfacePoint::from_degrees(0.0, 0.0)),

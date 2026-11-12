@@ -11,7 +11,7 @@
 
 use crate::Sim;
 use crate::hud::{self, UiFont, format_span, km};
-use crate::node_ui::{Selection, UiMessage};
+use crate::node_ui::{SelectedZone, Selection, UiMessage};
 use crate::rendezvous::{Rendezvous, TARGET_COLOR, TargetInfo, TransferInfo, distance_text};
 use crate::status_bar::{STATUS_HEIGHT, StatusBar, over_status};
 use bevy::prelude::*;
@@ -661,6 +661,17 @@ pub fn sync(
             Without<LaunchRows>,
         ),
     >,
+    mut target_card: Single<
+        &mut Node,
+        (
+            With<TargetCard>,
+            Without<DockButton>,
+            Without<LaunchCard>,
+            Without<Panel>,
+            Without<LaunchRows>,
+        ),
+    >,
+    zone: Res<SelectedZone>,
     mut target_texts: Query<
         (&TargetText, &mut Text, &mut TextColor),
         (
@@ -691,12 +702,20 @@ pub fn sync(
 ) {
     let world = &sim.0;
     let Some(vessel) = panel_vessel(world, &selection) else {
-        shown.0 = false;
-        panel.display = Display::None;
+        // Ohne Schiff bleibt die Leiste nur für die Karte "Startbasis".
+        shown.0 = crate::depot::depot_selected(world, &zone, &selection);
+        panel.display = if shown.0 {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        launch_card.display = Display::None;
+        target_card.display = Display::None;
         return;
     };
     shown.0 = true;
     panel.display = Display::Flex;
+    target_card.display = Display::Flex;
 
     let info = rendezvous.target.as_ref();
     let trajectory = &world.vessels[vessel].trajectory;

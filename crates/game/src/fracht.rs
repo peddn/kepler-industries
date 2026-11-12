@@ -15,7 +15,7 @@ use crate::panel::{
 use crate::status_bar::{StatusBar, over_status};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use sim::base::SITE_RADIUS;
+use sim::base::{PARTS_PRICE, SITE_RADIUS};
 use sim::{BaseKind, Segment, World};
 
 #[derive(Component)]
@@ -49,7 +49,14 @@ enum Action {
 }
 
 impl Action {
-    fn label(self) -> &'static str {
+    /// Beschriftung; beim Laden von Bauteilen mit dem Preis für das, was in
+    /// den Frachtraum passt.
+    fn label(self, world: &World, vessel: usize) -> String {
+        if self == Action::LoadParts {
+            let v = &world.vessels[vessel];
+            let room = v.params.cargo_capacity - v.cargo.total();
+            return format!("Bauteile laden ({} Zorit)", tons_fine(room * PARTS_PRICE));
+        }
         match self {
             Action::FoundMine => "Mine gründen",
             Action::FoundStation => "Tankstelle gründen",
@@ -59,7 +66,16 @@ impl Action {
             Action::LoadParts => "Bauteile laden",
             Action::DeliverZorit => "Zorit abladen",
         }
+        .into()
     }
+}
+
+/// Tonnen mit höchstens zwei Nachkommastellen (Preise, Lagerstand der
+/// Startbasis): "1 t", "0,5 t", "0,25 t".
+pub fn tons_fine(kg: f64) -> String {
+    let number = format!("{:.2}", kg / 1_000.0);
+    let number = number.trim_end_matches('0').trim_end_matches('.');
+    format!("{} t", number.replace('.', ","))
 }
 
 /// Tonnen mit einer Nachkommastelle.
@@ -168,12 +184,8 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
             let stock = world.base_stock(k).floor();
             let per_hour = rate * 3_600.0;
             match base.kind {
+                // Das Lager der Startbasis zeigt ihre eigene Karte.
                 BaseKind::Depot => {
-                    lines.push(format!(
-                        "{}:\n  Zorit im Lager {}\n  Bauteile und Treibstoff frei",
-                        base.name,
-                        tons(world.zorit)
-                    ));
                     lines.push(tank());
                 }
                 BaseKind::FuelStation => {
@@ -263,7 +275,9 @@ pub fn sync(
     for (which, mut text) in &mut texts {
         let value = match which {
             FrachtText::Lines => lines.join("\n"),
-            FrachtText::Button(k) => actions.get(*k).map_or("", |a| a.label()).into(),
+            FrachtText::Button(k) => actions
+                .get(*k)
+                .map_or(String::new(), |a| a.label(world, vessel)),
         };
         if text.0 != value {
             text.0 = value;
@@ -329,7 +343,7 @@ pub fn buttons(
             format!(
                 "{name}: {} Zorit abgeladen, im Lager {}",
                 tons(kg),
-                tons(world.zorit)
+                tons_fine(world.zorit)
             )
         }),
     };

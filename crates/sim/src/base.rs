@@ -5,8 +5,14 @@
 //!   Frachtraum; sie zählen beim Fliegen als Masse. Treibstoff ist der dritte
 //!   Stoff und liegt im Tank.
 //! - **Startbasis** (auf dem Heimatplaneten): Schiffe in ihrem Umkreis laden
-//!   Bauteile, tanken und laden Zorit ab (vorerst alles frei). Das Zorit
-//!   kommt ins Lager der Startbasis (`World::zorit`).
+//!   Bauteile, tanken und laden Zorit ab. Das Zorit kommt ins Lager der
+//!   Startbasis (`World::zorit`).
+//! - **Preise:** Mit Zorit aus dem Lager bezahlt man Bauteile
+//!   (`PARTS_PRICE`) und bestellt neue Schiffe (`World::order_ship`), die
+//!   dann vollgetankt an der Startbasis stehen. Treibstoff ist dort frei.
+//!   Das Spiel beginnt mit einem Vorrat, der genau für eine Basis reicht
+//!   (`scenario::START_ZORIT`). Es gibt keine Absicherung: Wer damit keine
+//!   Mine fertig bekommt, steckt fest.
 //! - **Gründen:** Ein Basisschiff, das auf einem Körper außer dem
 //!   Heimatplaneten steht, gründet dort eine Tankstelle oder eine Mine und
 //!   wird ihr Fundament; es fliegt dann nicht mehr. Der Landepunkt wird zur
@@ -31,8 +37,9 @@
 use crate::body::{BodyId, SurfacePoint};
 use crate::landing::LandingZone;
 use crate::log::{LogEntry, LogKind};
+use crate::scenario::{BASE_SHIP, FREIGHTER};
 use crate::trajectory::Segment;
-use crate::world::{Base, BaseKind, Store, World};
+use crate::world::{Base, BaseKind, Store, VesselParams, World};
 
 /// Bauteile für eine fertige Basis in kg.
 pub const BASE_KIT: f64 = 4_000.0;
@@ -46,6 +53,34 @@ pub const FUEL_STORAGE: f64 = 8_000.0;
 /// Eine Mine baut so viel Zorit ab (kg/s; 100 kg pro Stunde). Wie viel ihr
 /// Lager fasst, hängt vom Körper ab (`Body::zorit`).
 pub const ZORIT_RATE: f64 = 100.0 / 3_600.0;
+
+/// Ein Basisschiff oder ein Frachter kostet so viel Zorit (kg).
+pub const SHIP_PRICE: f64 = 1_000.0;
+/// Ein kg Bauteile kostet so viel Zorit (kg).
+pub const PARTS_PRICE: f64 = 0.25;
+
+/// Schiffe, die man an der Startbasis bestellt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShipKind {
+    BaseShip,
+    Freighter,
+}
+
+impl ShipKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            ShipKind::BaseShip => "Basisschiff",
+            ShipKind::Freighter => "Frachter",
+        }
+    }
+
+    pub fn params(self) -> VesselParams {
+        match self {
+            ShipKind::BaseShip => BASE_SHIP,
+            ShipKind::Freighter => FREIGHTER,
+        }
+    }
+}
 
 /// Warum ein Befehl an Fracht oder Basis nicht geht.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,6 +107,8 @@ pub enum BaseError {
     NothingToLoad,
     /// Tank voll oder Lager leer.
     NothingToRefuel,
+    /// Zu wenig Zorit im Lager der Startbasis.
+    NotEnoughZorit,
 }
 
 impl std::fmt::Display for BaseError {
@@ -88,6 +125,7 @@ impl std::fmt::Display for BaseError {
             BaseError::NothingToUnload => "nichts abzuladen",
             BaseError::NothingToLoad => "Frachtraum voll oder Lager leer",
             BaseError::NothingToRefuel => "Tank voll oder Lager leer",
+            BaseError::NotEnoughZorit => "zu wenig Zorit im Lager der Startbasis",
         })
     }
 }
@@ -334,15 +372,45 @@ impl World {
         Ok(amount)
     }
 
-    /// Lädt an der Startbasis Bauteile, bis der Frachtraum voll ist. Liefert
-    /// die Menge in kg.
+    /// Bestellt ein Schiff: Es steht sofort vollgetankt an der Startbasis
+    /// (eine Bauzeit wäre wirkungslos, Regel 14). Liefert seine Nummer.
+    pub fn order_ship(&mut self, kind: ShipKind) -> Result<usize, BaseError> {
+        let depot = self
+            .bases
+            .iter()
+            .find(|b| b.kind == BaseKind::Depot)
+            .ok_or(BaseError::NoBase)?;
+        let (body, pad) = (depot.body, depot.location);
+        if SHIP_PRICE > self.zorit {
+            return Err(BaseError::NotEnoughZorit);
+        }
+        self.zorit -= SHIP_PRICE;
+        let name = format!("{}-{}", kind.label(), self.vessels.len() + 1);
+        let params = kind.params();
+        let vessel = self.spawn_landed(&name, params, params.fuel_capacity, body, pad);
+        self.log.push(LogEntry {
+            time: self.time,
+            vessel,
+            kind: LogKind::Ordered,
+        });
+        Ok(vessel)
+    }
+
+    /// Lädt an der Startbasis Bauteile: bis der Frachtraum voll ist, oder so
+    /// viel, wie das Zorit im Lager bezahlt (`PARTS_PRICE`). Liefert die
+    /// Menge in kg.
     pub fn load_parts(&mut self, vessel: usize) -> Result<f64, BaseError> {
         self.parked_at(vessel, BaseKind::Depot)?;
         let v = &self.vessels[vessel];
-        let amount = v.params.cargo_capacity - v.cargo.total();
-        if amount <= 0.0 {
+        let room = v.params.cargo_capacity - v.cargo.total();
+        if room <= 0.0 {
             return Err(BaseError::NothingToLoad);
         }
+        let amount = room.min(self.zorit / PARTS_PRICE);
+        if amount <= 0.0 {
+            return Err(BaseError::NotEnoughZorit);
+        }
+        self.zorit = (self.zorit - amount * PARTS_PRICE).max(0.0);
         self.change_mass(vessel, amount);
         self.vessels[vessel].cargo.parts += amount;
         Ok(amount)

@@ -16,7 +16,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 9;
+pub const SAVE_VERSION: u32 = 10;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.

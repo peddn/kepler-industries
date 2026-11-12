@@ -8,14 +8,27 @@ Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKT
 
 ## Stand
 
-Die Sonne Zunn mit zwei Planeten: Zorb, Heimat der Zorbels, mit
-Atmosphäre und den Monden Zoon und Zimm, weiter draußen Nura; eine Startbasis, zwei Satelliten mit
-Triebwerk, eine Fähre am Boden und eine im Orbit. „Relais-1" kreist stabil oberhalb der Atmosphäre.
-„Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang durch die Luft
-abgebremst (orange) und stürzt nach einigen Umläufen ab, außer man rettet sie
-mit einem Manöver. „Fähre-3" steht an der Startbasis und kann starten.
-„Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator, bereit für
-den Flug zum Mond.
+Die Sonne Zunn mit zwei Planeten: Zorb, Heimat der Zorbels, mit Atmosphäre
+und den Monden Zoon und Zimm, weiter draußen Nura.
+
+**Spielbeginn:** Es gibt nur die Startbasis auf Zorb mit 3 t Zorit im Lager
+und keine Schiffe. Der Vorrat reicht genau für eine Basis: ein Basisschiff,
+ein Frachter und 4 t Bauteile (der Frachter fliegt dafür zweimal). Bestellt
+wird in der Karte „Startbasis" der Seitenleiste; sie ist zu Beginn offen.
+Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
+(etwa als Erstes eine Tankstelle baut oder ein Schiff verliert), steckt fest.
+
+**Demo (`--demo`):** Zum Ausprobieren und für alle Beispiele in diesem README,
+die Schiffe mit Nummer nennen (`--node`, `--select`, `--launch`, `--target`
+und so weiter), lädt `cargo run -p game -- --demo …` statt des Spielbeginns
+eine Welt mit Schiffen, weiteren Zielgebieten und leerem Lager: zwei
+Satelliten mit Triebwerk, eine Fähre am Boden und eine im Orbit, dazu zwei
+Basisschiffe und zwei beladene Frachter. „Relais-1" kreist stabil oberhalb
+der Atmosphäre. „Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang
+durch die Luft abgebremst (orange) und stürzt nach einigen Umläufen ab, außer
+man rettet sie mit einem Manöver. „Fähre-3" steht an der Startbasis und kann
+starten. „Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator,
+bereit für den Flug zum Mond.
 
 **Fracht und Basen (der Kreislauf der Wirtschaft):** Es gibt drei Stoffe:
 Bauteile und Zorit (ein Erz, das es auf Zorb nicht gibt) sind Fracht und
@@ -24,7 +37,12 @@ teilen sich den Frachtraum, Treibstoff liegt im Tank. Fracht zählt als Masse
 Basis" der Seitenleiste.
 
 - **Startbasis:** Schiffe in ihrem Zielgebiet laden Bauteile, tanken und
-  laden Zorit ab (vorerst alles frei; das Zorit kommt in ihr Lager).
+  laden Zorit ab; das Zorit kommt in ihr Lager. Die Karte „Startbasis"
+  (ein Schiff dort oder ihr Zielgebiet gewählt) zeigt das Lager und bestellt
+  neue Schiffe, die sofort vollgetankt dort stehen.
+- **Preise in Zorit:** Basisschiff 1 t, Frachter 1 t, Bauteile 0,25 t je
+  Tonne; Treibstoff ist an der Startbasis frei. Eine neue Basis kostet damit
+  2 t Zorit.
 - **Gründen:** Ein Basisschiff, das auf einem Körper außer Zorb gelandet ist,
   gründet dort eine **Mine** oder eine **Tankstelle** und wird ihr Fundament
   (es fliegt dann nicht mehr). Der Landepunkt wird zur Zone mit 5 km Radius,
@@ -40,11 +58,11 @@ Basis" der Seitenleiste.
 
 Frachter (2 t Frachtraum) und Basisschiff starten voll beladen von Zorb und
 kommen bis Zoon; der Frachter kommt von dort ohne Tanken mit Zorit zurück
-(auf Zorb bremsen Luft und Fallschirm). Zum schnellen Ausprobieren kreist
-die Startausstattung schon um Zorb, hinter Mondfähre-4: „Basisschiff-5",
+(auf Zorb bremsen Luft und Fallschirm). Zum schnellen Ausprobieren kreisen
+in der Demo schon Schiffe um Zorb, hinter Mondfähre-4: „Basisschiff-5",
 „Basisschiff-6" und die Frachter „Frachter-7" und „Frachter-8" mit je 2 t
 Bauteilen. Alle vier direkt nach Zoon:
-`--node 5,600,845,0,0 --node 6,620,845,0,0 --node 7,610,845,0,0 --node 4,647.5,845,0,0`;
+`--demo --node 5,600,845,0,0 --node 6,620,845,0,0 --node 7,610,845,0,0 --node 4,647.5,845,0,0`;
 Basisschiff-5 und beide Frachter landen nach knapp 8 Stunden nebeneinander
 bei 153° Ost, Basisschiff-6 bei 157° West (mit `--time 28300` stehen sie
 schon dort).
@@ -79,7 +97,7 @@ dazu die engste Annäherung der geplanten Bahn an das Ziel, auch wenn sie
 seine Einflusssphäre noch verfehlt; in der Karte markieren zwei Ringe mit
 Linie die Stelle. So sieht man beim Ziehen am Node, ob es besser wird, bis
 aus „Annäherung“ eine „Begegnung“ mit Periapsis wird. Zum Ausprobieren:
-`--select 3 --target-body 3,4 --node 3,163400,1080,0,0 --focus-body 0
+`--demo --select 3 --target-body 3,4 --node 3,163400,1080,0,0 --focus-body 0
 --camera 30,60,55000000` verfehlt Nura um 126.000 km; mit 1.090 m/s trifft es.
 
 Für ein Rendezvous wählt man in der Karte „Ziel“ der Seitenleiste ein
@@ -242,7 +260,7 @@ den Geistermond mit Ein- und Austritt, danach die neue Bahn um den Planeten.*
 
 *Mondfähre-4 nach der Landung auf Zoon, Start geplant mit der Voreinstellung
 ohne Luft (Wende ab 100 m mit 70°, Ziel 30 km). Nachspielen mit
-`--node 3,600,836,0,0 --node 3,24740,-380,0,0 --time 26500 --select 3
+`--demo --node 3,600,836,0,0 --node 3,24740,-380,0,0 --time 26500 --select 3
 --focus 3 --near --camera 20,25,60` und „Start planen“.*
 
 ![Sonnensystem](docs/screenshots/sonnensystem.png)
@@ -250,14 +268,20 @@ ohne Luft (Wende ab 100 m mit 70°, Ziel 30 km). Nachspielen mit
 *Mondfähre-4 (gelb, unten) auf dem Weg nach Nura: Zunn in der Mitte, innen
 Zorbs Bahn (die grüne Markierung sind Zorbs Zielgebiete), außen die von
 Nura. Die blaue Bahn um die Sonne führt in Nuras Einflusssphäre (Ringe
-rechts unten), links steht die Begegnung in 131 Tagen. Nachspielen mit `--node 3,163400,1090,0,0 --time 3000000
+rechts unten), links steht die Begegnung in 131 Tagen. Nachspielen mit `--demo --node 3,163400,1090,0,0 --time 3000000
 --select 3 --focus-body 0 --camera 30,60,55000000`.*
 
 ![Mond](docs/screenshots/mond.png)
 
 *Der Mond ist gewählt: Bahn um den Planeten, Einflusssphäre gelb, links seine
-Angaben. Nachspielen mit `--time 22100 --camera 30,50,30000` und einem Klick
+Angaben. Nachspielen mit `--demo --time 22100 --camera 30,50,30000` und einem Klick
 auf den Mond.*
+
+![Startbasis](docs/screenshots/startbasis.png)
+
+*Spielbeginn: Der bestellte Frachter-1 steht vollgetankt an der Startbasis.
+Die Karte „Startbasis“ zeigt das Zorit im Lager und die Preise, „Fracht &
+Basis“ den Preis für eine Ladung Bauteile.*
 
 ![Basis](docs/screenshots/basis.png)
 
@@ -351,6 +375,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
+| Seitenleiste „Startbasis“ (Schiff an der Startbasis oder ihr Zielgebiet gewählt) | Zorit im Lager, Preise; „Basisschiff bestellen“, „Frachter bestellen“ |
 | Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; je nach Lage „Mine gründen“ / „Tankstelle gründen“, „Bauteile abladen“, „Tanken“, „Zorit laden“, an der Startbasis „Bauteile laden“, „Tanken“, „Zorit abladen“ |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
@@ -368,7 +393,7 @@ nach außen/innen.
 ### Optionen
 
 ```sh
-cargo run -p game -- --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,4200
+cargo run -p game -- --demo --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,4200
 ```
 
 - `--time SEKUNDEN`: bis zu dieser Spielzeit vorrechnen; Start, Nodes und Ziel
@@ -396,7 +421,7 @@ Rendezvous Fähre-3 → Relais-1 aus dem Bild oben (Start im Startfenster,
 Zirkularisieren, Aufholen):
 
 ```sh
-cargo run -p game -- --time 11100 --launch 2,11299,120,1.5,100 --target 2,0 \
+cargo run -p game -- --demo --time 11100 --launch 2,11299,120,1.5,100 --target 2,0 \
   --node 2,11612,682,0,0 --node 2,12590,102.25,0,0
 ```
 
@@ -404,14 +429,14 @@ Mit Andocken (`--dock 2`) und dann mitten im Anflug aus der Nähe (Bild
 „Andocken aus der Nähe“):
 
 ```sh
-cargo run -p game -- --time 21772 --launch 2,11299,120,1.5,100 --target 2,0 \
+cargo run -p game -- --demo --time 21772 --launch 2,11299,120,1.5,100 --target 2,0 \
   --node 2,11612,682,0,0 --node 2,12590,102.25,0,0 --dock 2 --focus 2 --near --camera 40,20,0.6
 ```
 
 Dasselbe ohne Andocken kurz vor der Annäherung in der Nahansicht (Bild „Nahansicht“):
 
 ```sh
-cargo run -p game -- --time 21570 --launch 2,11299,120,1.5,100 --target 2,0 \
+cargo run -p game -- --demo --time 21570 --launch 2,11299,120,1.5,100 --target 2,0 \
   --node 2,11612,682,0,0 --node 2,12590,102.25,0,0 --focus 2 --near --camera 50,25,6
 ```
 
