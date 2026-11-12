@@ -54,7 +54,7 @@ pub fn tons_fine(kg: f64) -> String {
 }
 
 /// Tonnen mit einer Nachkommastelle.
-fn tons(kg: f64) -> String {
+pub fn tons(kg: f64) -> String {
     format!("{:.1} t", kg / 1_000.0).replace('.', ",")
 }
 
@@ -165,16 +165,20 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
                 }
                 BaseKind::FuelStation => {
                     lines.push(format!(
-                        "{}:\n  Treibstoff {stock:.0} von {capacity:.0} kg\n  (+{per_hour:.0} kg pro Stunde)",
-                        base.name
+                        "{}:\n  Treibstoff {} von {}\n  (+{per_hour:.0} kg pro Stunde)",
+                        base.name,
+                        tons(stock),
+                        tons(capacity)
                     ));
                     if v.foundation_of.is_none() {
                         lines.push(tank());
                     }
                 }
                 BaseKind::Mine => lines.push(format!(
-                    "{}:\n  Zorit {stock:.0} von {capacity:.0} kg\n  (+{per_hour:.0} kg pro Stunde)",
-                    base.name
+                    "{}:\n  Zorit {} von {}\n  (+{per_hour:.0} kg pro Stunde)",
+                    base.name,
+                    tons(stock),
+                    tons(capacity)
                 )),
             }
         }

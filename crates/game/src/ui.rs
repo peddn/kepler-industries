@@ -25,7 +25,7 @@ use crate::top_bar::{self, Panels};
 use crate::verbund::UndockChoice;
 use crate::{
     Sim, TimeWarp, depot, dv_bar, fracht, hud, left_bar, maneuver_card, start_card, target_card,
-    verbund,
+    verbund, wirtschaft,
 };
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -162,6 +162,14 @@ impl Selected<'_> {
         self.zone.0 = None;
         self.body.0 = None;
     }
+
+    /// Wählt ein Zielgebiet (und nichts sonst).
+    pub fn select_zone(&mut self, zone: usize) {
+        self.vessel.0 = None;
+        self.node.0 = None;
+        self.zone.0 = Some(zone);
+        self.body.0 = None;
+    }
 }
 
 /// Der Teil des Fensters, den die Leisten frei lassen: die Karte. Schreibt
@@ -271,6 +279,7 @@ pub fn draw(
     }
     // Zuletzt die Leiste oben: Sie liegt zwischen den Seitenleisten.
     top_bar::show(&mut root, world, &warp, &rig, &mut panels);
+    wirtschaft::show(root.ctx(), world, &mut selected, &mut panels.economy);
 
     // Was die Leisten frei lassen, gehört der Karte: Warnungen und
     // Beschriftungen werden darauf begrenzt gezeichnet.
