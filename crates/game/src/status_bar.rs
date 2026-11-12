@@ -47,6 +47,14 @@ fn crash_reason(reason: &Crash) -> String {
 
 /// Text und Farbe zu einem Eintrag des Protokolls.
 fn entry_line(world: &World, entry: &LogEntry) -> Line {
+    // Technologien gehören zu keinem Schiff.
+    if let LogKind::Unlocked { tech } = entry.kind {
+        return Line {
+            time: entry.time,
+            text: format!("Freigeschaltet: {}", tech.spec().name),
+            color: LANDED_COLOR,
+        };
+    }
     let name = &world.vessels[entry.vessel].name;
     // Auf dem Heimatplaneten ohne Namen, sonst " auf Zoon".
     let on = |body: usize| match body {
@@ -148,6 +156,7 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
                 LANDED_COLOR,
             )
         }
+        LogKind::Unlocked { tech } => (tech.spec().name.into(), LANDED_COLOR),
         LogKind::Separated { ship } => (
             format!("trennt sich von {}", world.vessels[*ship].name),
             TEXT_COLOR,

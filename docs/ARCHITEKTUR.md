@@ -940,18 +940,18 @@ noch 440 kN, damit ihre Beispiele bleiben, wie sie sind.
 |---|---|---|---|---|---|
 | Klein | 1.200 kg | 10 t | 1 | 0,4 t | von Anfang an |
 | Mittel | 1.900 kg | 16 t | 2 | 0,6 t | von Anfang an |
-| Groß | 3.800 kg | 32 t | 4 | 1,2 t | 20 GB, braucht B-2 |
+| Groß | 3.800 kg | 32 t | 4 | 1,2 t | 30 GB (voll nur auf dem B-2) |
 
 | Triebwerk | Schub | Ausströmgeschw. | Masse | Preis | frei |
 |---|---|---|---|---|---|
 | Z-1 | 250 kN | 3.200 m/s | 300 kg | 0,2 t | von Anfang an |
 | Z-2 | 250 kN | 3.600 m/s | 350 kg | 0,4 t | 30 GB |
-| Z-3 | 250 kN | 4.000 m/s | 400 kg | 0,8 t | 80 GB, braucht Z-2 |
+| Z-3 | 250 kN | 4.000 m/s | 400 kg | 0,8 t | 100 GB, braucht Z-2 |
 
 | Booster | Leermasse | Treibstoff | Schub | trägt | frei |
 |---|---|---|---|---|---|
 | B-1 | 3 t | 30 t | 760 kN | etwa 19 t | von Anfang an |
-| B-2 | 6 t | 60 t | 1.520 kN | etwa 38 t (geschätzt) | 30 GB, 3 t Zorit |
+| B-2 | 6 t | 60 t | 1.520 kN | etwa 38 t (37 t gemessen) | 50 GB, 3 t Zorit |
 
 Der Innenraum teilt sich per Regler in Tank und Fracht (0,5-t-Schritte, nur
 an der Startbasis änderbar). Feste Einbauten belegen zuerst Platz: das
@@ -988,6 +988,17 @@ gutgeschrieben.
 - *Vorschau statt Fummeln:* Die Karte „Manöver" zeigt beim Node, welche
   offenen Aufgaben die Bahn danach erfüllt (`World::tasks_met_by`, dieselbe
   Prüfung wie beim Zählen).
+- *Techtree* (`sim::tech`; gebaut, vorerst als Liste mit Voraussetzungen):
+  Z-2 (30 GB), Chassis Groß (30 GB), Booster B-2 (50 GB und 3 t Zorit), Z-3
+  (100 GB, braucht Z-2); zusammen 210 von 290 GB. Freischalten geschieht
+  sofort (eine Forschungszeit wäre wirkungslos, Regel 14). Teile kommen in
+  `World::unlocked`; der B-2 ersetzt die Werte des Boosters an der
+  Startbasis, endgültig und nur, wenn er dort frei steht. Gemessen trägt er
+  ein volles großes Chassis (37 t) und kommt zurück. Das große Chassis hat
+  keine Voraussetzung: Mit kleinem Tank fliegt es auch auf dem B-1, der
+  Editor warnt sonst.
+- *Fenster:* Daten verdienen und ausgeben liegen an einer Stelle, hinter
+  „Daten … GB" oben: Reiter Übersicht, Aufgaben, Technik.
 - *Noch offen:* Proben zurückbringen (eine neue Fracht; mehr Masse bringt
   mehr Daten, mit einer Obergrenze je Körper, damit sich Daten nicht endlos
   farmen lassen). Zufällig erzeugte Vorgaben: Der Zufall müsste in den
