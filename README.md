@@ -6,12 +6,26 @@ Laufen halten. Geschrieben in Rust mit [Bevy](https://bevy.org).
 
 Warum der Code so aufgebaut ist, steht in [`docs/ARCHITEKTUR.md`](docs/ARCHITEKTUR.md).
 
-## Stand
+## Starten
+
+Voraussetzung: Rust ≥ 1.97.1 (`rustup update`). Unter Linux die
+[Systempakete für Bevy](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md)
+(Audio- und Gamepad-Pakete werden nicht gebraucht).
+
+```sh
+cargo run -p game
+```
+
+Der erste Build dauert einige Minuten, danach geht es schnell.
+
+## Spielanleitung
 
 Die Sonne Zunn mit zwei Planeten: Zorb, Heimat der Zorbels, mit Atmosphäre
 und den Monden Zoon und Zill, weiter draußen Nura.
 
-**Spielbeginn:** Es gibt nur die Startbasis auf Zorb mit ihrem Booster, 3 t
+### Spielbeginn
+
+Es gibt nur die Startbasis auf Zorb mit ihrem Booster, 3 t
 Zorit im Lager und keine Schiffe. Der Vorrat reicht genau für eine Basis: ein Basisschiff,
 ein Frachter und 4 t Bauteile (der Frachter fliegt dafür zweimal). Bestellt
 wird in der Karte „Startbasis" der Seitenleiste nach Entwürfen; sie ist zu
@@ -20,7 +34,9 @@ Fundament einer Basis und einer Aufteilung des Innenraums in Tank und
 Fracht; daraus ergeben sich Flugwerte und Preis. Zu Beginn gibt es die
 Entwürfe „Basisschiff" und „Frachter".
 
-**Schiffseditor (Fenster „Entwürfe"):** Links die Liste der Entwürfe: einen
+### Schiffe und Entwürfe
+
+Links die Liste der Entwürfe: einen
 wählen, mit „Neu (Kopie)" einen weiteren anlegen, mit „Löschen" entfernen
 (auch die beiden vom Beginn). Rechts der gewählte Entwurf: Name, Chassis,
 Triebwerkssorte und Anzahl, Fundament und ein Regler, der den freien
@@ -36,31 +52,18 @@ bleiben, wie sie sind. Die Entwürfe gehören zum Spielstand.
 Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
 (etwa als Erstes eine Tankstelle baut oder ein Schiff verliert), steckt fest.
 
-**Aufgaben und Daten:** Neben Zorit gibt es Daten (in GB). Sie gehören dem
-Spieler, nicht einem Ort, und kommen von Aufgaben, die je einmal zählen: je
-Körper eine niedrige, eine hohe und eine polare Umlaufbahn, außer auf Zorb
-dazu eine Landung und eine fertige Basis (zusammen 290 GB). Orbitvorgaben
-sind Bereiche, keine Punktlandungen: „niedrig" heißt um Zorb die ganze Bahn
-zwischen 70 und 220 km, „hoch" ab 1.200 km, „polar" eine Bahnneigung von 80°
-bis 100°. Eine Umlaufbahn zählt, wenn ein Brennen auf ihr endet; ein
-Vorbeiflug zählt nicht, ein Absturz auch nicht. Die Karte „Manöver" zeigt
-beim Node schon vorab, welche offenen Aufgaben die Bahn danach erfüllt
-(„Erfüllt: …"). Eine Bahn darf mehrere Aufgaben zugleich erfüllen. Oben in
-der Leiste steht der Stand („Daten 15 GB"); ein Klick öffnet das Fenster
-„Wirtschaft" mit den Reitern Übersicht, Aufgaben und Technik.
+### Start und Booster
 
-**Technik (Techtree):** Im Reiter „Technik" schaltet man mit Daten frei:
-das Triebwerk Z-2 (30 GB; 3.600 statt 3.200 m/s Ausströmgeschwindigkeit),
-das Chassis Groß (30 GB; 32 t Innenraum, 4 Triebwerksplätze), den Booster
-B-2 (50 GB und 3 t Zorit; trägt Schiffe bis etwa 38 t statt 19 t) und das
-Triebwerk Z-3 (100 GB, braucht Z-2; 4.000 m/s). Freischalten gilt sofort und
-für immer; Chassis und Triebwerke sind dann im Editor wählbar. Der B-2
-ersetzt den Booster der Startbasis endgültig (nur möglich, wenn er dort frei
-steht). Er wirft kleine Schiffe steiler als der erste: Sie brauchen mit dem
-Standardprofil etwas mehr eigenes Δv, ein größerer Wendewinkel gleicht das
-aus.
+Gestartet wird mit einem Startprofil aus vier Werten: Kurs, Wendebeginn,
+Wendewinkel (so weit neigt sich das Schiff beim Wendebeginn aus der
+Senkrechten) und Ziel-Apoapsis. Eingestellt wird es in der Karte „Start“ der Seitenleiste
+rechts, die erscheint, sobald ein gelandetes Schiff gewählt ist. Die
+Voreinstellung hängt vom Körper ab: mit Luft (Zorb) Wende ab 1,5 km mit 10°,
+Ziel 100 km; ohne Luft (Zoon) ab 100 m mit 70°, Ziel 30 km. Die Vorschau zeigt den ganzen
+Aufstieg (gelb) und die Bahn danach. Den Node zum Zirkularisieren an der
+Apoapsis kann man schon vor dem Abheben setzen.
 
-**Booster:** Jeder Start von der Startbasis läuft mit dem Booster. Schiff und
+Jeder Start von der Startbasis läuft mit dem Booster. Schiff und
 Booster heben als Stapel ab, nur der Booster brennt; das Startprofil in der
 Karte „Start" gilt für den Stapel, das Schiff verbraucht dabei nichts. Bei
 Brennschluss trennen sie sich: Das Schiff fliegt allein weiter und bringt
@@ -80,63 +83,26 @@ auf Zorb außerhalb der Startbasis, starten Schiffe aus eigener Kraft. Die
 Schiffe sind dafür klein: Der Frachter fasst 14 t Treibstoff, das Basisschiff
 7 t.
 
-**Demo (`--demo`):** Zum Ausprobieren und für alle Beispiele in diesem README,
-die Schiffe mit Nummer nennen (`--node`, `--select`, `--launch`, `--target`
-und so weiter), lädt `cargo run -p game -- --demo …` den Spielbeginn mit
-weiteren Zielgebieten und mit Schiffen aus den beiden Startentwürfen, die
-schon unterwegs sind. Die Nummer im Namen ist die Nummer des Schiffs für die
-Optionen (der Booster ist Nummer 0). „Frachter-1" kreist stabil oberhalb der
-Atmosphäre. „Frachter-2" wurde zu tief abgesetzt und ist fast leer: Er wird
-bei jedem Durchgang durch die Luft abgebremst (orange) und kommt nach einigen
-Umläufen herunter, außer man rettet ihn mit einem Manöver. „Frachter-3" steht
-vollgetankt an der Startbasis, bereit zum Start auf dem Booster. „Frachter-4"
-kreist in 100 km Höhe über dem Äquator, bereit für den Flug zum Mond.
+### Manöver
 
-**Fracht und Basen (der Kreislauf der Wirtschaft):** Es gibt drei Stoffe:
-Bauteile und Zorit (ein Erz, das es auf Zorb nicht gibt) sind Fracht und
-teilen sich den Frachtraum, Treibstoff liegt im Tank. Fracht zählt als Masse
-(weniger Δv, zu sehen am Δv-Balken). Alles läuft über die Karte „Fracht &
-Basis" der Seitenleiste.
+Manöver plant man mit dem Manöver-Node wie in KSP, auch mehrere
+hintereinander als Kette: Jeder Node liegt auf der Bahn nach den vorherigen
+und wandert mit, wenn sich ein früherer ändert. Eine Kette ist sofort scharf:
+Das Schiff brennt zu den geplanten Zeitpunkten selbst, auch unter Zeitraffer.
+Ein Brennen beginnt nie vor jetzt und nie vor dem Ende des vorherigen, sonst
+rückt der Node einen Umlauf weiter. Ein Node, für den es nach einer Änderung
+keinen Platz mehr gibt (z. B. weil das Schiff vorher abstürzt), bleibt rot in
+der Liste stehen, bis es wieder passt. Gelbe Ringe auf der Bahn zeigen Beginn
+und Ende jedes Brennens. Während des Brennens zeigt die blaue Linie die momentane Bahn, die sich
+sichtbar zur geplanten (violetten) hin verformt. Endet eine Bahn am Boden,
+zeigt ein rotes Kreuz den Aufschlagpunkt.
 
-- **Startbasis:** Schiffe in ihrem Zielgebiet laden Bauteile, tanken und
-  laden Zorit ab; das Zorit kommt in ihr Lager. Die Karte „Startbasis"
-  (ein Schiff dort oder ihr Zielgebiet gewählt) zeigt das Lager und bestellt
-  neue Schiffe, die sofort vollgetankt dort stehen.
-- **Preise in Zorit:** Basisschiff 1 t, Frachter 1 t, Bauteile 0,25 t je
-  Tonne; Treibstoff ist an der Startbasis frei. Eine neue Basis kostet damit
-  2 t Zorit.
-- **Gründen:** Ein Basisschiff, das auf einem Körper außer Zorb gelandet ist,
-  gründet dort eine **Mine** oder eine **Tankstelle** und wird ihr Fundament
-  (es fliegt dann nicht mehr). Der Landepunkt wird zur Zone mit 5 km Radius,
-  sichtbar wie jedes Zielgebiet, auch in der Vorschau der Landung.
-- **Baustelle:** Sie braucht 4 t Bauteile; Frachter, die in der Zone landen,
-  laden dort ab.
-- **Tankstelle:** stellt Treibstoff her (180 kg pro Stunde, Lager 8 t);
-  Schiffe in der Zone tanken.
-- **Mine:** baut Zorit ab (100 kg pro Stunde); Frachter in der Zone laden es.
-  Wie viel ihr Lager fasst, hängt vom Körper ab (Zoon 1 t, Zill 2 t, Nura
-  4 t): Das ist die Menge pro Abholung. Weil Vorspulen nichts kostet, zählt
-  der Ertrag pro Flug, nicht pro Stunde.
+Unten zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
+ist der volle Tank, darin die geplanten Brennvorgänge der Kette (Start gelb,
+Nodes violett), dahinter der Rest (grün). Reicht der Treibstoff nicht, steht
+rot dahinter, wie viel fehlt.
 
-Frachter (2 t Frachtraum) und Basisschiff starten voll beladen von Zorb und
-kommen bis Zoon; der Frachter kommt von dort ohne Tanken mit Zorit zurück
-(auf Zorb bremsen Luft und Fallschirm). Zum schnellen Ausprobieren kreisen
-in der Demo schon Schiffe um Zorb, hinter Frachter-4: „Basisschiff-5",
-„Basisschiff-6" und die Frachter „Frachter-7" und „Frachter-8" mit je 2 t
-Bauteilen. Alle vier direkt nach Zoon:
-`--demo --node 6,600,845,0,0 --node 7,613.5,845,0,0 --node 8,602.5,845,0,0 --node 5,647.5,845,0,0`;
-Basisschiff-5 und beide Frachter landen nach knapp 8 Stunden nebeneinander
-bei 153° Ost, Basisschiff-6 bei 157° West (mit `--time 28300` stehen sie
-schon dort).
-
-Gestartet wird mit einem Startprofil aus vier Werten: Kurs, Wendebeginn,
-Wendewinkel (so weit neigt sich das Schiff beim Wendebeginn aus der
-Senkrechten) und Ziel-Apoapsis. Eingestellt wird es in der Karte „Start“ der Seitenleiste
-rechts, die erscheint, sobald ein gelandetes Schiff gewählt ist. Die
-Voreinstellung hängt vom Körper ab: mit Luft (Zorb) Wende ab 1,5 km mit 10°,
-Ziel 100 km; ohne Luft (Zoon) ab 100 m mit 70°, Ziel 30 km. Die Vorschau zeigt den ganzen
-Aufstieg (gelb) und die Bahn danach. Den Node zum Zirkularisieren an der
-Apoapsis kann man schon vor dem Abheben setzen.
+### Landen
 
 Gelandet wird über einen Node, der die Bahn in die Luft führt. Die Vorschau
 rechnet bis zum Boden, mit Fallschirm (unter 3 km). Ein Kreuz zeigt, wo das
@@ -146,24 +112,13 @@ als 5 m/s am Boden an, zündet es vorher automatisch ein Landebrennen (gelb auf
 der Bahn, „Landen“ im Δv-Balken), voller Schub gegen die Bewegung zum Boden,
 so spät, dass es knapp über dem Boden zum Stehen kommt. Das braucht Schub
 größer als das Gewicht und genug Treibstoff; sonst wird gar nicht gebremst und
-das Schiff stürzt ab: Frachter-2, der mit seinem letzten Treibstoff abbremst
-(`--demo --node 2,600,-245,0,0`), kommt am Fallschirm mit gut 6 m/s an, zu
-schnell für eine Landung. Die Anzeige nennt dann Ort (auch das Zielgebiet)
-und Grund. Wer daneben landet, kommt mit einem Hop ins Ziel: einem Start aus
+das Schiff stürzt ab (Beispiel „Absturz“ unter „Für Entwickler“). Die
+Anzeige nennt dann Ort (auch das Zielgebiet) und Grund. Wer daneben landet, kommt mit einem Hop ins Ziel: einem Start aus
 eigener Kraft mit niedriger Ziel-Apoapsis, zum Beispiel mit vollem Tank vom
 Übungsfeld 60 km östlich zurück zur Startbasis (Kurs 270°, Wendewinkel 20°,
 Ziel-Apoapsis etwa 49 km).
 
-Für den Flug zu einem Planeten oder Mond wählt man ihn in der Karte „Ziel“
-(mit ◄ ► nach den Schiffen). Sie zeigt den Phasenwinkel und wann das nächste
-Startfenster kommt (ein Richtwert aus der Hohmann-Formel, für Nura etwa 44°),
-dazu die engste Annäherung der geplanten Bahn an das Ziel, auch wenn sie
-seine Einflusssphäre noch verfehlt; in der Karte markieren zwei Ringe mit
-Linie die Stelle. So sieht man beim Ziehen am Node, ob es besser wird, bis
-aus „Annäherung“ eine „Begegnung“ mit Periapsis wird. Zum Ausprobieren:
-`--demo --select 4 --target-body 4,4 --node 4,163400,1080,0,0 --focus-body 0
---camera 30,60,55000000` verfehlt Nura um rund 109.000 km; mit 1.088,5 m/s
-trifft es.
+### Rendezvous und Andocken
 
 Für ein Rendezvous wählt man in der Karte „Ziel“ der Seitenleiste ein
 anderes Schiff (◄ ►). Dessen Bahn wird rosa. Die Karte zeigt den Abstand,
@@ -195,6 +150,8 @@ Flugrichtung und entfernt sich stetig (in 100 km Höhe etwa 6 km pro Umlauf).
 Es hat danach das Hauptschiff als Ziel, zum Wiederandocken. So lässt sich zum
 Beispiel ein Schiff im Orbit betanken.
 
+### Monde und Planeten
+
 Der Mond Zoon ist wie der Mun in KSP: 200 km Radius, Schwerkraft 1,63 m/s², keine
 Luft. Er kreist in 12.000 km Abstand über dem Äquator (Umlauf etwa 38,6 h) und
 zeigt dem Planeten immer dieselbe Seite. Um ihn liegt seine Einflusssphäre
@@ -210,10 +167,9 @@ kleine Ringe markieren Ein- und Austritt. Weil der Mond während des
 Vorbeiflugs weiterzieht, klafft beim Austritt eine Lücke. Links steht die
 nächste Begegnung („Begegnung: Zoon in 05:07:10, Periapsis 210,6 km“), im Flug
 „Orbit um Zoon“; Nodes um den Mond gelten relativ zu ihm, und in der
-Nahansicht liegt der Mond unten. Zum Ausprobieren: Frachter-4 mit 835 m/s
-prograd nach 10 Minuten (`--node 4,600,835,0,0`) fliegt in etwa 200 km Höhe
-am Mond vorbei; mit einem Brennen gegen die Flugrichtung an der Periapsis
-bleibt er bei ihm. Gelandet wird auf Zoon wie auf Zorb über einen Node, nur
+Nahansicht liegt der Mond unten. Von der Parkbahn führen rund 835 m/s
+prograd am Mond vorbei (Beispiel „Vorbeiflug an Zoon“); mit einem Brennen
+gegen die Flugrichtung an der Periapsis bleibt das Schiff bei ihm. Gelandet wird auf Zoon wie auf Zorb über einen Node, nur
 ohne Luftbremsung und Fallschirm: Das Landebrennen bremst die ganze
 Geschwindigkeit, aus einer niedrigen Bahn mit viel Schub etwa 550 m/s. Mit
 wenig Schub kostet es mehr (bei Schub/Gewicht 1,5 etwa 700 m/s): Es beginnt
@@ -237,9 +193,8 @@ Keplerbahnen aus sechs Bahnelementen (große Halbachse, Exzentrizität,
 Neigung, aufsteigender Knoten, Argument der Periapsis, mittlere Anomalie);
 die Karte zeigt die Ellipse, die Mondkarte Abstand und Neigung. Weil Zills
 Bahn geneigt ist, steht er meist weit über oder unter der Äquatorebene:
-Frachter-4 mit 936 m/s prograd nach 880 s (`--demo --node 4,880,936,0,0`)
-erreicht nach gut 4 Tagen seine Einflusssphäre, fliegt aber in rund
-6.600 km Höhe vorbei. Näher kommt man mit einer Ankunft nahe einem der
+Ein einfacher Transfer erreicht seine Einflusssphäre, fliegt aber weit an
+ihm vorbei (Beispiel „Zill“). Näher kommt man mit einer Ankunft nahe einem der
 Knoten seiner Bahn oder mit einer Kurskorrektur unterwegs.
 
 Zorb kreist wie Kerbin um die Sonne Zunn (13,6 Mio. km, ein Jahr hat 426
@@ -249,15 +204,83 @@ wie zu einem Mond. Nura ist Duna aus KSP nachempfunden: 320 km Radius,
 Schwerkraft 2,94 m/s², dünne Luft bis 50 km, 20,7 Mio. km von Zunn
 (leicht elliptisch), Einflusssphäre etwa 47.900 km. Ein Startfenster öffnet
 sich, wenn Nura Zorb etwa 44° vorausläuft, alle gut 900 Tage; das erste
-gleich zu Beginn. Frachter-4 mit 1.088,5 m/s prograd nach 163.400 s
-(`--node 4,163400,1088.5,0,0`) verlässt Zorb und erreicht nach etwa 270 Tagen
-Nuras Einflusssphäre (Periapsis knapp 10.000 km; mit einem Korrektur-Node
-unterwegs geht es tiefer). Zunn leuchtet als Kugel, das Licht kommt aus
+gleich zu Beginn. Der Flug kostet von der Parkbahn rund 1.090 m/s und dauert
+etwa 270 Tage (Beispiel „Nura“). Zunn leuchtet als Kugel, das Licht kommt aus
 ihrer Richtung, Tag- und Nachtseite der Planeten passen also. Die Karte
 zoomt bis zum ganzen Sonnensystem heraus; `F` auf Zunn oder einen Planeten
 (anklicken) zeigt ihn, Planeten bleiben aus der Ferne als Punkt sichtbar.
 
-Die Uhr oben links zählt Tage von Zorb: Ein Tag ist ein Sonnentag (6 h, die
+Für den Flug zu einem Planeten oder Mond wählt man ihn in der Karte „Ziel“
+(mit ◄ ► nach den Schiffen). Sie zeigt den Phasenwinkel und wann das nächste
+Startfenster kommt (ein Richtwert aus der Hohmann-Formel, für Nura etwa 44°),
+dazu die engste Annäherung der geplanten Bahn an das Ziel, auch wenn sie
+seine Einflusssphäre noch verfehlt; in der Karte markieren zwei Ringe mit
+Linie die Stelle. So sieht man beim Ziehen am Node, ob es besser wird, bis
+aus „Annäherung“ eine „Begegnung“ mit Periapsis wird.
+
+### Fracht und Basen
+
+Es gibt drei Stoffe:
+Bauteile und Zorit (ein Erz, das es auf Zorb nicht gibt) sind Fracht und
+teilen sich den Frachtraum, Treibstoff liegt im Tank. Fracht zählt als Masse
+(weniger Δv, zu sehen am Δv-Balken). Alles läuft über die Karte „Fracht &
+Basis" der Seitenleiste.
+
+- **Startbasis:** Schiffe in ihrem Zielgebiet laden Bauteile, tanken und
+  laden Zorit ab; das Zorit kommt in ihr Lager. Die Karte „Startbasis"
+  (ein Schiff dort oder ihr Zielgebiet gewählt) zeigt das Lager und bestellt
+  neue Schiffe, die sofort vollgetankt dort stehen.
+- **Preise in Zorit:** Basisschiff 1 t, Frachter 1 t, Bauteile 0,25 t je
+  Tonne; Treibstoff ist an der Startbasis frei. Eine neue Basis kostet damit
+  2 t Zorit.
+- **Gründen:** Ein Basisschiff, das auf einem Körper außer Zorb gelandet ist,
+  gründet dort eine **Mine** oder eine **Tankstelle** und wird ihr Fundament
+  (es fliegt dann nicht mehr). Der Landepunkt wird zur Zone mit 5 km Radius,
+  sichtbar wie jedes Zielgebiet, auch in der Vorschau der Landung.
+- **Baustelle:** Sie braucht 4 t Bauteile; Frachter, die in der Zone landen,
+  laden dort ab.
+- **Tankstelle:** stellt Treibstoff her (180 kg pro Stunde, Lager 8 t);
+  Schiffe in der Zone tanken.
+- **Mine:** baut Zorit ab (100 kg pro Stunde); Frachter in der Zone laden es.
+  Wie viel ihr Lager fasst, hängt vom Körper ab (Zoon 1 t, Zill 2 t, Nura
+  4 t): Das ist die Menge pro Abholung. Weil Vorspulen nichts kostet, zählt
+  der Ertrag pro Flug, nicht pro Stunde.
+
+Frachter (2 t Frachtraum) und Basisschiff starten voll beladen von Zorb und
+kommen bis Zoon; der Frachter kommt von dort ohne Tanken mit Zorit zurück
+(auf Zorb bremsen Luft und Fallschirm). Zum schnellen Ausprobieren kreisen
+in der Demo (`--demo`, siehe „Für Entwickler“) schon zwei Basisschiffe und zwei beladene Frachter um Zorb
+(Beispiel „Vier Schiffe nach Zoon“).
+
+### Aufgaben und Technik
+
+Neben Zorit gibt es Daten (in GB). Sie gehören dem
+Spieler, nicht einem Ort, und kommen von Aufgaben, die je einmal zählen: je
+Körper eine niedrige, eine hohe und eine polare Umlaufbahn, außer auf Zorb
+dazu eine Landung und eine fertige Basis (zusammen 290 GB). Orbitvorgaben
+sind Bereiche, keine Punktlandungen: „niedrig" heißt um Zorb die ganze Bahn
+zwischen 70 und 220 km, „hoch" ab 1.200 km, „polar" eine Bahnneigung von 80°
+bis 100°. Eine Umlaufbahn zählt, wenn ein Brennen auf ihr endet; ein
+Vorbeiflug zählt nicht, ein Absturz auch nicht. Die Karte „Manöver" zeigt
+beim Node schon vorab, welche offenen Aufgaben die Bahn danach erfüllt
+(„Erfüllt: …"). Eine Bahn darf mehrere Aufgaben zugleich erfüllen. Oben in
+der Leiste steht der Stand („Daten 15 GB"); ein Klick öffnet das Fenster
+„Wirtschaft" mit den Reitern Übersicht, Aufgaben und Technik.
+
+Im Reiter „Technik" schaltet man mit Daten frei:
+das Triebwerk Z-2 (30 GB; 3.600 statt 3.200 m/s Ausströmgeschwindigkeit),
+das Chassis Groß (30 GB; 32 t Innenraum, 4 Triebwerksplätze), den Booster
+B-2 (50 GB und 3 t Zorit; trägt Schiffe bis etwa 38 t statt 19 t) und das
+Triebwerk Z-3 (100 GB, braucht Z-2; 4.000 m/s). Freischalten gilt sofort und
+für immer; Chassis und Triebwerke sind dann im Editor wählbar. Der B-2
+ersetzt den Booster der Startbasis endgültig (nur möglich, wenn er dort frei
+steht). Er wirft kleine Schiffe steiler als der erste: Sie brauchen mit dem
+Standardprofil etwas mehr eigenes Δv, ein größerer Wendewinkel gleicht das
+aus.
+
+### Zeit, Kamera und Anzeigen
+
+Die Uhr oben zählt Tage von Zorb: Ein Tag ist ein Sonnentag (6 h, die
 Stunden laufen von 0 bis 5), abgeleitet aus Drehung und Umlauf um Zunn; wie
 Kerbin dreht sich Zorb dafür gegenüber den Sternen in 5:59:09. Diese eine
 Zeit gilt überall, auch am Mond und auf Nura (wie die Kerbin-Zeit in KSP);
@@ -278,22 +301,62 @@ rechts klappt die letzten Meldungen auf, mit Mausrad und Scrollleiste. So
 sieht man auch nach langem Zeitraffer, was passiert ist. Das Protokoll gehört
 zum Spielstand.
 
-Darüber zeigt ein Balken den Tank des gewählten Schiffs als Δv: Die volle Breite
-ist der volle Tank, darin die geplanten Brennvorgänge der Kette (Start gelb,
-Nodes violett), dahinter der Rest (grün). Reicht der Treibstoff nicht, steht
-rot dahinter, wie viel fehlt.
+## Steuerung
 
-Manöver plant man mit dem Manöver-Node wie in KSP, auch mehrere
-hintereinander als Kette: Jeder Node liegt auf der Bahn nach den vorherigen
-und wandert mit, wenn sich ein früherer ändert. Eine Kette ist sofort scharf:
-Das Schiff brennt zu den geplanten Zeitpunkten selbst, auch unter Zeitraffer.
-Ein Brennen beginnt nie vor jetzt und nie vor dem Ende des vorherigen, sonst
-rückt der Node einen Umlauf weiter. Ein Node, für den es nach einer Änderung
-keinen Platz mehr gibt (z. B. weil das Schiff vorher abstürzt), bleibt rot in
-der Liste stehen, bis es wieder passt. Gelbe Ringe auf der Bahn zeigen Beginn
-und Ende jedes Brennens. Während des Brennens zeigt die blaue Linie die momentane Bahn, die sich
-sichtbar zur geplanten (violetten) hin verformt. Endet eine Bahn am Boden,
-zeigt ein rotes Kreuz den Aufschlagpunkt.
+| Eingabe | Wirkung |
+|---|---|
+| Rechte Maustaste ziehen | Kamera drehen |
+| Mausrad | Zoomen (über dem aufgeklappten Protokoll: scrollen) |
+| ▲ / ▼ rechts in der Statusleiste | Protokoll auf- und zuklappen (mit Mausrad oder Scrollleiste blättern) |
+| Linksklick auf ein Schiff (in der Karte oder in der Liste links) / `Tab` | Schiff wählen / nächstes Schiff |
+| Schalter „Schiffe“ und „Info“ im Kopf der linken Leiste, „Hilfe“ oben rechts | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
+| ◀ / ▶ im Kopf jeder Seitenleiste | Leiste ein- und ausklappen |
+| Schalter „Entwürfe“ oben rechts | Schiffseditor: Entwürfe anlegen, ändern, löschen und bestellen |
+| „Daten … GB“ oben rechts | Stand der Daten; Klick: Fenster „Wirtschaft“ mit drei Reitern: Übersicht (Basen mit Vorrat, Fracht an Bord; Klick auf eine Zeile wählt die Basis oder das Schiff), Aufgaben, Technik (mit Daten freischalten) |
+| Klick auf einen Node in der Karte „Manöver“ | Node wählen |
+| Regler unten in jeder Seitenleiste (Tooltip „Deckkraft“) | Wie durchscheinend diese Leiste ist (die Karte läuft dahinter weiter) |
+| Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
+| Linksklick auf den Mond | Mond wählen (eine Bahn davor geht vor: Node setzen) |
+| `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten. Ist ein Node gewählt, wechselt `F` der Reihe nach: Node, sein Schiff, Planet |
+| `N` | Nahansicht an/aus (Planet unten, Zoom bis 10 m; nur mit einem Objekt im Fokus) |
+| Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Wendewinkel, Ziel-Apoapsis (`Umschalt`: feine Schritte); an der Startbasis mit Booster: zeigt Trennung, Boostback und Rückkehr |
+| Seitenleiste „Booster“ (Booster gewählt) | Wo der Booster gerade ist und wann er zurück ist |
+| Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
+| Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
+| Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
+| Seitenleiste „Startbasis“ (Schiff an der Startbasis oder ihr Zielgebiet gewählt) | Zorit im Lager, Preise; „Basisschiff bestellen“, „Frachter bestellen“ |
+| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; je nach Lage „Mine gründen“ / „Tankstelle gründen“, „Bauteile abladen“, „Tanken“, „Zorit laden“, an der Startbasis „Bauteile laden“, „Tanken“, „Zorit abladen“ |
+| Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
+| Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
+| Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
+| Node ziehen | Node entlang seiner Bahn verschieben; spätere Nodes wandern mit. Liegen Mitte und ein Griff nah beieinander, greift der Klick, was näher am Mauszeiger ist; mit `Strg` sind die Griffe aus, man verschiebt nur. Auf einer Bahn durch die Luft kommt er nach innen gezogen auf einen späteren Umlauf („+N Umläufe“) |
+| `Entf` / `Rücktaste` | gewählten Node löschen |
+| `F5` / `F9` | Spielstand speichern / laden (siehe unten) |
+| `H` | Zeitraffer-Stopp für das gewählte Schiff an/aus: Beginnt es zu brennen, hält der Zeitraffer genau dort an und schaltet auf 1× |
+| `Esc` | Auswahl aufheben |
+| `.` / `,` | Zeitraffer schneller / langsamer (1× bis 1 000 000×) |
+| Leertaste | Pause |
+
+Griffe: gelbgrün prograd/retrograd, violett normal/antinormal, türkis radial
+nach außen/innen.
+
+## Speichern und Laden
+
+`F5` speichert, `F9` lädt. Es gibt einen Spielstand: die Datei
+`spielstand.json` in dem Ordner, aus dem das Spiel gestartet wurde. Beim
+Speichern bleibt der vorherige Stand als `spielstand.vorher.json` erhalten,
+falls man einen guten Stand überschreibt (zum Zurückholen die Datei
+umbenennen oder mit `--load spielstand.vorher.json` starten).
+
+Gespeichert wird die ganze Welt: Zeit, Schiffe mit Bahnen und geplanten
+Manövern, Fracht, Basen, Lager, Zorit und das Protokoll. Ein Flug geht nach
+dem Laden exakt so weiter wie ohne Speichern. Kamera, Auswahl und Zeitraffer
+gehören nicht dazu; nach dem Laden ist das Spiel pausiert. Es wird nie von
+selbst gespeichert oder geladen: Das Spiel beginnt immer neu, `F9` holt den
+Stand. Spielstände älterer Versionen des Spiels werden nicht geladen (eine
+Meldung nennt die Versionen).
+
+## Bilder
 
 ![Rendezvous](docs/screenshots/rendezvous.png)
 
@@ -429,56 +492,21 @@ Umlauf später; das Etikett „+1 Umlauf“ zeigt es an.*
 Kette will zweimal 600 m/s: Der zweite Node bekommt nur 477 m/s, 123 m/s
 fehlen.*
 
-## Starten
+## Für Entwickler
 
-Voraussetzung: Rust ≥ 1.97.1 (`rustup update`). Unter Linux die
-[Systempakete für Bevy](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md)
-(Audio- und Gamepad-Pakete werden nicht gebraucht).
+### Demo
 
-```sh
-cargo run -p game
-```
-
-Der erste Build dauert einige Minuten, danach geht es schnell.
-
-### Steuerung
-
-| Eingabe | Wirkung |
-|---|---|
-| Rechte Maustaste ziehen | Kamera drehen |
-| Mausrad | Zoomen (über dem aufgeklappten Protokoll: scrollen) |
-| ▲ / ▼ rechts in der Statusleiste | Protokoll auf- und zuklappen (mit Mausrad oder Scrollleiste blättern) |
-| Linksklick auf ein Schiff (in der Karte oder in der Liste links) / `Tab` | Schiff wählen / nächstes Schiff |
-| Schalter „Schiffe“ und „Info“ im Kopf der linken Leiste, „Hilfe“ oben rechts | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
-| ◀ / ▶ im Kopf jeder Seitenleiste | Leiste ein- und ausklappen |
-| Schalter „Entwürfe“ oben rechts | Schiffseditor: Entwürfe anlegen, ändern, löschen und bestellen |
-| „Daten … GB“ oben rechts | Stand der Daten; Klick: Fenster „Wirtschaft“ mit drei Reitern: Übersicht (Basen mit Vorrat, Fracht an Bord; Klick auf eine Zeile wählt die Basis oder das Schiff), Aufgaben, Technik (mit Daten freischalten) |
-| Klick auf einen Node in der Karte „Manöver“ | Node wählen |
-| Regler unten in jeder Seitenleiste (Tooltip „Deckkraft“) | Wie durchscheinend diese Leiste ist (die Karte läuft dahinter weiter) |
-| Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
-| Linksklick auf den Mond | Mond wählen (eine Bahn davor geht vor: Node setzen) |
-| `F` | Kamera auf die Auswahl (Node, Schiff, Zielgebiet, Mond; ohne Auswahl Planet); nochmal `F` zurück zum Planeten. Ist ein Node gewählt, wechselt `F` der Reihe nach: Node, sein Schiff, Planet |
-| `N` | Nahansicht an/aus (Planet unten, Zoom bis 10 m; nur mit einem Objekt im Fokus) |
-| Seitenleiste „Start“ (gelandetes Schiff gewählt) | Start planen / abbrechen; −/+ ändern Startzeit, Kurs, Wendebeginn, Wendewinkel, Ziel-Apoapsis (`Umschalt`: feine Schritte); an der Startbasis mit Booster: zeigt Trennung, Boostback und Rückkehr |
-| Seitenleiste „Booster“ (Booster gewählt) | Wo der Booster gerade ist und wann er zurück ist |
-| Seitenleiste „Ziel“ ◄ ► | Ziel für ein Rendezvous wählen (anderes Schiff oder keins) |
-| Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
-| Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
-| Seitenleiste „Startbasis“ (Schiff an der Startbasis oder ihr Zielgebiet gewählt) | Zorit im Lager, Preise; „Basisschiff bestellen“, „Frachter bestellen“ |
-| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; je nach Lage „Mine gründen“ / „Tankstelle gründen“, „Bauteile abladen“, „Tanken“, „Zorit laden“, an der Startbasis „Bauteile laden“, „Tanken“, „Zorit abladen“ |
-| Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
-| Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
-| Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |
-| Node ziehen | Node entlang seiner Bahn verschieben; spätere Nodes wandern mit. Liegen Mitte und ein Griff nah beieinander, greift der Klick, was näher am Mauszeiger ist; mit `Strg` sind die Griffe aus, man verschiebt nur. Auf einer Bahn durch die Luft kommt er nach innen gezogen auf einen späteren Umlauf („+N Umläufe“) |
-| `Entf` / `Rücktaste` | gewählten Node löschen |
-| `F5` / `F9` | Spielstand speichern / laden (siehe unten) |
-| `H` | Zeitraffer-Stopp für das gewählte Schiff an/aus: Beginnt es zu brennen, hält der Zeitraffer genau dort an und schaltet auf 1× |
-| `Esc` | Auswahl aufheben |
-| `.` / `,` | Zeitraffer schneller / langsamer (1× bis 1 000 000×) |
-| Leertaste | Pause |
-
-Griffe: gelbgrün prograd/retrograd, violett normal/antinormal, türkis radial
-nach außen/innen.
+Zum Ausprobieren und für alle Beispiele in diesem README,
+die Schiffe mit Nummer nennen (`--node`, `--select`, `--launch`, `--target`
+und so weiter), lädt `cargo run -p game -- --demo …` den Spielbeginn mit
+weiteren Zielgebieten und mit Schiffen aus den beiden Startentwürfen, die
+schon unterwegs sind. Die Nummer im Namen ist die Nummer des Schiffs für die
+Optionen (der Booster ist Nummer 0). „Frachter-1" kreist stabil oberhalb der
+Atmosphäre. „Frachter-2" wurde zu tief abgesetzt und ist fast leer: Er wird
+bei jedem Durchgang durch die Luft abgebremst (orange) und kommt nach einigen
+Umläufen herunter, außer man rettet ihn mit einem Manöver. „Frachter-3" steht
+vollgetankt an der Startbasis, bereit zum Start auf dem Booster. „Frachter-4"
+kreist in 100 km Höhe über dem Äquator, bereit für den Flug zum Mond.
 
 ### Optionen
 
@@ -510,6 +538,29 @@ cargo run -p game -- --demo --node 1,600,237,0,0 --node 1,2027,212,0,0 --camera 
   bei `--focus-body`)
 - `--screenshot DATEI.png`: Bild speichern und beenden (Zeit steht dabei still)
 
+### Beispiele zum Nachspielen
+
+Alle Zeilen gehören hinter `cargo run -p game -- --demo`.
+
+- **Vorbeiflug an Zoon:** `--node 4,600,835,0,0`. Frachter-4 fliegt nach
+  gut 5 Stunden in etwa 200 km Höhe am Mond vorbei.
+- **Zill:** `--node 4,880,936,0,0`. Frachter-4 erreicht nach gut 4 Tagen
+  Zills Einflusssphäre, fliegt aber in rund 6.600 km Höhe vorbei.
+- **Nura:** `--node 4,163400,1088.5,0,0`. Frachter-4 verlässt Zorb und
+  erreicht nach etwa 270 Tagen Nuras Einflusssphäre (Periapsis knapp
+  10.000 km; mit einem Korrektur-Node unterwegs geht es tiefer). Mit
+  `--select 4 --target-body 4,4 --focus-body 0 --camera 30,60,55000000`
+  sieht man die Annäherung; mit 1.080 statt 1.088,5 m/s verfehlt die Bahn
+  Nura um rund 109.000 km.
+- **Vier Schiffe nach Zoon:** `--node 6,600,845,0,0 --node 7,613.5,845,0,0
+  --node 8,602.5,845,0,0 --node 5,647.5,845,0,0`. Basisschiff-5 und die
+  Frachter 7 und 8 (je 2 t Bauteile) landen nach knapp 8 Stunden
+  nebeneinander bei 153° Ost, Basisschiff-6 bei 157° West. Mit `--time 28300`
+  stehen sie schon dort.
+- **Absturz:** `--node 2,600,-245,0,0`. Frachter-2 bremst mit seinem letzten
+  Treibstoff ab und kommt am Fallschirm mit gut 6 m/s an, zu schnell für
+  eine Landung.
+
 Rendezvous Frachter-3 → Frachter-1 aus dem Bild oben (Start im Startfenster
 auf dem Booster, Zirkularisieren, Aufholen):
 
@@ -533,23 +584,7 @@ cargo run -p game -- --demo --time 19627 --launch 3,11333,125,1.5,100 --target 3
   --node 3,11570,1579,0,0 --node 3,12550,124.85,0,0 --focus 3 --near --camera 50,25,6
 ```
 
-## Speichern und Laden
-
-`F5` speichert, `F9` lädt. Es gibt einen Spielstand: die Datei
-`spielstand.json` in dem Ordner, aus dem das Spiel gestartet wurde. Beim
-Speichern bleibt der vorherige Stand als `spielstand.vorher.json` erhalten,
-falls man einen guten Stand überschreibt (zum Zurückholen die Datei
-umbenennen oder mit `--load spielstand.vorher.json` starten).
-
-Gespeichert wird die ganze Welt: Zeit, Schiffe mit Bahnen und geplanten
-Manövern, Fracht, Basen, Lager, Zorit und das Protokoll. Ein Flug geht nach
-dem Laden exakt so weiter wie ohne Speichern. Kamera, Auswahl und Zeitraffer
-gehören nicht dazu; nach dem Laden ist das Spiel pausiert. Es wird nie von
-selbst gespeichert oder geladen: Das Spiel beginnt immer neu, `F9` holt den
-Stand. Spielstände älterer Versionen des Spiels werden nicht geladen (eine
-Meldung nennt die Versionen).
-
-## Tests
+### Tests
 
 ```sh
 cargo test -p sim
@@ -568,8 +603,13 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-## Aufbau
+### Aufbau
 
-- `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Start, Landung, Rendezvous, Fracht und Basen, Zeitleiste, Spielstand)
-- `crates/game`: Darstellung und Eingabe mit Bevy; die Oberfläche (Leisten oben, links und rechts, Δv-Balken, Statusleiste) mit egui
-- `docs/ARCHITEKTUR.md`: Regeln, Physikmodell, Entscheidungen, Merkliste
+- `crates/sim`: die Simulation. Bahnen, Atmosphäre und Manöver; Start mit
+  Booster, Landung, Rendezvous und Andocken; Fracht und Basen, Entwürfe aus
+  dem Katalog, Aufgaben und Technik; Protokoll und Spielstand
+- `crates/game`: Darstellung und Eingabe mit Bevy; die Oberfläche (Leisten
+  oben, links und rechts, Fenster für Entwürfe und Wirtschaft, Δv-Balken,
+  Statusleiste) mit egui
+- `docs/ARCHITEKTUR.md`: Regeln, Physikmodell und Entscheidungen; am Ende
+  die Ideen, die noch nicht gebaut sind
