@@ -7,6 +7,7 @@
 
 use crate::hud::km;
 use crate::ui::{Notes, card, stepper, wide_button};
+use crate::zahl::De;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use sim::docking::SEPARATION_SPEED;
@@ -69,8 +70,9 @@ pub fn show(
         ui.label("Treibstoff mitnehmen");
         let text = format!(
             "{fuel:.0} kg ({:.0}–{:.0})",
-            range.min.floor(),
-            range.max.floor()
+            De(range.min.floor()),
+            De(range.max.floor()),
+            fuel = De(fuel)
         );
         let sign = stepper(ui, ["−", "+"], text.into());
         if sign != 0 {
@@ -88,10 +90,21 @@ pub fn show(
         ui.label(
             [
                 format!("{} danach:", world.vessels[part].name),
-                format!("  {fuel:.0} kg, Δv {part_dv:.0} m/s"),
+                format!(
+                    "  {fuel:.0} kg, Δv {part_dv:.0} m/s",
+                    fuel = De(fuel),
+                    part_dv = De(part_dv)
+                ),
                 format!("{} danach:", world.vessels[host].name),
-                format!("  {:.0} kg, Δv {host_dv:.0} m/s", range.pool - fuel),
-                format!("Trennstoß {SEPARATION_SPEED:.0} m/s gegen die Flugrichtung,"),
+                format!(
+                    "  {:.0} kg, Δv {host_dv:.0} m/s",
+                    De(range.pool - fuel),
+                    host_dv = De(host_dv)
+                ),
+                format!(
+                    "Trennstoß {SEPARATION_SPEED:.0} m/s gegen die Flugrichtung,",
+                    SEPARATION_SPEED = De(SEPARATION_SPEED)
+                ),
                 drift.map_or(String::new(), |d| {
                     format!("danach etwa {} mehr Abstand pro Umlauf.", km(d))
                 }),

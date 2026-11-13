@@ -4,10 +4,11 @@
 //! Teil für Entwürfe frei (`World::unlocked`, siehe `design`) oder ersetzt den
 //! Booster der Startbasis durch ein stärkeres Modell. Freischalten kostet
 //! Daten, beim Booster dazu Zorit für den Bau; es geschieht sofort (eine
-//! Forschungszeit wäre wirkungslos, Regel 14) und gilt für immer.
+//! Forschungszeit wäre wirkungslos, Regel 14) und gilt für immer. Im
+//! Protokoll steht es nicht: Das gehört den Schiffen, und was freigeschaltet
+//! ist, sagt `World::techs`.
 
 use crate::design::{Chassis, Engine, Part};
-use crate::log::{LogEntry, LogKind};
 use crate::scenario::BOOSTER_B2;
 use crate::world::{BoosterStatus, World};
 use serde::{Deserialize, Serialize};
@@ -135,11 +136,6 @@ impl World {
                 .trajectory
                 .set_landed_mass(BOOSTER_B2.dry_mass + BOOSTER_B2.fuel_capacity);
         }
-        self.push_log([LogEntry {
-            time: self.time,
-            vessel: self.booster.unwrap_or(0),
-            kind: LogKind::Unlocked { tech },
-        }]);
         Ok(())
     }
 }

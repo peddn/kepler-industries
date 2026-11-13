@@ -96,7 +96,7 @@ fn ship_reaches_orbit_and_booster_returns() {
     let budget = world.delta_v_budget(BOOSTER_INDEX);
     assert_eq!(budget.available, budget.full);
     assert_eq!(budget.burns.len(), 2);
-    assert!((budget.burns[1].1 - booster.back.node.delta_v.length()).abs() < 1e-9);
+    assert!((budget.burns[1].1 - booster.back.delta_v()).abs() < 1e-9);
     assert!(
         budget.rest >= booster::LANDING_DELTA_V - 1e-6,
         "{}",
@@ -331,4 +331,45 @@ fn booster_returns_from_any_eastward_heading() {
         let back = plan.booster.unwrap().back;
         assert!(back.miss < 500.0, "Kurs {heading}: {} m", back.miss);
     }
+}
+
+/// Sehr steil geht auch: Nach einem senkrechten Aufstieg hat sich der Planet
+/// weitergedreht, der Booster fiele hinter den Startplatz. Die Suche findet
+/// auch dafür den Stoß (oder keinen, wenn er ohnehin trifft).
+#[test]
+fn steep_launch_returns_too() {
+    for kick in [0.0, 1.0, 2.0] {
+        let (mut world, ship) = at_depot(FREIGHTER, 2_000.0);
+        world.set_launch(ship, launch(60.0, kick)).unwrap();
+        world.set_armed(ship, true).unwrap();
+        let plan = *world.vessels[ship].trajectory.launch().unwrap();
+        let back = plan.booster.unwrap().back;
+        assert!(back.miss < 500.0, "{kick}°: {} m", back.miss);
+        assert!(back.delta_v() < 200.0, "{kick}°: {}", back.delta_v());
+        world.advance_to(back.landing + 1.0);
+        assert_eq!(
+            world.booster_status(),
+            Some(BoosterStatus::Ready),
+            "{kick}°"
+        );
+    }
+}
+
+/// Mitten im Aufstieg gespeichert und geladen: Trennung und Rückflug laufen
+/// genau gleich weiter.
+#[test]
+fn ascent_is_saved() {
+    let (mut world, ship) = ready_freighter();
+    let plan = *world.vessels[ship].trajectory.launch().unwrap();
+    world.advance_to(plan.burn.start + 40.0);
+    assert_eq!(
+        world.booster_status(),
+        Some(BoosterStatus::Ascending { ship })
+    );
+    let mut loaded = from_json(&to_json(&world)).unwrap();
+    assert_eq!(loaded, world);
+    world.advance(2_000.0);
+    loaded.advance(2_000.0);
+    assert_eq!(loaded, world);
+    assert_eq!(world.booster_status(), Some(BoosterStatus::Ready));
 }

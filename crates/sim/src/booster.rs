@@ -68,16 +68,25 @@ pub struct BoosterPlan {
 /// Der Rückflug des Boosters.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Return {
-    /// Der Boostback.
-    pub node: ManeuverNode,
+    /// Der Boostback; `None`, wenn der Booster auch ohne ihn an der
+    /// Startbasis aufsetzt (sehr steiler Aufstieg).
+    pub node: Option<ManeuverNode>,
     /// Zeitpunkt des Aufsetzens.
     pub landing: f64,
     /// Abstand des Aufsetzpunkts von der Startbasis (m).
     pub miss: f64,
 }
 
+impl Return {
+    /// Δv des Boostbacks (m/s); 0 ohne.
+    pub fn delta_v(&self) -> f64 {
+        self.node.map_or(0.0, |node| node.delta_v.length())
+    }
+}
+
 /// Zeitleiste des Boosters ab der Trennung (Zustand `state`, Masse `mass`
-/// zum Zeitpunkt `t`) mit dem Boostback `node`.
+/// zum Zeitpunkt `t`) mit dem Boostback `node` (ohne: freier Fall bis zum
+/// Landebrennen).
 pub fn flight(
     bodies: &[Body],
     params: &VesselParams,
@@ -85,16 +94,18 @@ pub fn flight(
     t: f64,
     state: StateVector,
     mass: f64,
-    node: ManeuverNode,
+    node: Option<ManeuverNode>,
 ) -> Option<Trajectory> {
     let mut trajectory = Trajectory::new_flying(bodies, params, body, t, state, mass);
-    trajectory.add_node(bodies, params, t, node).ok()?;
-    trajectory.set_armed(true).ok()?;
+    if let Some(node) = node {
+        trajectory.add_node(bodies, params, t, node).ok()?;
+        trajectory.set_armed(true).ok()?;
+    }
     Some(trajectory)
 }
 
 /// Sucht den Boostback, mit dem der Booster nach der Trennung an `pad`
-/// aufsetzt. Der Schub geht waagerecht gegen die Bewegung über dem Boden.
+/// aufsetzt. Der Schub geht waagerecht gegen den Kurs.
 /// Gesucht wird sein Betrag (mehr davon trägt den Aufsetzpunkt entlang des
 /// Kurses `heading`, in Grad, weiter zurück) und, wo die Drehung des Planeten
 /// den Booster zur Seite trägt, ein Winkel, um den er dagegen gedreht ist.
@@ -116,14 +127,24 @@ pub fn plan_return(
     let (_, at_node) = coast
         .predicted_state(bodies, time)
         .ok_or(PlanError::BoosterNoReturn)?;
+    // Kurs am Startplatz, im mitdrehenden System.
+    let pad_up = pad.body_fixed_direction();
+    let east = DVec3::Z.cross(pad_up).try_normalize().unwrap_or(DVec3::Y);
+    let north = pad_up.cross(east);
+    let heading = heading.to_radians();
+    let along = north * heading.cos() + east * heading.sin();
+    // Der Stoß geht waagerecht gegen den Kurs: dessen Richtung dort, wo der
+    // Booster gerade ist. (Nicht gegen seine Bewegung über dem Boden: Nach
+    // einem steilen Aufstieg ist die fast null und ihre Richtung Zufall.)
     let up = at_node.position.normalize();
-    let ground = at_node.velocity - body.co_rotating_velocity(at_node.position);
-    let Some(back) = (up * ground.dot(up) - ground).try_normalize() else {
+    let course = body.body_fixed_to_inertial(along, time);
+    let Some(back) = (up * course.dot(up) - course).try_normalize() else {
         return Err(PlanError::BoosterNoReturn);
     };
     let side = up.cross(back);
     let [prograde, normal, radial] = maneuver::node_frame(&at_node);
-    // Boostback mit dem Betrag `amount`, um den Winkel `turn` zur Seite gedreht.
+    // Boostback mit dem Betrag `amount` (negativ: nach vorn), um den Winkel
+    // `turn` zur Seite gedreht.
     let node = |amount: f64, turn: f64| {
         let push = (back * turn.cos() + side * turn.sin()) * amount;
         ManeuverNode {
@@ -132,16 +153,10 @@ pub fn plan_return(
         }
     };
 
-    // Kurs am Startplatz, im mitdrehenden System.
-    let pad_up = pad.body_fixed_direction();
-    let east = DVec3::Z.cross(pad_up).try_normalize().unwrap_or(DVec3::Y);
-    let north = pad_up.cross(east);
-    let heading = heading.to_radians();
-    let along = north * heading.cos() + east * heading.sin();
     let left = pad_up.cross(along);
     // Wo der Booster heil aufsetzt, vom Startplatz aus gesehen.
-    let landing = |amount: f64, turn: f64| -> Option<Landing> {
-        let trajectory = flight(bodies, params, body_id, t, state, mass, node(amount, turn))?;
+    let touchdown = |node: Option<ManeuverNode>| -> Option<Landing> {
+        let trajectory = flight(bodies, params, body_id, t, state, mass, node)?;
         let (time, point) = trajectory.segments().find_map(|s| match s {
             Segment::Surface {
                 start,
@@ -158,6 +173,7 @@ pub fn plan_return(
             aside: body.radius * at.dot(left),
         })
     };
+    let landing = |amount: f64, turn: f64| touchdown(Some(node(amount, turn)));
 
     // Mehr als die Reserve hergibt, wird nicht versucht (bleibt vom Aufstieg
     // Treibstoff übrig, wäre mehr im Tank): Weit stärkere Stöße trügen den
@@ -165,22 +181,36 @@ pub fn plan_return(
     // muss, steht nicht zur Verfügung.
     let on_board = params.exhaust_velocity * (mass / params.dry_mass).ln();
     let available = (on_board - LANDING_DELTA_V).clamp(0.0, RETURN_DELTA_V);
-    // Ohne Boostback landet er so weit vor dem Startplatz.
-    let range = landing(0.0, 0.0).ok_or(PlanError::BoosterNoReturn)?.ahead;
-    if range <= 0.0 {
-        return Err(PlanError::BoosterNoReturn);
+    // Ohne Boostback landet er so weit vor dem Startplatz; liegt das schon
+    // an der Startbasis, braucht es keinen.
+    let free = touchdown(None).ok_or(PlanError::BoosterNoReturn)?;
+    let range = free.ahead;
+    if range.hypot(free.aside) <= ASIDE_PRECISION {
+        return Ok(Return {
+            node: None,
+            landing: free.time,
+            miss: range.hypot(free.aside),
+        });
     }
     // Der Betrag für die Richtung `turn`: Mehr davon trägt den Aufsetzpunkt
     // stetig weiter zurück, mit allem Verfügbaren bis hinter den Startplatz.
-    // Regula falsi (Illinois), wenige Schritte genügen.
+    // Nach einem sehr steilen Aufstieg fiele der Booster schon ohne Stoß
+    // hinter den Startplatz (der Planet dreht sich unter ihm weiter): Dann
+    // geht der Stoß nach vorn, der Betrag ist negativ. Regula falsi
+    // (Illinois), wenige Schritte genügen.
     let solve = |turn: f64| -> Result<(f64, Landing), PlanError> {
         let failed = PlanError::BoosterNoReturn;
-        let (mut low, mut high) = (0.0, available);
-        let mut ahead_low = landing(0.0, turn).ok_or(failed)?.ahead;
-        let mut ahead_high = landing(available, turn).ok_or(failed)?.ahead;
-        if ahead_low < 0.0 || ahead_high > 0.0 {
+        let far = if range > 0.0 { available } else { -available };
+        // `low` landet vor dem Startplatz, `high` dahinter.
+        let ahead_far = landing(far, turn).ok_or(failed)?.ahead;
+        if range * ahead_far > 0.0 {
             return Err(failed);
         }
+        let ((mut low, mut ahead_low), (mut high, mut ahead_high)) = if range > 0.0 {
+            ((0.0, range), (far, ahead_far))
+        } else {
+            ((far, ahead_far), (0.0, range))
+        };
         let mut found = Err(failed);
         for _ in 0..30 {
             let amount = (low * ahead_high - high * ahead_low) / (ahead_high - ahead_low);
@@ -230,7 +260,7 @@ pub fn plan_return(
         return Err(PlanError::BoosterNoReturn);
     }
     Ok(Return {
-        node: node(amount, turn),
+        node: Some(node(amount, turn)),
         landing: at.time,
         miss,
     })

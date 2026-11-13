@@ -8,6 +8,7 @@ use crate::camera::CameraRig;
 use crate::fracht::tons_fine;
 use crate::hud::{self, format_time};
 use crate::side::{Edge, Side};
+use crate::zahl::De;
 use crate::{TimeWarp, focus, wirtschaft};
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -65,12 +66,15 @@ pub fn show(
             ui.toggle_value(&mut panels.help, "Hilfe");
             // Die Daten gehören dem Spieler, nicht einem Ort, und stehen
             // deshalb hier; ein Klick öffnet die Übersicht dazu.
-            ui.toggle_value(&mut panels.economy, format!("Daten {:.0} GB", world.data))
-                .on_hover_text(format!(
-                    "Daten aus erfüllten Aufgaben. Klick: Übersicht, Aufgaben und Technik.\n\
+            ui.toggle_value(
+                &mut panels.economy,
+                format!("Daten {:.0} GB", De(world.data)),
+            )
+            .on_hover_text(format!(
+                "Daten aus erfüllten Aufgaben. Klick: Übersicht, Aufgaben und Technik.\n\
                      Im Lager der Startbasis: Zorit {}",
-                    tons_fine(world.zorit)
-                ));
+                tons_fine(world.zorit)
+            ));
             ui.toggle_value(&mut panels.designs, "Entwürfe");
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.label(format_time(world.time, hud::day(world)));
@@ -91,7 +95,7 @@ pub fn show(
         .open(&mut panels.help)
         .resizable(false)
         .collapsible(false)
-        .default_pos([320.0, 60.0])
+        .default_pos(crate::ui::window_pos(0))
         .default_width(640.0)
         .show(root.ctx(), |ui| {
             for line in hud::HELP {

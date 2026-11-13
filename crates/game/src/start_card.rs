@@ -5,6 +5,7 @@
 use crate::booster_card;
 use crate::hud::{self, format_span, km};
 use crate::ui::{Notes, card, stepper, wide_button};
+use crate::zahl::De;
 use bevy_egui::egui;
 use sim::{BaseKind, Launch, LaunchProfile, PlanError, Segment, World, kepler};
 
@@ -60,9 +61,9 @@ impl Param {
         let p = &launch.profile;
         match self {
             Param::StartIn => format_span((launch.time - now).max(0.0), day),
-            Param::Heading => format!("{:.0}°", p.heading),
+            Param::Heading => format!("{:.0}°", De(p.heading)),
             Param::Turn => km(p.turn_altitude),
-            Param::Kick => format!("{:.0}°", p.kick),
+            Param::Kick => format!("{:.0}°", De(p.kick)),
             Param::Apoapsis => km(p.target_apoapsis),
         }
     }
@@ -117,13 +118,13 @@ fn launch_result(world: &World, i: usize) -> String {
         row("  in Höhe", km(altitude)),
         row(
             "Treibstoff",
-            format!("{:.0} kg", burn.ship_end_mass() - params.dry_mass),
+            format!("{:.0} kg", De(burn.ship_end_mass() - params.dry_mass)),
         ),
         row(
             "  reicht für",
             format!(
                 "{:.0} m/s",
-                params.exhaust_velocity * (burn.ship_end_mass() / params.dry_mass).ln()
+                De(params.exhaust_velocity * (burn.ship_end_mass() / params.dry_mass).ln())
             ),
         ),
     ];
@@ -144,14 +145,17 @@ fn launch_result(world: &World, i: usize) -> String {
         lines.push(row("", format!("Pe {}", km(info.periapsis - body.radius))));
         lines.push(row(
             "Bahnneigung",
-            format!("{:.1}°", (h.z / h.length()).acos().to_degrees()),
+            format!("{:.1}°", De((h.z / h.length()).acos().to_degrees())),
         ));
     }
     if let Some(booster) = &plan.booster {
         let back = &booster.back;
         lines.push(row(
             "Booster",
-            format!("Boostback {:.0} m/s", back.node.delta_v.length()),
+            match back.node {
+                Some(_) => format!("Boostback {:.0} m/s", De(back.delta_v())),
+                None => "kein Boostback nötig".into(),
+            },
         ));
         lines.push(row(
             "",

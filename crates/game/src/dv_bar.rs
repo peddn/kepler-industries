@@ -8,6 +8,7 @@
 
 use crate::rendezvous::TARGET_COLOR;
 use crate::ui::color32;
+use crate::zahl::De;
 use bevy_egui::egui::{self, Color32};
 use sim::{BudgetItem, World};
 
@@ -45,25 +46,25 @@ fn pieces(budget: &sim::DeltaVBudget, chosen: Option<usize>) -> Vec<Piece> {
             BudgetItem::Launch => Piece {
                 delta_v,
                 color: LAUNCH_COLOR,
-                label: format!("Start {delta_v:.0}"),
+                label: format!("Start {delta_v:.0}", delta_v = De(delta_v)),
                 selected: false,
             },
             BudgetItem::Node(k) => Piece {
                 delta_v,
                 color: NODE_COLORS[k % 2],
-                label: format!("{}: {delta_v:.0}", k + 1),
+                label: format!("{}: {delta_v:.0}", k + 1, delta_v = De(delta_v)),
                 selected: chosen == Some(k),
             },
             BudgetItem::Landing => Piece {
                 delta_v,
                 color: LANDING_COLOR,
-                label: format!("Landen {delta_v:.0}"),
+                label: format!("Landen {delta_v:.0}", delta_v = De(delta_v)),
                 selected: false,
             },
             BudgetItem::Docking => Piece {
                 delta_v,
                 color: color32(TARGET_COLOR),
-                label: format!("Andocken {delta_v:.0}"),
+                label: format!("Andocken {delta_v:.0}", delta_v = De(delta_v)),
                 selected: false,
             },
         })
@@ -76,7 +77,7 @@ fn pieces(budget: &sim::DeltaVBudget, chosen: Option<usize>) -> Vec<Piece> {
             pieces.push(Piece {
                 delta_v,
                 color,
-                label: format!("{name} {delta_v:.0}"),
+                label: format!("{name} {delta_v:.0}", delta_v = De(delta_v)),
                 selected: false,
             });
         }
@@ -98,7 +99,8 @@ pub fn show(root: &mut egui::Ui, world: &World, vessel: usize, chosen: Option<us
     egui::Panel::bottom("dv_bar").show(root, |ui| {
         ui.label(format!(
             "Δv {:.0} von {:.0} m/s (voller Tank)",
-            budget.available, budget.full
+            De(budget.available),
+            De(budget.full)
         ));
         let size = egui::vec2(ui.available_width(), BAR_HEIGHT);
         let (bar, _) = ui.allocate_exact_size(size, egui::Sense::hover());

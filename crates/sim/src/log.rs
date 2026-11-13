@@ -8,7 +8,6 @@
 
 use crate::body::{BodyId, SurfacePoint};
 use crate::landing::Crash;
-use crate::tech::Tech;
 use serde::{Deserialize, Serialize};
 
 /// So viele Einträge bleiben erhalten (die ältesten fallen heraus).
@@ -80,7 +79,4 @@ pub enum LogKind {
     Separated { ship: usize },
     /// Die Aufgabe mit dieser Nummer ist erfüllt (siehe `task`).
     TaskDone { task: usize },
-    /// Eine Technologie wurde freigeschaltet (siehe `tech`); gehört zu
-    /// keinem Schiff.
-    Unlocked { tech: Tech },
 }

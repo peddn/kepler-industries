@@ -8,6 +8,7 @@
 
 use crate::hud::{self, format_time, km, place};
 use crate::node_ui::UiMessage;
+use crate::zahl::De;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use sim::{Crash, LogEntry, LogKind, World};
@@ -37,9 +38,15 @@ struct Line {
 /// Grund eines Absturzes als Text.
 fn crash_reason(reason: &Crash) -> String {
     match reason {
-        Crash::NoFuel { available, .. } => format!("Δv an Bord nur {available:.0} m/s"),
+        Crash::NoFuel { available, .. } => format!(
+            "Δv an Bord nur {available:.0} m/s",
+            available = De(*available)
+        ),
         Crash::TooWeak { thrust_to_weight } => {
-            format!("Schub zu schwach zum Bremsen (Schub/Gewicht {thrust_to_weight:.2})")
+            format!(
+                "Schub zu schwach zum Bremsen (Schub/Gewicht {thrust_to_weight:.2})",
+                thrust_to_weight = De(*thrust_to_weight)
+            )
         }
         Crash::TooLate => "keine Zeit zum Bremsen".into(),
     }
@@ -47,14 +54,6 @@ fn crash_reason(reason: &Crash) -> String {
 
 /// Text und Farbe zu einem Eintrag des Protokolls.
 fn entry_line(world: &World, entry: &LogEntry) -> Line {
-    // Technologien gehören zu keinem Schiff.
-    if let LogKind::Unlocked { tech } = entry.kind {
-        return Line {
-            time: entry.time,
-            text: format!("Freigeschaltet: {}", tech.spec().name),
-            color: LANDED_COLOR,
-        };
-    }
     let name = &world.vessels[entry.vessel].name;
     // Auf dem Heimatplaneten ohne Namen, sonst " auf Zoon".
     let on = |body: usize| match body {
@@ -126,7 +125,8 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
         LogKind::Undocked { host, fuel } => (
             format!(
                 "abgedockt von {} ({fuel:.0} kg Treibstoff)",
-                world.vessels[*host].name
+                world.vessels[*host].name,
+                fuel = De(*fuel)
             ),
             TEXT_COLOR,
         ),
@@ -151,12 +151,13 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             (
                 format!(
                     "Aufgabe erfüllt: {} ({}), +{:.0} GB",
-                    task.title, world.bodies[task.body].name, task.data
+                    task.title,
+                    world.bodies[task.body].name,
+                    De(task.data)
                 ),
                 LANDED_COLOR,
             )
         }
-        LogKind::Unlocked { tech } => (tech.spec().name.into(), LANDED_COLOR),
         LogKind::Separated { ship } => (
             format!("trennt sich von {}", world.vessels[*ship].name),
             TEXT_COLOR,

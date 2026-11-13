@@ -4,6 +4,7 @@
 //! `top_bar`); nur die Warnungen stehen als Text über der Karte.
 
 use crate::rendezvous::distance_text;
+use crate::zahl::De;
 use bevy_egui::egui;
 use sim::body::{body_state, orbital_period, sphere_of_influence};
 use sim::{
@@ -84,7 +85,8 @@ pub fn body_details(world: &World, b: usize) -> Vec<String> {
             ""
         } else {
             ", keine Luft"
-        }
+        },
+        gravity = De(gravity)
     )];
     if let (Some(orbit), Some(period)) = (&body.orbit, orbital_period(&world.bodies, b)) {
         let parent = &world.bodies[orbit.parent];
@@ -102,7 +104,7 @@ pub fn body_details(world: &World, b: usize) -> Vec<String> {
                 "Abstand {} bis {}, Neigung {:.1}°",
                 km(orbit.periapsis()),
                 km(orbit.apoapsis()),
-                orbit.inclination.to_degrees()
+                De(orbit.inclination.to_degrees())
             ));
         }
         lines.push(format!(
@@ -141,9 +143,9 @@ pub(crate) fn format_span(seconds: f64, day: f64) -> String {
 /// Strecke in km, ab einer Million km in Mio. km.
 pub(crate) fn km(meters: f64) -> String {
     if meters.abs() >= 1.0e9 {
-        format!("{:.2} Mio. km", meters / 1.0e9)
+        format!("{:.2} Mio. km", De(meters / 1.0e9))
     } else {
-        format!("{:.1} km", meters / 1000.0)
+        format!("{:.1} km", De(meters / 1000.0))
     }
 }
 
@@ -152,9 +154,9 @@ pub(crate) fn place(point: &SurfacePoint) -> String {
     let lon = point.longitude.to_degrees();
     format!(
         "{:.1}° {}, {:.1}° {}",
-        lat.abs(),
+        De(lat.abs()),
         if lat >= 0.0 { "N" } else { "S" },
-        lon.abs(),
+        De(lon.abs()),
         if lon >= 0.0 { "O" } else { "W" }
     )
 }
@@ -193,7 +195,7 @@ pub fn warnings(world: &World, i: usize) -> Vec<String> {
                 lines.push(format!(
                     "Node {}: Treibstoff reicht nur für {:.0} m/s!",
                     k + 1,
-                    plan.burn.delta_v()
+                    De(plan.burn.delta_v())
                 ));
             }
             Ok(_) => {}
@@ -235,7 +237,7 @@ pub fn chain_lines(world: &World, i: usize, chosen: Option<usize>) -> Vec<String
                     format!(
                         "{marker} {}  {when:<12} {:6.1} m/s{after}",
                         k + 1,
-                        plan.node.delta_v.length()
+                        De(plan.node.delta_v.length())
                     )
                 }
                 Err(_) => format!("{marker} {}  ungültig", k + 1),
@@ -257,7 +259,7 @@ fn touchdown_place(world: &World, t: &Touchdown) -> String {
 /// Höhe in m, ab 1 km in km.
 fn height(meters: f64) -> String {
     if meters < 1_000.0 {
-        format!("{meters:.0} m")
+        format!("{meters:.0} m", meters = De(meters))
     } else {
         km(meters)
     }
@@ -289,23 +291,32 @@ pub(crate) fn touchdown_lines(world: &World, i: usize) -> Vec<String> {
                     "  Landebrennen in {} ab {} Höhe: {:.0} m/s, {:.prec$} s{hop}",
                     format_span(burn.start - world.time, day(world)),
                     height(altitude),
-                    burn.delta_v(),
-                    burn.duration(),
-                    prec = usize::from(burn.duration() < 10.0),
+                    De(burn.delta_v()),
+                    De(burn.duration()),
+                    prec = usize::from(burn.duration() < 10.0)
                 ),
                 Some(_) => format!("  Landebrennen läuft{hop}"),
-                None => format!("  Aufsetzen mit {:.1} m/s ohne Bremsen{hop}", t.speed),
+                None => format!("  Aufsetzen mit {:.1} m/s ohne Bremsen{hop}", De(t.speed)),
             },
         ],
         Err(crash) => {
             let (reason, detail) = match crash {
                 Crash::NoFuel { available, missing } => (
-                    format!("Δv an Bord nur {available:.0} m/s"),
-                    format!("zum Bremsen fehlen mindestens {missing:.0} m/s"),
+                    format!(
+                        "Δv an Bord nur {available:.0} m/s",
+                        available = De(available)
+                    ),
+                    format!(
+                        "zum Bremsen fehlen mindestens {missing:.0} m/s",
+                        missing = De(missing)
+                    ),
                 ),
                 Crash::TooWeak { thrust_to_weight } => (
                     "Schub zu schwach zum Bremsen".into(),
-                    format!("Schub/Gewicht {thrust_to_weight:.2}, nötig über 1"),
+                    format!(
+                        "Schub/Gewicht {thrust_to_weight:.2}, nötig über 1",
+                        thrust_to_weight = De(thrust_to_weight)
+                    ),
                 ),
                 Crash::TooLate => (
                     "keine Zeit zum Bremsen".into(),
@@ -314,7 +325,7 @@ pub(crate) fn touchdown_lines(world: &World, i: usize) -> Vec<String> {
             };
             vec![
                 format!("Absturz in {when} {place}: {reason}"),
-                format!("  Aufprall {:.0} m/s, {detail}", t.speed),
+                format!("  Aufprall {:.0} m/s, {detail}", De(t.speed)),
             ]
         }
     }
@@ -334,15 +345,15 @@ pub fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<Strin
         "Brennt".into()
     };
     let mut lines = vec![
-        format!("Node {}: Δv {:.1} m/s", k + 1, dv.length()),
-        format!("  prograd {:.1}", dv.x),
-        format!("  normal  {:.1}", dv.y),
-        format!("  radial  {:.1}", dv.z),
+        format!("Node {}: Δv {:.1} m/s", k + 1, De(dv.length())),
+        format!("  prograd {:.1}", De(dv.x)),
+        format!("  normal  {:.1}", De(dv.y)),
+        format!("  radial  {:.1}", De(dv.z)),
         when,
-        format!("Dauer {:.1} s", burn.duration()),
+        format!("Dauer {:.1} s", De(burn.duration())),
         format!(
             "Treibstoff danach {:.0} kg",
-            burn.end_mass() - world.params(i).dry_mass
+            De(burn.end_mass() - world.params(i).dry_mass)
         ),
     ];
     match vessel.trajectory.segment_after(burn) {
@@ -373,7 +384,9 @@ pub fn node_details(world: &World, i: usize, k: usize, plan: &Plan) -> Vec<Strin
                 let task = &world.tasks[task];
                 lines.push(format!(
                     "Erfüllt: {} um {} (+{:.0} GB)",
-                    task.title, body.name, task.data
+                    task.title,
+                    body.name,
+                    De(task.data)
                 ));
             }
         }
@@ -397,7 +410,7 @@ pub fn flight_data(world: &World, i: usize) -> Vec<(&'static str, String)> {
         world.vessels[world.host(i)].trajectory.current(),
         Segment::Surface { .. }
     );
-    let speed = |v: f64| format!("{v:.1} m/s");
+    let speed = |v: f64| format!("{v:.1} m/s", v = De(v));
     let up = state.position.normalize();
     let ground = state.velocity - body.co_rotating_velocity(state.position);
     let vertical = ground.dot(up);
@@ -482,7 +495,8 @@ pub fn ship_status(world: &World, i: usize) -> String {
                 format!(
                     "Landebrennen, noch {remaining:.1} s  Höhe {}  {:.0} m/s zum Boden",
                     height(state.position.length() - body.radius),
-                    sim::landing::ground_speed(body, &state)
+                    De(sim::landing::ground_speed(body, &state)),
+                    remaining = De(remaining)
                 )
             } else {
                 // Momentane Bahn: ändert sich während des Brennens laufend.
@@ -490,7 +504,8 @@ pub fn ship_status(world: &World, i: usize) -> String {
                 format!(
                     "Brennt, noch {remaining:.1} s  Ap {}  Pe {}",
                     info.apoapsis.map_or("–".into(), |r| km(r - body.radius)),
-                    km(info.periapsis - body.radius)
+                    km(info.periapsis - body.radius),
+                    remaining = De(remaining)
                 )
             }
         }

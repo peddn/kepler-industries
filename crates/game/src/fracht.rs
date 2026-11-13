@@ -7,6 +7,7 @@
 //! an der Baustelle abladen, an der Tankstelle tanken, an der Mine laden.
 
 use crate::ui::{Notes, card, wide_button};
+use crate::zahl::De;
 use bevy_egui::egui;
 use sim::base::{PARTS_PRICE, SITE_RADIUS};
 use sim::{BaseError, BaseKind, Segment, World};
@@ -48,14 +49,14 @@ impl Action {
 /// Tonnen mit höchstens zwei Nachkommastellen (Preise, Lagerstand der
 /// Startbasis): "1 t", "0,5 t", "0,25 t".
 pub fn tons_fine(kg: f64) -> String {
-    let number = format!("{:.2}", kg / 1_000.0);
-    let number = number.trim_end_matches('0').trim_end_matches('.');
-    format!("{} t", number.replace('.', ","))
+    let number = format!("{:.2}", De(kg / 1_000.0));
+    let number = number.trim_end_matches('0').trim_end_matches(',');
+    format!("{number} t")
 }
 
 /// Tonnen mit einer Nachkommastelle.
 pub fn tons(kg: f64) -> String {
-    format!("{:.1} t", kg / 1_000.0).replace('.', ",")
+    format!("{:.1} t", De(kg / 1_000.0))
 }
 
 /// Steht das Schiff heil am Boden?
@@ -143,8 +144,8 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
     let tank = || {
         format!(
             "Tank: {:.0} von {:.0} kg",
-            world.vessel_fuel(vessel).floor(),
-            world.params(world.host(vessel)).fuel_capacity
+            De(world.vessel_fuel(vessel).floor()),
+            De(world.params(world.host(vessel)).fuel_capacity)
         )
     };
     match world.base_of(vessel).map(|k| (k, &world.bases[k])) {
@@ -168,7 +169,8 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
                         "{}:\n  Treibstoff {} von {}\n  (+{per_hour:.0} kg pro Stunde)",
                         base.name,
                         tons(stock),
-                        tons(capacity)
+                        tons(capacity),
+                        per_hour = De(per_hour)
                     ));
                     if v.foundation_of.is_none() {
                         lines.push(tank());
@@ -178,13 +180,14 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
                     "{}:\n  Zorit {} von {}\n  (+{per_hour:.0} kg pro Stunde)",
                     base.name,
                     tons(stock),
-                    tons(capacity)
+                    tons(capacity),
+                    per_hour = De(per_hour)
                 )),
             }
         }
         None if v.cargo.total() > 0.0 => lines.push(format!(
             "Keine Basis im Umkreis ({:.0} km).",
-            SITE_RADIUS / 1_000.0
+            De(SITE_RADIUS / 1_000.0)
         )),
         None => {}
     }
@@ -206,7 +209,7 @@ impl Action {
                 String::new()
             }
             Action::Unload => format!("{name}: {} Bauteile abgeladen", tons(world.unload(vessel)?)),
-            Action::Refuel => format!("{name}: {:.0} kg getankt", world.refuel(vessel)?),
+            Action::Refuel => format!("{name}: {:.0} kg getankt", De(world.refuel(vessel)?)),
             Action::LoadZorit => {
                 format!("{name}: {} Zorit geladen", tons(world.load_zorit(vessel)?))
             }

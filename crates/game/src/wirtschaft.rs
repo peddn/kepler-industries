@@ -8,6 +8,7 @@
 use crate::fracht::{tons, tons_fine};
 use crate::hud;
 use crate::ui::{Notes, Selected};
+use crate::zahl::De;
 use bevy_egui::egui;
 use sim::body::sphere_of_influence;
 use sim::{BaseKind, Goal, Task, Tech, TechError, VesselStatus, World};
@@ -154,7 +155,8 @@ fn goal(world: &World, task: &Task) -> String {
     if spec.inclination != (0.0, 180.0) {
         parts.push(format!(
             "Neigung {:.0}° bis {:.0}°",
-            spec.inclination.0, spec.inclination.1
+            De(spec.inclination.0),
+            De(spec.inclination.1)
         ));
     }
     if parts.is_empty() {
@@ -173,7 +175,11 @@ fn tasks(ui: &mut egui::Ui, world: &World) {
         .map(|t| t.data)
         .sum();
     let total: f64 = world.tasks.iter().map(|t| t.data).sum();
-    ui.heading(format!("Aufgaben ({earned:.0} von {total:.0} GB)"));
+    ui.heading(format!(
+        "Aufgaben ({earned:.0} von {total:.0} GB)",
+        earned = De(earned),
+        total = De(total)
+    ));
     ui.weak(
         "Eine Umlaufbahn zählt, wenn ein Brennen auf ihr endet; die Karte \"Manöver\" \
          zeigt beim Node vorab, was er erfüllt.",
@@ -189,7 +195,7 @@ fn tasks(ui: &mut egui::Ui, world: &World) {
                     ui.label(&world.bodies[task.body].name);
                     ui.label(&task.title);
                     ui.label(goal(world, task));
-                    ui.label(format!("{:.0} GB", task.data));
+                    ui.label(format!("{:.0} GB", De(task.data)));
                     match task.done {
                         Some(time) => ui.label(format!(
                             "erfüllt ({})",
@@ -206,8 +212,8 @@ fn tasks(ui: &mut egui::Ui, world: &World) {
 /// Was eine Technologie bringt, in Worten.
 fn effect(tech: Tech) -> &'static str {
     match tech {
-        Tech::EngineZ2 => "3.600 m/s Ausströmgeschw. (Z-1: 3.200)",
-        Tech::EngineZ3 => "4.000 m/s Ausströmgeschwindigkeit",
+        Tech::EngineZ2 => "3600 m/s Ausströmgeschw. (Z-1: 3200)",
+        Tech::EngineZ3 => "4000 m/s Ausströmgeschwindigkeit",
         Tech::ChassisLarge => "32 t Innenraum, 4 Triebwerksplätze",
         Tech::BoosterB2 => "neuer Booster: trägt 38 t statt 19 t",
     }
@@ -216,7 +222,7 @@ fn effect(tech: Tech) -> &'static str {
 /// Der Techtree als Liste: was es gibt, was es bringt und kostet, und der
 /// Knopf zum Freischalten (oder warum es gerade nicht geht).
 fn techs(ui: &mut egui::Ui, world: &mut World, notes: &mut Notes) {
-    ui.heading(format!("Technik (Daten: {:.0} GB)", world.data));
+    ui.heading(format!("Technik (Daten: {:.0} GB)", De(world.data)));
     ui.weak("Freischalten kostet Daten und gilt sofort und für immer.");
     egui::Grid::new("techs").striped(true).show(ui, |ui| {
         header(ui, &["Technologie", "bringt", "Preis", ""]);
@@ -225,14 +231,16 @@ fn techs(ui: &mut egui::Ui, world: &mut World, notes: &mut Notes) {
             ui.label(spec.name);
             ui.label(effect(tech));
             ui.label(if spec.zorit > 0.0 {
-                format!("{:.0} GB + {} Zorit", spec.data, tons_fine(spec.zorit))
+                format!("{:.0} GB + {} Zorit", De(spec.data), tons_fine(spec.zorit))
             } else {
-                format!("{:.0} GB", spec.data)
+                format!("{:.0} GB", De(spec.data))
             });
             match world.can_unlock(tech) {
                 Ok(()) => {
-                    if ui.button("Freischalten").clicked() {
-                        notes.check(world.unlock(tech));
+                    if ui.button("Freischalten").clicked()
+                        && notes.check(world.unlock(tech)).is_some()
+                    {
+                        notes.say(format!("Freigeschaltet: {}", spec.name));
                     }
                 }
                 Err(TechError::Done) => {
@@ -271,7 +279,7 @@ pub fn show(
         .open(open)
         .resizable(false)
         .collapsible(false)
-        .default_pos([320.0, 60.0])
+        .default_pos(crate::ui::window_pos(2))
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(tab, Tab::Overview, "Übersicht");
