@@ -89,6 +89,10 @@ pub enum BaseError {
     NoDesign,
     /// Der Entwurf lässt sich nicht bauen.
     Design(DesignError),
+    /// Umbau nur auf einen Entwurf mit demselben Chassis.
+    OtherChassis,
+    /// Die geladene Fracht passt nicht in den neuen Frachtraum.
+    CargoInTheWay,
 }
 
 impl std::fmt::Display for BaseError {
@@ -107,6 +111,10 @@ impl std::fmt::Display for BaseError {
             BaseError::NothingToRefuel => "Tank voll oder Lager leer",
             BaseError::NotEnoughZorit => "zu wenig Zorit im Lager der Startbasis",
             BaseError::NoDesign => "diesen Entwurf gibt es nicht",
+            BaseError::OtherChassis => "Umbau nur mit demselben Chassis",
+            BaseError::CargoInTheWay => {
+                "die Fracht passt nicht in den neuen Frachtraum: erst abladen"
+            }
             BaseError::Design(error) => return write!(f, "{error}"),
         })
     }
@@ -387,6 +395,43 @@ impl World {
             kind: LogKind::Ordered,
         }]);
         Ok(vessel)
+    }
+
+    /// Baut das Schiff an der Startbasis auf den Entwurf `design` um (Stelle
+    /// in `World::designs`; dasselbe Chassis). Bezahlt wird der
+    /// Preisunterschied, ein billigerer Entwurf bringt ihn zurück; liefert
+    /// ihn in kg Zorit. Das Schiff steht danach vollgetankt da (Treibstoff
+    /// ist dort frei), sofort (eine Umbauzeit wäre wirkungslos, Regel 14),
+    /// und behält Namen und Fracht.
+    pub fn refit(&mut self, vessel: usize, design: usize) -> Result<f64, BaseError> {
+        self.parked_at(vessel, BaseKind::Depot)?;
+        let new = self.designs.get(design).ok_or(BaseError::NoDesign)?.clone();
+        // Was nicht nach einem Entwurf gebaut ist (der Booster), baut man
+        // nicht um.
+        let old = self.vessels[vessel]
+            .design
+            .as_ref()
+            .ok_or(BaseError::NoDesign)?;
+        if new.chassis != old.chassis {
+            return Err(BaseError::OtherChassis);
+        }
+        new.check(&self.unlocked()).map_err(BaseError::Design)?;
+        let cargo = self.vessels[vessel].cargo.total();
+        if cargo > new.cargo() {
+            return Err(BaseError::CargoInTheWay);
+        }
+        let price = new.price() - old.price();
+        if price > self.zorit {
+            return Err(BaseError::NotEnoughZorit);
+        }
+        self.zorit -= price;
+        let params = new.params();
+        let v = &mut self.vessels[vessel];
+        v.params = params;
+        v.design = Some(new);
+        v.trajectory
+            .set_landed_mass(params.dry_mass + cargo + params.fuel_capacity);
+        Ok(price)
     }
 
     /// Lädt an der Startbasis Bauteile: bis der Frachtraum voll ist, oder so

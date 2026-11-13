@@ -836,6 +836,17 @@ eine Sorte Triebwerk. Startentwürfe: Frachter = Mittel + 2 × Z-1, 14 t Tank,
 2 t Fracht; Basisschiff = Klein + Z-1 + Fundament, 7 t Tank; beide 1 t Zorit,
 beide löschbar. Ein Basisschiff mit freiem Innenraum darf Fracht tragen.
 
+*Umbau* (`World::refit`): Ein Schiff, das bereit an der Startbasis steht
+(wie beim Laden: kein Start geplant, nichts angedockt), bekommt einen
+anderen Entwurf mit demselben Chassis. Bezahlt wird der Preisunterschied,
+ein billigerer Entwurf bringt ihn voll zurück; so kostet Ausprobieren
+nichts, und ein anderes Chassis bleibt ein neues Schiff. Auch das Fundament
+ist ein Teil wie jedes andere. Das Schiff steht danach vollgetankt da
+(Treibstoff ist dort frei) und behält Namen und Fracht; passt die Fracht
+nicht in den neuen Frachtraum, wird verweigert. Es geschieht sofort
+(Regel 14). Der Booster hat keinen Entwurf und wird nur über die Technik
+ersetzt.
+
 **Daten und Aufgaben** (`sim::task`): Daten (GB) sind der zweite
 Zähler (bestimmen, *was* man bauen kann; Zorit, *wie viel*). Sie sind
 keine Fracht und gehören keinem Ort: Sie werden gefunkt und sofort
@@ -881,13 +892,10 @@ gutgeschrieben.
 Gebaut und spielbar: Fliegen (Manöverketten, Start auf dem Booster, Landung,
 Rendezvous, Andocken, Flüge zu Monden und Planeten), der Kreislauf aus
 Bauteilen, Basen und Zorit, Entwürfe aus dem Katalog, Aufgaben für Daten und
-die Technik.
+die Technik, dazu der Umbau gebauter Schiffe.
 
 Vereinbart, noch nicht gebaut:
 
-- **Umbau:** Ein Schiff an der Startbasis bekommt einen anderen Entwurf mit
-  demselben Chassis. Bezahlt wird der Preisunterschied, das alte Teil wird
-  voll in Zorit erstattet.
 - **Proben:** eine neue Fracht, die man zurückbringt und heil landet. Mehr
   Masse bringt mehr Daten, mit einer Obergrenze je Körper, damit sich Daten
   nicht endlos farmen lassen.

@@ -4,7 +4,7 @@
 use sim::design::{Chassis, Design, DesignError, Engine, FOUNDATION_SPACE, Part, SPACE_STEP};
 use sim::scenario::start;
 use sim::tech::Tech;
-use sim::{BaseError, VesselParams};
+use sim::{BaseError, Launch, LaunchProfile, VesselParams};
 
 /// Die Startentwürfe ergeben die abgestimmten Schiffe: Massen, Tanks und
 /// Preise; der Frachter hat zwei Z-1.
@@ -164,6 +164,104 @@ fn ships_are_ordered_from_designs() {
     world.techs.push(Tech::EngineZ2);
     world.order_ship(2).unwrap();
     assert_eq!(world.zorit, 3_000.0 - 800.0 - 1_000.0);
+}
+
+/// Umbau an der Startbasis: ein anderer Entwurf mit demselben Chassis, zum
+/// Preisunterschied (ein billigerer bringt ihn zurück). Das Schiff steht
+/// danach vollgetankt da und behält seinen Namen.
+#[test]
+fn refit_costs_the_price_difference() {
+    let mut world = start();
+    world.techs.push(Tech::EngineZ2);
+    let ship = world.order_ship(1).unwrap();
+    assert_eq!(world.zorit, 2_000.0);
+    // Frachter mit zwei Z-2 statt Z-1: je 0,2 t mehr.
+    let mut fast = Design::freighter();
+    fast.name = "Schnell".into();
+    fast.engine = Engine::Z2;
+    // Kleiner Frachter aus dem Basisschiff: ohne Fundament, 0,4 t billiger.
+    let mut small = Design::base_ship();
+    small.name = "Klein".into();
+    small.foundation = false;
+    world.designs.extend([fast.clone(), small]);
+
+    assert_eq!(world.refit(ship, 2), Ok(400.0));
+    assert_eq!(world.zorit, 1_600.0);
+    let v = &world.vessels[ship];
+    assert_eq!(v.name, "Frachter-1");
+    assert_eq!(v.params, fast.params());
+    assert_eq!(v.design, Some(fast.clone()));
+    assert!((world.vessel_fuel(ship) - 14_000.0).abs() < 1e-9);
+    assert_eq!(world.delta_v_budget(ship).full, world.vessel_delta_v(ship));
+
+    // Zurück auf den Frachter: Das Zorit kommt wieder.
+    assert_eq!(world.refit(ship, 1), Ok(-400.0));
+    assert_eq!(world.zorit, 2_000.0);
+    assert_eq!(world.vessels[ship].params, Design::freighter().params());
+
+    // Fundament ein- und ausbauen geht auch: Basisschiff zu kleinem Frachter.
+    let base_ship = world.order_ship(0).unwrap();
+    assert_eq!(world.refit(base_ship, 3), Ok(-400.0));
+    assert!(!world.vessels[base_ship].params.base_kit);
+    assert_eq!(world.refit(base_ship, 0), Ok(400.0));
+    assert!(world.vessels[base_ship].params.base_kit);
+
+    // Spielstand: Das umgebaute Schiff bleibt, wie es ist.
+    world.refit(ship, 2).unwrap();
+    let loaded = sim::save::from_json(&sim::save::to_json(&world)).unwrap();
+    assert_eq!(loaded.vessels[ship].params, fast.params());
+    assert_eq!(loaded.vessel_mass(ship), world.vessel_mass(ship));
+}
+
+/// Was einen Umbau verhindert: anderes Chassis, nicht baubar, zu wenig
+/// Zorit, Fracht im Weg, nicht an der Startbasis, Start geplant, der
+/// Booster. Dabei ändert sich nichts.
+#[test]
+fn refit_is_refused() {
+    let mut world = start();
+    let ship = world.order_ship(1).unwrap();
+    let booster = world.booster.unwrap();
+    let mut fast = Design::freighter();
+    fast.engine = Engine::Z2;
+    let mut tanker = Design::freighter();
+    tanker.tank = 16_000.0;
+    world.designs.extend([fast, tanker]);
+    let before = (world.zorit, world.vessels[ship].clone());
+
+    assert_eq!(world.refit(ship, 9), Err(BaseError::NoDesign));
+    assert_eq!(world.refit(ship, 0), Err(BaseError::OtherChassis));
+    assert_eq!(
+        world.refit(ship, 2),
+        Err(BaseError::Design(DesignError::Locked(Part::Engine(
+            Engine::Z2
+        ))))
+    );
+    assert_eq!(world.refit(booster, 1), Err(BaseError::NoDesign));
+    world.techs.push(Tech::EngineZ2);
+    world.zorit = 399.0;
+    assert_eq!(world.refit(ship, 2), Err(BaseError::NotEnoughZorit));
+    world.zorit = before.0;
+    assert_eq!((world.zorit, world.vessels[ship].clone()), before);
+
+    // Mit Bauteilen an Bord passt der Entwurf ohne Frachtraum nicht.
+    world.load_parts(ship).unwrap();
+    assert_eq!(world.refit(ship, 3), Err(BaseError::CargoInTheWay));
+    // Der mit gleichem Frachtraum geht, die Fracht bleibt an Bord.
+    world.refit(ship, 2).unwrap();
+    assert_eq!(world.vessels[ship].cargo.parts, 2_000.0);
+    assert!((world.vessel_fuel(ship) - 14_000.0).abs() < 1e-9);
+
+    // Mit geplantem Start nicht.
+    let launch = Launch {
+        time: 100.0,
+        profile: LaunchProfile::default(),
+    };
+    world.set_launch(ship, launch).unwrap();
+    assert_eq!(world.refit(ship, 1), Err(BaseError::Busy));
+    // Und nicht im Flug.
+    world.set_armed(ship, true).unwrap();
+    world.advance_to(400.0);
+    assert_eq!(world.refit(ship, 1), Err(BaseError::NotLanded));
 }
 
 /// Der Editor fragt, was ein Start auf dem Booster ergibt: dieselbe Planung
