@@ -187,7 +187,7 @@ fn one_orbit_can_meet_several_tasks() {
 fn flyby_does_not_count() {
     let mut world = demo();
     // Frachter-4 mit dem Transfer aus der Demo: knapp an Zoon vorbei.
-    world.add_node(4, prograde(600.0, 836.0)).unwrap();
+    world.add_node(4, prograde(600.0, 835.0)).unwrap();
     world.set_armed(4, true).unwrap();
     world.advance_to(200_000.0);
     assert!(

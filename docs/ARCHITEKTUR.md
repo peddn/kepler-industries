@@ -269,7 +269,7 @@ Wendebeginn, dort um den Wendewinkel zur Seite, danach immer entlang der Bewegun
 relativ zur Luft, nie steiler als der Wendewinkel, nie unter die Waagerechte.
 Voreinstellung nach dem Körper (`LaunchProfile::for_body`): mit Luft 1,5 km
 und 10° (steiler wenden fliegt zu lange durch dichte Luft und stürzt ab),
-ohne Luft 100 m und 70° (auf Zoon mit Schub/Gewicht 12 stiege die Fähre mit
+ohne Luft 100 m und 70° (auf Zoon mit Schub/Gewicht 12 stiege ein Schiff mit
 10° fast senkrecht: 822 statt 666 m/s bis zur 30-km-Bahn; 85° spart noch
 25 m/s, lässt schwache Schiffe aber kaum steigen). Ziel-Apoapsis 30 km über
 der Luftgrenze bzw. dem Boden. 10° rechnet bitgenau wie der alte feste Winkel
@@ -615,7 +615,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   rosa im Δv-Balken; der Angleich-Node ist ein doppelter rosa Ring ohne
   Griffe. Das Ziel wird Hauptschiff, der Verbund kann normal brennen (so
   lassen sich größere Schiffe im Orbit zusammensetzen). In der Liste steht er
-  als „Relais-1 + Fähre-3“, angedockte Schiffe sind nicht einzeln wählbar.
+  als „Frachter-1 + Frachter-3“, angedockte Schiffe sind nicht einzeln wählbar.
 - **Abdocken** in der Karte „Verbund“: Teil wählen, Treibstoff zum
   Mitnehmen mit − / + (Vorschlag nach Tankgröße), Vorschau beider Schiffe,
   „Abdocken“. Planbares Abdocken als Schritt der Kette kommt mit den
@@ -632,8 +632,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Logik pro Klasse. Später stellt der Spieler Schiffe, Satelliten und Sonden
   selbst zusammen: ein Chassis pro Klasse, darin Module (Triebwerk, Tank,
   Fallschirm, …). Die Summe der Module ergibt die `VesselParams`; die
-  Simulation bleibt dabei unverändert. Bis dahin sind die Demo-Satelliten
-  bewusst nicht landefähig (Schub kleiner als das Gewicht, kein Fallschirm).
+  Simulation bleibt dabei unverändert.
 - **Ein Auftragssystem** für Daten (kein Geld, siehe „Wirtschaft“).
 
 ## Wirtschaft (Konzept; gebaut ist der erste Schritt)
@@ -838,9 +837,15 @@ Startbasis frei.
   4 t Bauteile). Bewusst keine Absicherung gegen die Sackgasse: Wer damit
   keine Mine fertig bekommt, steckt fest; das ist die Gefahr des frühen
   Spiels.
-- **Demo** (`scenario::demo`, im Spiel `--demo`): dieselbe Welt mit festen
-  Schiffen und weiteren Zielgebieten. Sie ist die Grundlage der Tests und der
-  Beispiele im README, nicht der Spielbeginn.
+- **Demo** (`scenario::demo`, im Spiel `--demo`): der Spielbeginn, dazu
+  weitere Zielgebiete und Schiffe aus den Startentwürfen, die schon unterwegs
+  sind (die Nummer im Namen ist die Nummer des Schiffs, der Booster ist
+  Nummer 0). Sie ist die Grundlage der Beispiele im README und vieler Tests.
+  Es gibt damit nur eine Welt: Was die Demo zeigt, geht im Spiel genauso.
+- **Prüfschiffe** (`tests/common`): Tests, die ihre eigene kleine Welt
+  bauen, nehmen dafür auch Werte, die der Katalog nicht hat (sehr wenig
+  Schub, kein Fallschirm). Die Regeln der Simulation gelten für beliebige
+  Werte; im Spiel und in der Demo gibt es diese Schiffe nicht.
 - Im Spiel: Karte „Startbasis", sobald ein Schiff gewählt ist, das dort
   steht, oder ihr Zielgebiet (dessen Raute lässt sich nur anklicken, wenn
   kein Schiff darauf steht; Schiffe haben beim Klicken Vorrang).
@@ -933,8 +938,6 @@ zum Schiff; es gibt genau einen.
   ist er sofort wieder vollgetankt.
 - *Die Werte der Booster* (B-1, B-2) stehen in `sim::booster`, die der
   Schiffsteile in `sim::design`.
-- *Die Demo hat keinen Booster* (die Fähre dort startet aus eigener Kraft),
-  damit Tests und Beispiele bleiben, wie sie sind.
 
 **Katalog** (`sim::design`; gebaut sind der Katalog, Entwürfe mit ihren
 Flugwerten und Preisen, das Bestellen nach Entwurf und der Editor, noch
@@ -946,9 +949,9 @@ dieselbe Startplanung in einer eigenen kleinen Welt, neu nur, wenn sich der
 Entwurf ändert). Solange jemand in ein Textfeld tippt, laufen die Systeme
 mit Tasten nicht (`ui::not_typing`). Jedes bestellte Schiff merkt sich seinen
 Entwurf (`Vessel::design`); was man bauen darf, steht in `World::unlocked`
-(bis zum Techtree: die Ausstattung vom Spielbeginn). Die Schiffe der Demo
-und der Booster sind feste Vorlagen ohne Entwurf; der Frachter der Demo hat
-noch 440 kN, damit ihre Beispiele bleiben, wie sie sind.
+(bis zum Techtree: die Ausstattung vom Spielbeginn). Nur der Booster hat
+feste Werte ohne Entwurf; auch die Schiffe der Demo kommen aus den
+Startentwürfen.
 
 | Chassis | Masse | Innenraum | Triebwerksplätze | Preis | frei |
 |---|---|---|---|---|---|

@@ -243,7 +243,7 @@ fn node_at_the_moon_captures() {
     assert!(info.apoapsis.unwrap() < sphere_of_influence(&world.bodies, MOON));
 }
 
-/// In der Demo: Frachter-4 fliegt mit 836 m/s nach 10 Minuten knapp am
+/// In der Demo: Frachter-4 fliegt mit 835 m/s nach 10 Minuten knapp am
 /// Mond vorbei.
 #[test]
 fn demo_ferry_reaches_the_moon() {
@@ -255,7 +255,7 @@ fn demo_ferry_reaches_the_moon() {
         .unwrap();
     let node = ManeuverNode {
         time: 600.0,
-        delta_v: DVec3::new(836.0, 0.0, 0.0),
+        delta_v: DVec3::new(835.0, 0.0, 0.0),
     };
     world.add_node(ferry, node).unwrap();
     let s: Vec<Segment> = world.vessels[ferry]
