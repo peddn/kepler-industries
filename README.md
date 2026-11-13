@@ -547,6 +547,16 @@ cargo test -p sim
 Die Simulation hat keine Abhängigkeit zu Bevy, die Tests kompilieren und laufen
 in Sekunden.
 
+Jeder Pull Request wird automatisch geprüft (`.github/workflows/pruefung.yml`):
+Formatierung, Clippy ohne Warnungen und alle Tests, erst die Simulation, dann
+das Spiel. Dasselbe von Hand:
+
+```sh
+cargo fmt --all --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
 ## Aufbau
 
 - `crates/sim`: Simulation (Bahnen, Atmosphäre, Manöver, Start, Landung, Rendezvous, Fracht und Basen, Zeitleiste, Spielstand)
