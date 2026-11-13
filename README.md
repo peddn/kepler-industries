@@ -228,18 +228,20 @@ aus „Annäherung“ eine „Begegnung“ mit Periapsis wird.
 
 ### Fracht und Basen
 
-Es gibt drei Stoffe:
-Bauteile und Zorit (ein Erz, das es auf Zorb nicht gibt) sind Fracht und
-teilen sich den Frachtraum, Treibstoff liegt im Tank. Fracht zählt als Masse
-(weniger Δv, zu sehen am Δv-Balken). Alles läuft über die Karte „Fracht &
-Basis" der Seitenleiste.
+Bauteile und Zorit (ein Erz, das es auf Zorb nicht gibt) sind Güter: Schiffe
+tragen sie als Fracht, Basen haben sie im Lager. Alle Güter teilen sich den
+Frachtraum, Treibstoff liegt im Tank. Fracht zählt als Masse (weniger Δv, zu
+sehen am Δv-Balken). Geladen und abgeladen wird in der Karte „Fracht &
+Basis" der Seitenleiste: Steht das Schiff an einer Basis, hat jedes Gut, das
+sich dort bewegen lässt, eine Zeile mit − (abladen) und + (laden) in
+Schritten von 0,5 t.
 
 - **Startbasis:** Sie hat ein Lager für Zorit und Bauteile. Die Karte
   „Startbasis" (ein Schiff dort oder ihr Zielgebiet gewählt) zeigt es,
   tauscht Zorit gegen Bauteile (sie kommen ins Lager) und bestellt neue
   Schiffe, die sofort vollgetankt dort stehen. Schiffe in ihrem Zielgebiet
-  laden Bauteile und Zorit aus dem Lager, laden beides dorthin ab und
-  tanken. Tauschen und Laden sind zwei Schritte.
+  laden aus dem Lager, was dort liegt, laden dorthin ab und tanken. Tauschen
+  und Laden sind zwei Schritte.
 - **Preise in Zorit:** Basisschiff 1 t, Frachter 1 t, Bauteile 0,25 t je
   Tonne; Treibstoff ist an der Startbasis frei. Eine neue Basis kostet damit
   2 t Zorit.
@@ -335,7 +337,7 @@ zum Spielstand.
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
 | Seitenleiste „Startbasis“ (Schiff an der Startbasis oder ihr Zielgebiet gewählt) | Zorit im Lager, Preise; „Basisschiff bestellen“, „Frachter bestellen“ |
-| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; je nach Lage „Mine gründen“ / „Tankstelle gründen“, „Bauteile abladen“, „Tanken“, „Zorit laden“, an der Startbasis Bauteile und Zorit laden und abladen, „Tanken“ |
+| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; an einer Basis je Gut eine Zeile mit − (abladen) und + (laden), je 0,5 t; dazu je nach Lage „Mine gründen“ / „Tankstelle gründen“ und „Tanken“ |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |

@@ -107,7 +107,7 @@ impl World {
         if spec.data > self.data {
             return Err(TechError::NotEnoughData);
         }
-        if spec.zorit > self.zorit {
+        if spec.zorit > self.zorit() {
             return Err(TechError::NotEnoughZorit);
         }
         if tech == Tech::BoosterB2 && self.booster_status() != Some(BoosterStatus::Ready) {
@@ -131,7 +131,7 @@ impl World {
         self.can_unlock(tech)?;
         let spec = tech.spec();
         self.data -= spec.data;
-        self.zorit -= spec.zorit;
+        self.pay(spec.zorit);
         self.techs.push(tech);
         if tech == Tech::BoosterB2
             && let Some(booster) = self.booster

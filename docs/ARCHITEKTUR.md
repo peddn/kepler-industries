@@ -643,18 +643,27 @@ man kommt und was man zurückbringt.
   daraus Schiffe und Bauteile → weiter hinaus. Hinaus ist
   teuer (Start von Zorb, voll beladen), zurück billig (schwache Schwerkraft,
   auf Zorb bremst die Luft).
-- **Stoffe:** Bauteile und Zorit sind Fracht und teilen sich den Frachtraum
-  (`Cargo`); Treibstoff ist der dritte Stoff und liegt im Tank. Fracht zählt
+- **Güter und Inventare** (`sim::goods`): Ein Gut ist eine Sorte Fracht
+  (`Good`: Bauteile, Zorit, im Lager einer Tankstelle auch Treibstoff), ein
+  Inventar eine Liste aus Gut und Menge. Es gibt es an zwei Stellen: als
+  Frachtraum eines Schiffs (`Vessel::cargo`; alle Güter teilen ihn sich) und
+  als Lager einer Basis (`Base::stock`). Dazwischen gibt es genau zwei
+  Handlungen, Einladen und Ausladen (`World::load`, `World::unload`, mit
+  Menge); die Basis bestimmt, was sie herausgibt und annimmt: die Startbasis
+  alles, eine Baustelle nimmt Bauteile, eine Mine gibt Zorit. Ein neues Gut
+  braucht damit nur einen Eintrag in `Good`, keinen eigenen Code zum Lagern
+  und Laden. Was keine Lagerbewegung ist, bleibt eine eigene Handlung:
+  tauschen, tanken, bestellen, umbauen.
+- **Treibstoff** liegt im Schiff im Tank und ist dort kein Frachtgut, weil
+  er zum Flug gehört (Masse, Δv). Fracht zählt
   als Masse (`World::params` rechnet sie zur Masse ohne Treibstoff; damit
   stimmen Brennen, Δv-Balken, Landung). Zorit ist ein seltenes Erz, das es
   auf Zorb nicht gibt; vorerst der einzige Rohstoff, weitere Arten kommen mit
   den Rohstoffkarten.
 - **Eine Basis, ein Stoff** (`BaseKind`): Eine Tankstelle stellt Treibstoff
   her, eine Mine Zorit. Wer an einem Ort beides will, baut zwei Basen.
-- **Lager der Startbasis:** Zorit und Bauteile (`World::zorit`,
-  `World::parts`). Schiffe laden beides aus dem Lager ein und dorthin aus;
-  Treibstoff gibt sie frei aus. Ein allgemeines Lager an jeder Basis für
-  beliebige Stoffe kommt mit dem zweiten Rohstoff.
+- **Lager der Startbasis:** unbegrenzt, für alle Güter. Mit dem Zorit darin
+  bezahlt man (`World::zorit`); Treibstoff gibt sie frei aus.
 - **Gründen:** Das Basisschiff gründet auf einem Körper außer dem
   Heimatplaneten eine Mine oder Tankstelle und wird ihr Fundament
   (`foundation_of`; ein Start ist dann gesperrt). Der Landepunkt wird zur
@@ -666,8 +675,9 @@ man kommt und was man zurückbringt.
   fertig.
 - **Herstellung:** gleichmäßig, bis das Lager voll ist; vorerst aus dem
   Nichts, bis es Strom und Bewohner gibt. Gespeichert sind Menge und
-  Zeitpunkt der letzten Änderung (`Store`), der Stand dazwischen wird direkt
-  berechnet (Regel 14, unabhängig von der Schrittgröße). Tankstelle: 180 kg
+  Zeitpunkt der letzten Änderung (`Base::stock`, `Base::since`), der Stand
+  dazwischen wird direkt berechnet (`World::stock`; Regel 14, unabhängig
+  von der Schrittgröße). Tankstelle: 180 kg
   pro Stunde, Lager 8 t. Mine: 100 kg pro Stunde.
 - **Häufigkeit = Lagergröße:** Weil Vorspulen nichts kostet, ist jede Rate
   wirkungslos; auch eine schlecht gelegene Mine liefe voll. Knapp sind nur
@@ -917,7 +927,8 @@ oben.
 
 Vorbilder sind Aufbauspiele wie die Anno-Reihe.
 
-**Aufbau wie bei den Bahnen** (gilt schon für das Lager einer Basis, `Store`):
+**Aufbau wie bei den Bahnen** (gilt schon für das Lager einer Basis,
+`World::stock`):
 Die Wirtschaft einer Basis ist eine Folge von
 Abschnitten zwischen Ereignissen (ein Gebäude wird fertig, ein Lager ist
 voll oder leer, ein Schiff kommt an, Bewohner ziehen ein oder aus). Jeder

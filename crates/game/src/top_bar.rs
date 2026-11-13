@@ -73,7 +73,7 @@ pub fn show(
             .on_hover_text(format!(
                 "Daten aus erfüllten Aufgaben. Klick: Übersicht, Aufgaben und Technik.\n\
                      Im Lager der Startbasis: Zorit {}",
-                tons_fine(world.zorit)
+                tons_fine(world.zorit())
             ));
             ui.toggle_value(&mut panels.designs, "Entwürfe");
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {

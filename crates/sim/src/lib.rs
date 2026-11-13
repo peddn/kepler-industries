@@ -11,6 +11,7 @@ pub mod body;
 pub mod booster;
 pub mod design;
 pub mod docking;
+pub mod goods;
 pub mod integrator;
 pub mod kepler;
 pub mod landing;
@@ -32,6 +33,7 @@ pub use body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint};
 pub use booster::{BoosterPlan, LaunchEstimate, Return};
 pub use design::{Chassis, Design, DesignError, Engine, Part};
 pub use docking::{DockError, DockPlan, DockRequest, Docking, UndockError, UndockFuel};
+pub use goods::{Good, Inventory};
 pub use kepler::StateVector;
 pub use landing::{Crash, LandingZone};
 pub use launch::{Launch, LaunchPlan, LaunchProfile};
@@ -43,6 +45,6 @@ pub use tech::{Tech, TechError};
 pub use trajectory::{ChainNode, Event, Segment, Trajectory};
 pub use transfer::{BodyApproach, Window};
 pub use world::{
-    Base, BaseKind, BoosterStatus, BudgetItem, Cargo, DeltaVBudget, LandingBurn, Store, Touchdown,
-    Vessel, VesselParams, VesselStatus, World,
+    Base, BaseKind, BoosterStatus, BudgetItem, DeltaVBudget, LandingBurn, Touchdown, Vessel,
+    VesselParams, VesselStatus, World,
 };

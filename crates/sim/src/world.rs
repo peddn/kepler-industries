@@ -7,6 +7,7 @@ use crate::design::Design;
 use crate::docking::{
     self, DOCKING_RANGE, DockError, DockRequest, SEPARATION_SPEED, UndockError, UndockFuel,
 };
+use crate::goods::{Good, Inventory};
 use crate::kepler::{self, StateVector};
 use crate::landing::{self, Crash, LandingZone};
 use crate::launch::{Launch, LaunchPlan};
@@ -20,7 +21,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 17;
+pub const SAVE_VERSION: u32 = 18;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -123,8 +124,9 @@ pub struct Vessel {
     /// Ziel für einen Flug: ein Himmelskörper. Höchstens eines der beiden
     /// Ziele ist gesetzt (`World::set_target`, `World::set_target_body`).
     pub target_body: Option<BodyId>,
-    /// Fracht an Bord. Sie zählt beim Fliegen als Masse (`World::params`).
-    pub cargo: Cargo,
+    /// Fracht an Bord (siehe `goods`). Sie zählt beim Fliegen als Masse
+    /// (`World::params`).
+    pub cargo: Inventory,
     /// Dieses Schiff ist das Fundament der Basis mit dieser Nummer und
     /// fliegt nicht mehr.
     pub foundation_of: Option<usize>,
@@ -140,31 +142,27 @@ pub struct Vessel {
     pub design: Option<Design>,
 }
 
-/// Fracht an Bord in kg. Beide Stoffe teilen sich den Frachtraum.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
-pub struct Cargo {
-    /// Bauteile: von der Startbasis zu den Baustellen.
-    pub parts: f64,
-    /// Zorit: von den Minen zur Startbasis.
-    pub zorit: f64,
-}
-
-impl Cargo {
-    pub fn total(&self) -> f64 {
-        self.parts + self.zorit
-    }
-}
-
 /// Was eine Basis ist. Jede stellt höchstens einen Stoff her.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BaseKind {
-    /// Die Startbasis auf dem Heimatplaneten: gibt Bauteile und Treibstoff
-    /// aus und nimmt Zorit an.
+    /// Die Startbasis auf dem Heimatplaneten: lagert alle Güter, tauscht
+    /// Zorit gegen Bauteile und gibt Treibstoff frei aus.
     Depot,
     /// Stellt Treibstoff her; Schiffe tanken dort.
     FuelStation,
     /// Baut Zorit ab; Schiffe laden es dort.
     Mine,
+}
+
+impl BaseKind {
+    /// Das Gut, das eine fertige Basis dieser Art herstellt.
+    pub fn product(self) -> Option<Good> {
+        match self {
+            BaseKind::Depot => None,
+            BaseKind::FuelStation => Some(Good::Fuel),
+            BaseKind::Mine => Some(Good::Zorit),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -177,9 +175,13 @@ pub struct Base {
     /// abgeladen ist (kg). Die Startbasis braucht nichts.
     pub required: f64,
     pub delivered: f64,
-    /// Lager einer fertigen Tankstelle oder Mine für ihren Stoff; `None` bei
-    /// der Startbasis und auf einer Baustelle.
-    pub store: Option<Store>,
+    /// Das Lager (siehe `goods`). Für das Gut, das die Basis herstellt
+    /// (`BaseKind::product`), ist das der Stand zum Zeitpunkt `since`;
+    /// seitdem kommt gleichmäßig dazu, bis das Lager voll ist
+    /// (`World::stock`): für jeden Zeitpunkt direkt berechnet, und Warten
+    /// füllt es nur einmal (Regel 14).
+    pub stock: Inventory,
+    pub since: f64,
 }
 
 impl Base {
@@ -187,15 +189,6 @@ impl Base {
     pub fn complete(&self) -> bool {
         self.delivered >= self.required
     }
-}
-
-/// Lager einer Basis: der Stand zu einem Zeitpunkt. Seitdem kommt gleichmäßig
-/// dazu, bis das Lager voll ist (`World::base_stock`): für jeden Zeitpunkt
-/// direkt berechnet, und Warten füllt es nur einmal (Regel 14).
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Store {
-    pub amount: f64,
-    pub since: f64,
 }
 
 /// Was die Anzeige über ein Schiff wissen muss.
@@ -288,12 +281,6 @@ pub struct World {
     pub home: BodyId,
     pub vessels: Vec<Vessel>,
     pub bases: Vec<Base>,
-    /// Zorit im Lager der Startbasis in kg (siehe `base`).
-    pub zorit: f64,
-    /// Bauteile im Lager der Startbasis in kg: gegen Zorit getauscht oder
-    /// von Schiffen abgeladen.
-    #[serde(default)]
-    pub parts: f64,
     /// Zielgebiete zum Landen.
     pub zones: Vec<LandingZone>,
     /// Was passiert ist, nach Zeit geordnet (höchstens `LOG_LIMIT`
@@ -326,8 +313,6 @@ impl World {
             home: 0,
             vessels: Vec::new(),
             bases: Vec::new(),
-            zorit: 0.0,
-            parts: 0.0,
             zones: Vec::new(),
             log: Vec::new(),
             booster: None,
@@ -413,7 +398,7 @@ impl World {
             halt_warp_at_burn: false,
             target: None,
             target_body: None,
-            cargo: Cargo::default(),
+            cargo: Inventory::default(),
             foundation_of: None,
             docked_to: None,
             design: None,
@@ -493,7 +478,7 @@ impl World {
             halt_warp_at_burn: false,
             target: None,
             target_body: None,
-            cargo: Cargo::default(),
+            cargo: Inventory::default(),
             foundation_of: None,
             docked_to: None,
             design: None,

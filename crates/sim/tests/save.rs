@@ -1,10 +1,14 @@
 //! Tests für den Spielstand als Text (`sim::save`).
 
 use glam::DVec3;
+use sim::Good;
 use sim::save::{LoadError, from_json, to_json};
 use sim::scenario::{demo, start};
 use sim::world::SAVE_VERSION;
 use sim::{BaseKind, ManeuverNode};
+
+/// Laden und Abladen ohne Grenze: so viel, wie da ist und passt.
+const ALL: f64 = f64::INFINITY;
 
 /// Der Startentwurf, wie er in `World::designs` steht.
 const FREIGHTER_DESIGN: usize = 1;
@@ -32,8 +36,8 @@ fn loaded_game_continues_exactly() {
     for w in &mut worlds {
         w.advance_to(28_200.0);
         let mine = w.found_base(5, BaseKind::Mine).unwrap();
-        w.unload(7).unwrap();
-        w.unload(8).unwrap();
+        w.unload(7, Good::Parts, ALL).unwrap();
+        w.unload(8, Good::Parts, ALL).unwrap();
         w.advance(5_000.0);
         assert!(w.base_stock(mine) > 0.0);
     }
@@ -51,7 +55,7 @@ fn start_is_saved() {
     let loaded = from_json(&to_json(&world)).unwrap();
     assert_eq!(loaded, world);
     // Der Booster und das bestellte Schiff.
-    assert_eq!((loaded.zorit, loaded.vessels.len()), (2_000.0, 2));
+    assert_eq!((loaded.zorit(), loaded.vessels.len()), (2_000.0, 2));
 }
 
 /// Ein Spielstand einer anderen Version wird als solcher erkannt, auch wenn

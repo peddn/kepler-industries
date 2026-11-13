@@ -1,10 +1,14 @@
 //! Tests für Entwürfe aus Komponenten: Flugwerte, Preise und was sich bauen
 //! lässt.
 
+use sim::Good;
 use sim::design::{Chassis, Design, DesignError, Engine, FOUNDATION_SPACE, Part, SPACE_STEP};
 use sim::scenario::start;
 use sim::tech::Tech;
 use sim::{BaseError, Launch, LaunchProfile, VesselParams};
+
+/// Laden und Abladen ohne Grenze: so viel, wie da ist und passt.
+const ALL: f64 = f64::INFINITY;
 
 /// Die Startentwürfe ergeben die abgestimmten Schiffe: Massen, Tanks und
 /// Preise; der Frachter hat zwei Z-1.
@@ -151,7 +155,7 @@ fn ships_are_ordered_from_designs() {
     assert_eq!(v.name, "Leichter-1");
     assert_eq!(v.params, cheap.params());
     assert_eq!(v.design, Some(cheap));
-    assert_eq!(world.zorit, 3_000.0 - 800.0);
+    assert_eq!(world.zorit(), 3_000.0 - 800.0);
     assert!((world.vessel_fuel(ship) - 12_000.0).abs() < 1e-9);
 
     world.designs[2].engine = Engine::Z2;
@@ -163,7 +167,7 @@ fn ships_are_ordered_from_designs() {
     );
     world.techs.push(Tech::EngineZ2);
     world.order_ship(2).unwrap();
-    assert_eq!(world.zorit, 3_000.0 - 800.0 - 1_000.0);
+    assert_eq!(world.zorit(), 3_000.0 - 800.0 - 1_000.0);
 }
 
 /// Umbau an der Startbasis: ein anderer Entwurf mit demselben Chassis, zum
@@ -174,7 +178,7 @@ fn refit_costs_the_price_difference() {
     let mut world = start();
     world.techs.push(Tech::EngineZ2);
     let ship = world.order_ship(1).unwrap();
-    assert_eq!(world.zorit, 2_000.0);
+    assert_eq!(world.zorit(), 2_000.0);
     // Frachter mit zwei Z-2 statt Z-1: je 0,2 t mehr.
     let mut fast = Design::freighter();
     fast.name = "Schnell".into();
@@ -186,7 +190,7 @@ fn refit_costs_the_price_difference() {
     world.designs.extend([fast.clone(), small]);
 
     assert_eq!(world.refit(ship, 2), Ok(400.0));
-    assert_eq!(world.zorit, 1_600.0);
+    assert_eq!(world.zorit(), 1_600.0);
     let v = &world.vessels[ship];
     assert_eq!(v.name, "Frachter-1");
     assert_eq!(v.params, fast.params());
@@ -196,7 +200,7 @@ fn refit_costs_the_price_difference() {
 
     // Zurück auf den Frachter: Das Zorit kommt wieder.
     assert_eq!(world.refit(ship, 1), Ok(-400.0));
-    assert_eq!(world.zorit, 2_000.0);
+    assert_eq!(world.zorit(), 2_000.0);
     assert_eq!(world.vessels[ship].params, Design::freighter().params());
 
     // Fundament ein- und ausbauen geht auch: Basisschiff zu kleinem Frachter.
@@ -226,7 +230,7 @@ fn refit_is_refused() {
     let mut tanker = Design::freighter();
     tanker.tank = 16_000.0;
     world.designs.extend([fast, tanker]);
-    let before = (world.zorit, world.vessels[ship].clone());
+    let before = (world.zorit(), world.vessels[ship].clone());
 
     assert_eq!(world.refit(ship, 9), Err(BaseError::NoDesign));
     assert_eq!(world.refit(ship, 0), Err(BaseError::OtherChassis));
@@ -238,23 +242,23 @@ fn refit_is_refused() {
     );
     assert_eq!(world.refit(booster, 1), Err(BaseError::NoDesign));
     world.techs.push(Tech::EngineZ2);
-    world.zorit = 399.0;
+    world.depot_stock_mut().set(Good::Zorit, 399.0);
     assert_eq!(world.refit(ship, 2), Err(BaseError::NotEnoughZorit));
-    world.zorit = before.0;
-    assert_eq!((world.zorit, world.vessels[ship].clone()), before);
+    world.depot_stock_mut().set(Good::Zorit, before.0);
+    assert_eq!((world.zorit(), world.vessels[ship].clone()), before);
 
     // Mit Bauteilen an Bord passt der Entwurf ohne Frachtraum nicht.
     world.buy_parts(2_000.0).unwrap();
-    world.load_parts(ship).unwrap();
+    world.load(ship, Good::Parts, ALL).unwrap();
     assert_eq!(world.refit(ship, 3), Err(BaseError::CargoInTheWay));
     // Abgeladen geht es, und zurück auch.
-    world.unload(ship).unwrap();
+    world.unload(ship, Good::Parts, ALL).unwrap();
     assert_eq!(world.refit(ship, 3), Ok(0.0));
     assert_eq!(world.refit(ship, 1), Ok(0.0));
-    world.load_parts(ship).unwrap();
+    world.load(ship, Good::Parts, ALL).unwrap();
     // Der mit gleichem Frachtraum geht, die Fracht bleibt an Bord.
     world.refit(ship, 2).unwrap();
-    assert_eq!(world.vessels[ship].cargo.parts, 2_000.0);
+    assert_eq!(world.vessels[ship].cargo.get(Good::Parts), 2_000.0);
     assert!((world.vessel_fuel(ship) - 14_000.0).abs() < 1e-9);
 
     // Mit geplantem Start nicht.

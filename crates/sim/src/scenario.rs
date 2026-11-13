@@ -3,6 +3,7 @@
 use crate::body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint, circular_period};
 use crate::booster;
 use crate::design::Design;
+use crate::goods::{Good, Inventory};
 use crate::kepler::state_from_apsides;
 use crate::landing::LandingZone;
 use crate::task;
@@ -183,7 +184,6 @@ pub fn start() -> World {
     world.tasks = task::standard(&world.bodies, ZORB);
     world.designs = vec![Design::base_ship(), Design::freighter()];
     world.home = ZORB;
-    world.zorit = START_ZORIT;
     let pad = SurfacePoint::from_degrees(5.0, -20.0);
     world.bases.push(Base {
         name: "Startbasis".into(),
@@ -192,8 +192,10 @@ pub fn start() -> World {
         kind: BaseKind::Depot,
         required: 0.0,
         delivered: 0.0,
-        store: None,
+        stock: Inventory::default(),
+        since: 0.0,
     });
+    world.depot_stock_mut().set(Good::Zorit, START_ZORIT);
     world.zones.push(LandingZone {
         name: "Startbasis".into(),
         body: ZORB,
