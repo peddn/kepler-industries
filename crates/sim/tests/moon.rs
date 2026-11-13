@@ -1,9 +1,12 @@
 //! Tests für die Körper auf Schienen: Sonne im Ursprung, Planeten und Monde
 //! auf Kreisen und geneigten Ellipsen, Einflusssphären, gebundene Rotation.
 
+mod common;
+
+use common::SATELLITE;
 use glam::DVec3;
 use sim::body::{body_state, day_length, orbital_period, sphere_of_influence};
-use sim::scenario::{NURA, ZILL, ZOON, ZORB, ZUNN, demo};
+use sim::scenario::{NURA, ZILL, ZOON, ZORB, ZUNN, demo, start};
 use sim::{Event, StateVector, World, kepler};
 
 /// Lage und Geschwindigkeit von `body` relativ zu seinem Mutterkörper.
@@ -186,8 +189,7 @@ fn outer_moon_follows_its_ellipse() {
 /// fliegt um ihn herum und verlässt sie wieder zum Planeten.
 #[test]
 fn flyby_of_the_outer_moon() {
-    let mut world = demo();
-    world.vessels.clear();
+    let mut world = start();
     let moon = relative(&world, ZILL, 0.0);
     let soi = sphere_of_influence(&world.bodies, ZILL);
     let toward = -moon.velocity.normalize();
@@ -196,8 +198,12 @@ fn flyby_of_the_outer_moon() {
         position: moon.position - toward * 1.3 * soi + aside * 0.2 * soi,
         velocity: moon.velocity + toward * 300.0,
     };
-    world.spawn_vessel("Sonde", sim::scenario::SATELLITE, 100.0, ZORB, state);
-    let segments: Vec<_> = world.vessels[0].trajectory.segments().cloned().collect();
+    let probe = world.spawn_vessel("Sonde", SATELLITE, 100.0, ZORB, state);
+    let segments: Vec<_> = world.vessels[probe]
+        .trajectory
+        .segments()
+        .cloned()
+        .collect();
     assert_eq!(segments[0].end_event(), Some(Event::SoiEntry(ZILL)));
     let entry = segments[0].end();
     let ship = segments[0].state_at(&world.bodies, entry).position;

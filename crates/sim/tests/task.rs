@@ -1,9 +1,12 @@
 //! Tests für Aufgaben und Daten: die feste Liste, Orbitvorgaben als
 //! Bereiche, Landung und Basis; jede zählt einmal, an ihrem Ereignis.
 
+mod common;
+
+use common::{FERRY, base_ship_params, freighter_params};
 use glam::DVec3;
 use sim::kepler::state_from_apsides;
-use sim::scenario::{BASE_SHIP, FERRY, FREIGHTER, NURA, ZILL, ZOON, ZORB, demo, start};
+use sim::scenario::{NURA, ZILL, ZOON, ZORB, demo, start};
 use sim::{BaseKind, Goal, LogKind, ManeuverNode, Orbit, OrbitSpec, SurfacePoint, World};
 
 fn prograde(time: f64, delta_v: f64) -> ManeuverNode {
@@ -183,9 +186,9 @@ fn one_orbit_can_meet_several_tasks() {
 #[test]
 fn flyby_does_not_count() {
     let mut world = demo();
-    // Mondfähre-4 mit dem Transfer aus der Demo: knapp an Zoon vorbei.
-    world.add_node(3, prograde(600.0, 836.0)).unwrap();
-    world.set_armed(3, true).unwrap();
+    // Frachter-4 mit dem Transfer aus der Demo: knapp an Zoon vorbei.
+    world.add_node(4, prograde(600.0, 836.0)).unwrap();
+    world.set_armed(4, true).unwrap();
     world.advance_to(200_000.0);
     assert!(
         world
@@ -227,11 +230,11 @@ fn landing_counts_but_a_crash_does_not() {
 fn base_counts_when_it_is_complete() {
     let mut world = demo();
     let site = SurfacePoint::from_degrees(10.0, 30.0);
-    let ship = world.spawn_landed("Basisschiff", BASE_SHIP, 1_000.0, ZOON, site);
+    let ship = world.spawn_landed("Basisschiff", base_ship_params(), 1_000.0, ZOON, site);
     let base = world.found_base(ship, BaseKind::Mine).unwrap();
     assert_eq!(world.data, 0.0);
     for _ in 0..2 {
-        let freighter = world.spawn_landed("Frachter", FREIGHTER, 1_000.0, ZOON, site);
+        let freighter = world.spawn_landed("Frachter", freighter_params(), 1_000.0, ZOON, site);
         world.load_cargo(freighter, 2_000.0);
         world.unload(freighter).unwrap();
     }

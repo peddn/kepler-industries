@@ -1,13 +1,15 @@
 //! Tests fürs Protokoll: Einträge, Reihenfolge, Schrittgröße, Obergrenze.
 
-use glam::DVec3;
-use sim::kepler::time_to_apoapsis;
-use sim::scenario::{ZOON, ZORB, demo};
-use sim::{
-    Crash, LOG_LIMIT, Launch, LaunchProfile, LogEntry, LogKind, ManeuverNode, Segment, World,
-};
+mod common;
 
-const FERRY: usize = 2;
+use common::hop;
+
+use glam::DVec3;
+use sim::scenario::{ZOON, ZORB, demo};
+use sim::{LOG_LIMIT, Launch, LaunchProfile, LogEntry, LogKind, ManeuverNode, World};
+
+/// Frachter-3 der Demo steht an der Startbasis.
+const SHIP: usize = 3;
 
 fn kinds(world: &World, vessel: usize) -> Vec<LogKind> {
     world
@@ -18,9 +20,9 @@ fn kinds(world: &World, vessel: usize) -> Vec<LogKind> {
         .collect()
 }
 
-/// Start in den Orbit mit Zirkularisieren an der Apoapsis: Abheben,
+/// Start auf dem Booster und Zirkularisieren an der Apoapsis: Abheben,
 /// Brennschluss des Aufstiegs, Brennbeginn und Brennschluss des Nodes; danach
-/// eine runde Bahn.
+/// eine runde Bahn. Die Trennung und der Rückflug stehen beim Booster.
 #[test]
 fn launch_and_circularize() {
     let mut world = demo();
@@ -30,37 +32,21 @@ fn launch_and_circularize() {
         time: 60.0,
         profile: LaunchProfile::default(),
     };
-    world.set_launch(FERRY, launch).unwrap();
-    world.set_armed(FERRY, true).unwrap();
-    // Node an der Apoapsis der ersten Keplerbahn nach dem Aufstieg.
-    let gm = world.bodies[ZORB].gm;
-    let burn_end = world.vessels[FERRY].trajectory.launch().unwrap().burn.end;
-    let (start, state) = world.vessels[FERRY]
-        .trajectory
-        .segments()
-        .find_map(|s| match s {
-            Segment::Kepler { start, state, .. } if *start >= burn_end => Some((*start, *state)),
-            _ => None,
-        })
-        .unwrap();
-    let dt = time_to_apoapsis(gm, &state).unwrap();
-    let apoapsis = sim::kepler::propagate(gm, state, dt);
-    let dv = (gm / apoapsis.position.length()).sqrt() - apoapsis.velocity.length();
-    world
-        .add_node(
-            FERRY,
-            ManeuverNode {
-                time: start + dt,
-                delta_v: DVec3::new(dv, 0.0, 0.0),
-            },
-        )
-        .unwrap();
+    world.set_launch(SHIP, launch).unwrap();
+    world.set_armed(SHIP, true).unwrap();
+    let (time, dv) =
+        sim::booster::to_orbit(&world.bodies, &world.vessels[SHIP].trajectory).unwrap();
+    let node = ManeuverNode {
+        time,
+        delta_v: DVec3::new(dv, 0.0, 0.0),
+    };
+    world.add_node(SHIP, node).unwrap();
 
-    world.advance_to(start + dt + 600.0);
-    let kinds = kinds(&world, FERRY);
+    world.advance_to(time + 600.0);
+    let ship = kinds(&world, SHIP);
     assert!(
         matches!(
-            kinds.as_slice(),
+            ship.as_slice(),
             [
                 LogKind::Liftoff,
                 LogKind::BurnEnd { .. },
@@ -68,30 +54,36 @@ fn launch_and_circularize() {
                 LogKind::BurnEnd { .. }
             ]
         ),
-        "{kinds:?}"
+        "{ship:?}"
     );
     let LogKind::BurnEnd {
         apoapsis: Some(ap),
         periapsis: pe,
         ..
-    } = kinds[3]
+    } = ship[3]
     else {
         panic!("Bahn nach dem Zirkularisieren");
     };
     assert!(ap > 95_000.0 && pe > 95_000.0, "Ap {ap} Pe {pe}");
+    let booster = kinds(&world, world.booster.unwrap());
+    assert_eq!(booster[0], LogKind::Separated { ship: SHIP });
+    assert!(
+        matches!(booster.last(), Some(LogKind::Landed { zone: Some(0), .. })),
+        "{booster:?}"
+    );
     // Die Zeiten sind die der Ereignisse, aufsteigend.
     let times: Vec<f64> = world.log.iter().map(|e| e.time).collect();
     assert!(times.windows(2).all(|w| w[0] <= w[1]));
     assert_eq!(world.log[0].time, 60.0);
 }
 
-/// Sonde-2 taucht bei jedem Umlauf in die Luft; jeder Eintritt steht mit der
-/// Periapsis im Protokoll, bis sie abstürzt (Satellit: zu schwach zum Bremsen).
+/// Frachter-2 taucht bei jedem Umlauf in die Luft; jeder Eintritt steht mit
+/// der Periapsis im Protokoll, bis er herunterkommt und am Fallschirm landet.
 #[test]
-fn decay_and_crash() {
+fn decay_and_landing() {
     let mut world = demo();
     world.advance_to(40_000.0);
-    let kinds = kinds(&world, 1);
+    let kinds = kinds(&world, 2);
     let entries: Vec<f64> = kinds
         .iter()
         .filter_map(|k| match k {
@@ -107,42 +99,22 @@ fn decay_and_crash() {
     );
     // Die Bahn sinkt von Umlauf zu Umlauf.
     assert!(entries.windows(2).all(|w| w[1] < w[0]), "{entries:?}");
-    let Some(LogKind::Crashed { reason, .. }) = kinds.last() else {
-        panic!("Absturz erwartet: {kinds:?}");
-    };
-    assert!(matches!(reason, Crash::TooWeak { .. }));
+    assert!(
+        matches!(kinds.last(), Some(LogKind::Landed { body: ZORB, .. })),
+        "Landung erwartet: {kinds:?}"
+    );
 }
 
-/// Hop zum Übungsfeld: Landung mit Zielgebiet im Protokoll.
+/// Hop vom Übungsfeld zur Startbasis: Landung mit Zielgebiet im Protokoll.
 #[test]
 fn landing_names_the_zone() {
-    let field = demo()
+    let (mut world, ship) = hop(270.0, 49.0);
+    let depot = world
         .zones
         .iter()
-        .position(|z| z.name == "Übungsfeld")
+        .position(|z| z.name == "Startbasis")
         .unwrap();
-    let mut world = (20..35)
-        .map(|km| {
-            let mut world = demo();
-            let profile = LaunchProfile {
-                target_apoapsis: km as f64 * 1000.0,
-                ..LaunchProfile::default()
-            };
-            world
-                .set_launch(
-                    FERRY,
-                    Launch {
-                        time: 60.0,
-                        profile,
-                    },
-                )
-                .unwrap();
-            world.set_armed(FERRY, true).unwrap();
-            world
-        })
-        .find(|w| w.touchdown(FERRY).is_some_and(|t| t.zone == Some(field)))
-        .unwrap();
-    let touchdown = world.touchdown(FERRY).unwrap();
+    let touchdown = world.touchdown(ship).unwrap();
     world.advance_to(touchdown.time + 1.0);
     let entry = world.log.last().unwrap();
     assert_eq!(entry.time, touchdown.time);
@@ -150,7 +122,7 @@ fn landing_names_the_zone() {
         entry.kind,
         LogKind::Landed {
             point: touchdown.point,
-            zone: Some(field),
+            zone: Some(depot),
             body: ZORB,
         }
     );
@@ -159,28 +131,10 @@ fn landing_names_the_zone() {
 /// Regel 6 auch fürs Protokoll: 1 Schritt == 10 000 Schritte, bitgenau.
 #[test]
 fn log_is_independent_of_step_size() {
-    let setup = || {
-        let mut world = demo();
-        let profile = LaunchProfile {
-            target_apoapsis: 25_000.0,
-            ..LaunchProfile::default()
-        };
-        world
-            .set_launch(
-                FERRY,
-                Launch {
-                    time: 60.0,
-                    profile,
-                },
-            )
-            .unwrap();
-        world.set_armed(FERRY, true).unwrap();
-        world
-    };
     let target = 20_000.0;
-    let mut one_step = setup();
+    let (mut one_step, _) = hop(90.0, 25.0);
     one_step.advance_to(target);
-    let mut many_steps = setup();
+    let (mut many_steps, _) = hop(90.0, 25.0);
     for i in 1..=10_000 {
         many_steps.advance_to(target * i as f64 / 10_000.0);
     }
@@ -202,7 +156,7 @@ fn log_keeps_the_newest() {
     assert_eq!(world.log.len(), LOG_LIMIT);
     assert!(matches!(
         world.log.last().unwrap().kind,
-        LogKind::Crashed { .. }
+        LogKind::Landed { .. }
     ));
 }
 
@@ -235,7 +189,7 @@ fn landing_on_the_moon_is_logged_with_its_body() {
         .position(|z| z.name == "Nahseite")
         .unwrap();
     let orbit = sim::kepler::state_from_apsides(gm, r, r, 0.0, 0.0, 0.0, false);
-    world.spawn_vessel("Lander", sim::scenario::FERRY, 2_000.0, ZOON, orbit);
+    world.spawn_vessel("Lander", common::FERRY, 2_000.0, ZOON, orbit);
     let lander = world.vessels.len() - 1;
     // Absenken an verschiedenen Stellen, bis das Kreuz in der Nahseite liegt.
     let world = (0..1_000)

@@ -15,7 +15,7 @@ const FREIGHTER_DESIGN: usize = 1;
 #[test]
 fn loaded_game_continues_exactly() {
     let mut world = demo();
-    for (vessel, time) in [(4, 647.5), (6, 620.0), (7, 610.0)] {
+    for (vessel, time) in [(5, 647.5), (7, 613.5), (8, 602.5)] {
         let node = ManeuverNode {
             time,
             delta_v: DVec3::new(845.0, 0.0, 0.0),
@@ -24,16 +24,16 @@ fn loaded_game_continues_exactly() {
         world.set_armed(vessel, true).unwrap();
     }
     // Mitten im Brennen der Frachter.
-    world.advance_to(615.0);
+    world.advance_to(608.0);
     let loaded = from_json(&to_json(&world)).unwrap();
     assert_eq!(loaded, world);
 
     let mut worlds = [world, loaded];
     for w in &mut worlds {
         w.advance_to(28_200.0);
-        let mine = w.found_base(4, BaseKind::Mine).unwrap();
-        w.unload(6).unwrap();
+        let mine = w.found_base(5, BaseKind::Mine).unwrap();
         w.unload(7).unwrap();
+        w.unload(8).unwrap();
         w.advance(5_000.0);
         assert!(w.base_stock(mine) > 0.0);
     }

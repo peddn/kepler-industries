@@ -2,26 +2,44 @@
 //! lässt.
 
 use sim::design::{Chassis, Design, DesignError, Engine, FOUNDATION_SPACE, Part, SPACE_STEP};
-use sim::scenario::{BASE_SHIP, FREIGHTER, start};
+use sim::scenario::start;
 use sim::{BaseError, VesselParams};
 
 /// Die Startentwürfe ergeben die abgestimmten Schiffe: Massen, Tanks und
-/// Preise wie die festen Vorlagen, der Frachter mit zwei Z-1.
+/// Preise; der Frachter hat zwei Z-1.
 #[test]
 fn start_designs_match_the_catalogue() {
     let freighter = Design::freighter();
     assert_eq!(
         freighter.params(),
         VesselParams {
+            dry_mass: 2_500.0,
+            drag_area: 5.0,
             thrust: 500_000.0,
-            ..FREIGHTER
+            exhaust_velocity: 3_200.0,
+            fuel_capacity: 14_000.0,
+            parachute_area: 1_000.0,
+            cargo_capacity: 2_000.0,
+            base_kit: false,
         }
     );
     assert_eq!(freighter.cargo(), 2_000.0);
     assert_eq!(freighter.price(), 1_000.0);
 
     let base_ship = Design::base_ship();
-    assert_eq!(base_ship.params(), BASE_SHIP);
+    assert_eq!(
+        base_ship.params(),
+        VesselParams {
+            dry_mass: 3_000.0,
+            drag_area: 4.0,
+            thrust: 250_000.0,
+            exhaust_velocity: 3_200.0,
+            fuel_capacity: 7_000.0,
+            parachute_area: 400.0,
+            cargo_capacity: 0.0,
+            base_kit: true,
+        }
+    );
     assert_eq!(base_ship.free_space(), 10_000.0 - FOUNDATION_SPACE);
     assert_eq!(base_ship.cargo(), 0.0);
     assert_eq!(base_ship.price(), 1_000.0);

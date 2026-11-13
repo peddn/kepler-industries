@@ -1,9 +1,12 @@
 //! Tests für Manöverketten: mehrere Nodes pro Schiff, jeder auf der Bahn
 //! nach den vorherigen.
 
+mod common;
+
+use common::SATELLITE;
 use glam::DVec3;
 use sim::kepler::{self, state_from_apsides};
-use sim::scenario::{SATELLITE, demo, home_planet};
+use sim::scenario::{demo, home_planet};
 use sim::{ManeuverNode, Plan, PlanError, Segment, VesselStatus, World};
 
 /// Ein Satellit (Werte wie in der Demo) auf einer Bahn mit den gegebenen Höhen.
@@ -347,8 +350,8 @@ fn revolutions_on_stable_orbit() {
     assert_eq!(trajectory.revolutions(&world.bodies, 0.0, 2.7 * period), 2);
 }
 
-/// Regel 6 mit Ketten: 1 Schritt == 10 000 Schritte, bitgenau. Relais-1
-/// führt eine scharfe Kette aus, die Kette von Sonde-2 ist nicht scharf.
+/// Regel 6 mit Ketten: 1 Schritt == 10 000 Schritte, bitgenau. Frachter-1
+/// führt eine scharfe Kette aus, die Kette von Frachter-2 ist nicht scharf.
 #[test]
 fn chain_result_is_independent_of_step_size() {
     let setup = || {
@@ -357,7 +360,7 @@ fn chain_result_is_independent_of_step_size() {
         for (time, dv) in [(1_500.0, 120.0), (3_000.0, -40.0)] {
             world
                 .add_node(
-                    0,
+                    1,
                     ManeuverNode {
                         time,
                         delta_v: prograde(dv),
@@ -365,10 +368,10 @@ fn chain_result_is_independent_of_step_size() {
                 )
                 .unwrap();
         }
-        world.set_armed(0, true).unwrap();
+        world.set_armed(1, true).unwrap();
         world
             .add_node(
-                1,
+                2,
                 ManeuverNode {
                     time: 1_500.0,
                     delta_v: DVec3::new(30.0, 10.0, 5.0),
@@ -386,10 +389,10 @@ fn chain_result_is_independent_of_step_size() {
     }
     many_steps.advance_to(target);
     assert!(
-        one_step.vessels[0].trajectory.nodes().is_empty(),
+        one_step.vessels[1].trajectory.nodes().is_empty(),
         "Kette ausgeführt"
     );
-    for i in 0..2 {
+    for i in 1..3 {
         assert_eq!(one_step.vessel_state(i), many_steps.vessel_state(i));
         assert_eq!(one_step.vessel_status(i), many_steps.vessel_status(i));
         assert_eq!(one_step.vessel_mass(i), many_steps.vessel_mass(i));
@@ -404,10 +407,10 @@ fn save_and_load_with_chain() {
         time: 600.0,
         delta_v: prograde(10.0),
     };
-    world.add_node(0, first).unwrap();
+    world.add_node(1, first).unwrap();
     world
         .add_node(
-            0,
+            1,
             ManeuverNode {
                 time: 2_400.0,
                 delta_v: prograde(10.0),
@@ -416,7 +419,7 @@ fn save_and_load_with_chain() {
         .unwrap();
     world
         .set_node(
-            0,
+            1,
             0,
             ManeuverNode {
                 delta_v: prograde(-300.0),
@@ -424,17 +427,17 @@ fn save_and_load_with_chain() {
             },
         )
         .unwrap();
-    assert!(world.vessels[0].trajectory.nodes()[1].plan.is_err());
+    assert!(world.vessels[1].trajectory.nodes()[1].plan.is_err());
     world
         .add_node(
-            1,
+            2,
             ManeuverNode {
                 time: 2_000.0,
                 delta_v: prograde(25.0),
             },
         )
         .unwrap();
-    world.set_armed(1, true).unwrap();
+    world.set_armed(2, true).unwrap();
     let json = serde_json::to_string(&world).unwrap();
     let loaded: World = serde_json::from_str(&json).unwrap();
     assert_eq!(world, loaded);

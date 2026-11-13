@@ -1,8 +1,11 @@
 //! Tests für Manöver-Nodes und Brennmanöver.
 
+mod common;
+
+use common::SATELLITE;
 use glam::DVec3;
 use sim::kepler::{self, state_from_apsides};
-use sim::scenario::{SATELLITE, ZORB, demo, home_planet};
+use sim::scenario::{ZORB, demo, home_planet};
 use sim::{ManeuverNode, PlanError, Segment, VesselParams, VesselStatus, World};
 
 const DAY: f64 = 86_400.0;
@@ -185,28 +188,28 @@ fn impact_prediction_matches_wreck() {
     assert_eq!(world.vessel_status(0), VesselStatus::Wreck { point });
 }
 
-/// Sonde-2 aus der Demo lässt sich mit einem kleinen Manöver an der Apoapsis
+/// Frachter-2 aus der Demo lässt sich mit einem kleinen Manöver an der Apoapsis
 /// retten: Die Periapsis steigt über die Atmosphäre, die Bahn bleibt stabil.
 #[test]
 fn rescue_probe_at_apoapsis() {
     let mut world = demo();
     // Erst den ersten Durchgang durch die Luft abwarten.
     world.advance_to(1_300.0);
-    let (_, state) = world.vessel_state(1);
+    let (_, state) = world.vessel_state(2);
     let apoapsis_in = kepler::time_to_apoapsis(world.bodies[ZORB].gm, &state).unwrap();
     world
         .add_node(
-            1,
+            2,
             ManeuverNode {
                 time: world.time + apoapsis_in,
                 delta_v: prograde(30.0),
             },
         )
         .unwrap();
-    world.set_armed(1, true).unwrap();
-    let (periapsis, _) = orbit_after_burn(&world, 1);
+    world.set_armed(2, true).unwrap();
+    let (periapsis, _) = orbit_after_burn(&world, 2);
     assert!(periapsis > BOUNDARY_ALT, "Periapsis {periapsis}");
-    let trajectory = &world.vessels[1].trajectory;
+    let trajectory = &world.vessels[2].trajectory;
     let burn = trajectory.plans().next().unwrap().burn;
     assert!(matches!(
         trajectory.segment_after(&burn),
@@ -215,7 +218,7 @@ fn rescue_probe_at_apoapsis() {
 
     world.advance_to(world.time + DAY);
     assert!(matches!(
-        world.vessel_status(1),
+        world.vessel_status(2),
         VesselStatus::Orbit {
             descending: false,
             ..
@@ -244,14 +247,14 @@ fn clearing_node_restores_trajectory() {
 }
 
 /// Regel 6 gilt auch mit Manöver: 1 Schritt == 10 000 Schritte, bitgenau.
-/// Relais-1 brennt (scharf). Der Node von Sonde-2 ist nicht scharf und
+/// Frachter-1 brennt (scharf). Der Node von Frachter-2 ist nicht scharf und
 /// verfällt bei Brennbeginn, weil vor dem nächsten Umlauf die Luft liegt.
 #[test]
 fn node_result_is_independent_of_step_size() {
     let setup = || {
         let mut world = demo();
         world.advance_to(100.0);
-        for (index, delta_v) in [(0, prograde(-250.0)), (1, DVec3::new(30.0, 10.0, 5.0))] {
+        for (index, delta_v) in [(1, prograde(-250.0)), (2, DVec3::new(30.0, 10.0, 5.0))] {
             world
                 .add_node(
                     index,
@@ -262,7 +265,7 @@ fn node_result_is_independent_of_step_size() {
                 )
                 .unwrap();
         }
-        world.set_armed(0, true).unwrap();
+        world.set_armed(1, true).unwrap();
         world
     };
     let target = 4.0 * 3600.0 + 17.0;
@@ -273,7 +276,7 @@ fn node_result_is_independent_of_step_size() {
         many_steps.advance_to(100.0 + (target - 100.0) * i as f64 / 10_000.0);
     }
     many_steps.advance_to(target);
-    for i in 0..2 {
+    for i in 1..3 {
         assert_eq!(one_step.vessel_state(i), many_steps.vessel_state(i));
         assert_eq!(one_step.vessel_status(i), many_steps.vessel_status(i));
         assert_eq!(one_step.vessel_mass(i), many_steps.vessel_mass(i));
@@ -348,16 +351,16 @@ fn halting_burn_respects_flag() {
         time,
         delta_v: prograde(20.0),
     };
-    world.add_node(0, node(1_000.0)).unwrap();
-    world.add_node(1, node(2_000.0)).unwrap();
+    world.add_node(1, node(1_000.0)).unwrap();
+    world.add_node(2, node(2_000.0)).unwrap();
     assert_eq!(world.next_halting_burn(), None);
 
     // Markiert, aber der Node ist nicht scharf: kein Anhalten.
-    world.vessels[1].halt_warp_at_burn = true;
+    world.vessels[2].halt_warp_at_burn = true;
     assert_eq!(world.next_halting_burn(), None);
 
-    world.set_armed(1, true).unwrap();
-    let start = world.vessels[1]
+    world.set_armed(2, true).unwrap();
+    let start = world.vessels[2]
         .trajectory
         .plans()
         .next()
@@ -370,7 +373,7 @@ fn halting_burn_respects_flag() {
     world.advance_to(start);
     assert_eq!(world.next_halting_burn(), None);
     assert!(matches!(
-        world.vessel_status(1),
+        world.vessel_status(2),
         VesselStatus::Burning { .. }
     ));
 }

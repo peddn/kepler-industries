@@ -6,7 +6,7 @@ use crate::design::Design;
 use crate::kepler::state_from_apsides;
 use crate::landing::LandingZone;
 use crate::task;
-use crate::world::{Base, BaseKind, VesselParams, World};
+use crate::world::{Base, BaseKind, World};
 use std::f64::consts::PI;
 
 /// Nummern der Körper in der Demo: die Sonne zuerst, dann der Heimatplanet
@@ -158,71 +158,17 @@ pub fn solar_system() -> Vec<Body> {
     vec![sun(), planet, moon, outer_moon(ZORB), nura(ZUNN)]
 }
 
-/// Kleiner Satellit mit Triebwerk: 400 kg leer, rund 1,2 km/s Δv bei 200 kg
-/// Treibstoff.
-pub const SATELLITE: VesselParams = VesselParams {
-    dry_mass: 400.0,
-    drag_area: 2.0,
-    thrust: 2_000.0,
-    exhaust_velocity: 3_000.0,
-    fuel_capacity: 200.0,
-    parachute_area: 0.0,
-    cargo_capacity: 0.0,
-    base_kit: false,
-};
-
 /// Radius der Zielgebiete in m.
 pub const ZONE_RADIUS: f64 = 5_000.0;
 
-/// Fähre, die selbst vom Boden startet: 1,5 t leer, Schub reicht für das
-/// 1,5-fache des Startgewichts. Mit 4 t Treibstoff rund 4,2 km/s Δv: genug
-/// für 100 km und das Zirkularisieren, mit etwas Rest. Am Fallschirm kommt sie
-/// mit rund 10 m/s am Boden an.
-pub const FERRY: VesselParams = VesselParams {
-    dry_mass: 1_500.0,
-    drag_area: 2.0,
-    thrust: 80_000.0,
-    exhaust_velocity: 3_200.0,
-    fuel_capacity: 4_000.0,
-    parachute_area: 400.0,
-    cargo_capacity: 0.0,
-    base_kit: false,
-};
-
-/// Frachter der Demo (feste Werte; im Spiel kommen Schiffe aus Entwürfen,
-/// siehe `design`, der Frachter dort hat zwei Z-1 mit zusammen 500 kN):
-/// 2 t Frachtraum. So groß, dass er voll beladen auf dem Booster
-/// von Zorb startet, auf Zoon landet und ohne Tanken mit Zorit zurückkommt;
-/// auf Zorb bremsen Luft und Fallschirm.
-pub const FREIGHTER: VesselParams = VesselParams {
-    dry_mass: 2_500.0,
-    drag_area: 5.0,
-    thrust: 440_000.0,
-    exhaust_velocity: 3_200.0,
-    fuel_capacity: 14_000.0,
-    parachute_area: 1_000.0,
-    cargo_capacity: 2_000.0,
-    base_kit: false,
-};
-
-/// Basisschiff der Demo (feste Werte, dieselben wie der Startentwurf in
-/// `design`): startet auf dem Booster von Zorb, landet einmal und wird zum
-/// Fundament einer Basis (siehe `base`). Kein Frachtraum.
-pub const BASE_SHIP: VesselParams = VesselParams {
-    dry_mass: 3_000.0,
-    drag_area: 4.0,
-    thrust: 250_000.0,
-    exhaust_velocity: 3_200.0,
-    fuel_capacity: 7_000.0,
-    parachute_area: 400.0,
-    cargo_capacity: 0.0,
-    base_kit: true,
-};
-
-/// So viel Treibstoff haben die Schiffe der Startausstattung im Orbit: etwa,
-/// was nach einem Start von Zorb übrig ist.
+/// So viel Treibstoff haben die Schiffe der Demo im Orbit: etwa, was nach
+/// einem Start von Zorb übrig ist.
 const FREIGHTER_FUEL_IN_ORBIT: f64 = 6_900.0;
 const BASE_SHIP_FUEL_IN_ORBIT: f64 = 3_100.0;
+/// Frachter-1 der Demo hat einen Teil verflogen (rund 1,1 km/s übrig),
+/// Frachter-2 fast alles (rund 250 m/s).
+const RELAY_FUEL: f64 = 1_000.0;
+const LOW_FUEL: f64 = 200.0;
 
 /// Zorit im Lager der Startbasis zu Spielbeginn (kg): genau, was eine Basis
 /// kostet. Ein Basisschiff, ein Frachter und 4 t Bauteile (der Frachter
@@ -233,20 +179,6 @@ pub const START_ZORIT: f64 = 3_000.0;
 /// mit ihrem Zielgebiet, dem Booster und `START_ZORIT` im Lager. Keine
 /// Schiffe: Man bestellt, was man braucht (siehe `base`).
 pub fn start() -> World {
-    let mut world = base_world();
-    add_booster(&mut world);
-    world
-}
-
-/// Der Booster steht vollgetankt an der Startbasis.
-fn add_booster(world: &mut World) {
-    let pad = world.bases[0].location;
-    let booster = world.spawn_landed("Booster", booster::B1, booster::B1.fuel_capacity, ZORB, pad);
-    world.booster = Some(booster);
-}
-
-/// Sonnensystem und Startbasis, noch ohne Booster.
-fn base_world() -> World {
     let mut world = World::new(solar_system());
     world.tasks = task::standard(&world.bodies, ZORB);
     world.designs = vec![Design::base_ship(), Design::freighter()];
@@ -268,112 +200,103 @@ fn base_world() -> World {
         center: pad,
         radius: ZONE_RADIUS,
     });
+    let booster = world.spawn_landed("Booster", booster::B1, booster::B1.fuel_capacity, ZORB, pad);
+    world.booster = Some(booster);
     world
 }
 
-/// Für Tests und zum Ausprobieren (`--demo`): wie `start`, aber ohne Booster
-/// (die Fähre an der Startbasis startet aus eigener Kraft, wie überall
-/// sonst; die Beispiele mit ihr bleiben so, wie sie sind), mit leerem
-/// Lager, weiteren Zielgebieten und Schiffen. Zwei Satelliten: einer stabil
-/// oberhalb der Atmosphäre, einer zu tief abgesetzt. Ohne Eingriff bremst die
-/// Luft ihn bei jedem Durchgang ab, bis er abstürzt. Mit einem Manöver an der
-/// Apoapsis lässt er sich retten. Dazu eine Fähre an der Startbasis, die
-/// starten kann, eine vollgetankte Fähre im Orbit für den Flug zum Mond und
-/// dahinter zwei Basisschiffe und zwei beladene Frachter.
+/// Ein Schiff nach einem Entwurf, benannt wie ein bestelltes. `place` setzt
+/// es mit seinen Werten aus und liefert seine Nummer.
+fn ship(
+    world: &mut World,
+    design: &Design,
+    place: impl FnOnce(&mut World, &str) -> usize,
+) -> usize {
+    let name = format!("{}-{}", design.name, world.ship_count() + 1);
+    let vessel = place(world, &name);
+    world.vessels[vessel].design = Some(design.clone());
+    vessel
+}
+
+/// Für Tests und zum Ausprobieren (`--demo`): der Spielbeginn (`start`),
+/// dazu weitere Zielgebiete und Schiffe aus den Startentwürfen, die schon
+/// unterwegs sind. Die Nummer im Namen ist die Nummer des Schiffs (der
+/// Booster ist Nummer 0):
+///
+/// - Frachter-1 auf einer stabilen Kreisbahn, als Ziel für ein Rendezvous.
+/// - Frachter-2 zu tief abgesetzt und fast leer. Ohne Eingriff bremst die
+///   Luft ihn bei jedem Durchgang ab, bis er herunterkommt. Mit einem
+///   Manöver an der Apoapsis lässt er sich retten.
+/// - Frachter-3 vollgetankt an der Startbasis, bereit zum Start auf dem
+///   Booster.
+/// - Frachter-4 auf der Parkbahn, für Flüge zu den Monden und nach Nura.
+/// - dahinter zwei Basisschiffe und zwei beladene Frachter: alles für eine
+///   Basis.
 pub fn demo() -> World {
-    let mut world = base_world();
-    world.zorit = 0.0;
+    let mut world = start();
     let planet = &world.bodies[ZORB];
     let (gm, r) = (planet.gm, planet.radius);
     let pad = world.bases[0].location;
-
-    let stable = state_from_apsides(
-        gm,
-        r + 100_000.0,
-        r + 100_000.0,
-        28f64.to_radians(),
-        0.0,
-        0.0,
-        false,
-    );
-    world.spawn_vessel("Relais-1", SATELLITE, 100.0, ZORB, stable);
-
-    // Periapsis 62 km liegt in der Luft.
-    let too_low = state_from_apsides(
-        gm,
-        r + 62_000.0,
-        r + 150_000.0,
-        10f64.to_radians(),
-        120f64.to_radians(),
-        0.0,
-        true,
-    );
-    world.spawn_vessel("Sonde-2", SATELLITE, 200.0, ZORB, too_low);
-
-    world.spawn_landed("Fähre-3", FERRY, 4_000.0, ZORB, pad);
-
-    // Vollgetankt in 100 km Höhe über dem Äquator, so gestellt, dass ein
-    // Transfer nach 10 Minuten (836 m/s prograd) knapp am Mond vorbeiführt.
-    let parked = state_from_apsides(
-        gm,
-        r + 100_000.0,
-        r + 100_000.0,
-        0.0,
-        0.0,
-        314f64.to_radians(),
-        false,
-    );
-    world.spawn_vessel("Mondfähre-4", FERRY, 4_000.0, ZORB, parked);
-
-    // Die Startausstattung (siehe `base`), auf derselben Bahn
-    // hintereinander: zwei Basisschiffe (für eine Mine und eine Tankstelle)
-    // und zwei Frachter mit zusammen den Bauteilen für eine Basis.
-    for (name, params, fuel, cargo, ahead) in [
-        (
-            "Basisschiff-5",
-            BASE_SHIP,
-            BASE_SHIP_FUEL_IN_ORBIT,
-            0.0,
-            316.0,
-        ),
-        (
-            "Basisschiff-6",
-            BASE_SHIP,
-            BASE_SHIP_FUEL_IN_ORBIT,
-            0.0,
-            318.0,
-        ),
-        (
-            "Frachter-7",
-            FREIGHTER,
-            FREIGHTER_FUEL_IN_ORBIT,
-            2_000.0,
-            320.0,
-        ),
-        (
-            "Frachter-8",
-            FREIGHTER,
-            FREIGHTER_FUEL_IN_ORBIT,
-            2_000.0,
-            322.0,
-        ),
-    ] {
-        let state = state_from_apsides(
+    let freighter = Design::freighter();
+    let base_ship = Design::base_ship();
+    // Höhen in m, Winkel in Grad. Eine elliptische Bahn beginnt an der
+    // Apoapsis.
+    let orbit = |periapsis: f64, apoapsis: f64, inclination: f64, node: f64, anomaly: f64| {
+        state_from_apsides(
             gm,
-            r + 100_000.0,
-            r + 100_000.0,
-            0.0,
-            0.0,
-            f64::to_radians(ahead),
-            false,
-        );
-        let vessel = world.spawn_vessel(name, params, fuel, ZORB, state);
+            r + periapsis,
+            r + apoapsis,
+            inclination.to_radians(),
+            node.to_radians(),
+            anomaly.to_radians(),
+            periapsis < apoapsis,
+        )
+    };
+    let in_orbit = |world: &mut World, design: &Design, fuel: f64, state| {
+        ship(world, design, |w, name| {
+            w.spawn_vessel(name, design.params(), fuel, ZORB, state)
+        })
+    };
+
+    in_orbit(
+        &mut world,
+        &freighter,
+        RELAY_FUEL,
+        orbit(100e3, 100e3, 28.0, 0.0, 0.0),
+    );
+    // Periapsis 62 km liegt in der Luft.
+    in_orbit(
+        &mut world,
+        &freighter,
+        LOW_FUEL,
+        orbit(62e3, 150e3, 10.0, 120.0, 0.0),
+    );
+    ship(&mut world, &freighter, |w, name| {
+        let params = freighter.params();
+        w.spawn_landed(name, params, params.fuel_capacity, ZORB, pad)
+    });
+    // In 100 km Höhe über dem Äquator, so gestellt, dass ein Transfer nach
+    // 10 Minuten knapp am Mond vorbeiführt. Dahinter auf derselben Bahn die
+    // Schiffe für eine Basis; die Frachter tragen zusammen ihre Bauteile.
+    in_orbit(
+        &mut world,
+        &freighter,
+        FREIGHTER_FUEL_IN_ORBIT,
+        orbit(100e3, 100e3, 0.0, 0.0, 314.0),
+    );
+    for (design, fuel, cargo, ahead) in [
+        (&base_ship, BASE_SHIP_FUEL_IN_ORBIT, 0.0, 316.0),
+        (&base_ship, BASE_SHIP_FUEL_IN_ORBIT, 0.0, 318.0),
+        (&freighter, FREIGHTER_FUEL_IN_ORBIT, 2_000.0, 320.0),
+        (&freighter, FREIGHTER_FUEL_IN_ORBIT, 2_000.0, 322.0),
+    ] {
+        let state = orbit(100e3, 100e3, 0.0, 0.0, ahead);
+        let vessel = in_orbit(&mut world, design, fuel, state);
         world.load_cargo(vessel, cargo);
     }
 
-    // Weitere Zielgebiete: eines etwa 60 km östlich der Startbasis zum Üben
-    // eines Hops (Kurs 90°, Ziel-Apoapsis rund 27 km) und eines weit weg im
-    // Osten, zum Anfliegen aus dem Orbit.
+    // Weitere Zielgebiete: eines etwa 60 km östlich der Startbasis und eines
+    // weit weg im Osten, zum Anfliegen aus dem Orbit.
     // Auf Zoon: die Nahseite (Zorb im Zenit) und die Fernseite.
     for (name, body, point) in [
         ("Übungsfeld", ZORB, SurfacePoint::from_degrees(4.94, -14.2)),

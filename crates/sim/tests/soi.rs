@@ -1,11 +1,14 @@
 //! Tests für den Wechsel der Einflusssphäre: Mond-Vorbeiflug, Brennen über
 //! die Grenze, Einfang, Bahn um die Sonne, Flug zu Nura.
 
+mod common;
+
+use common::FERRY;
 use glam::DVec3;
 use sim::body::{body_state, sphere_of_influence};
 use sim::kepler::{StateVector, orbit_info, state_from_apsides};
 use sim::log::LogKind;
-use sim::scenario::{FERRY, NURA, ZOON, ZORB, ZUNN, home_planet, moon, solar_system};
+use sim::scenario::{NURA, ZOON, ZORB, ZUNN, home_planet, moon, solar_system};
 use sim::trajectory::{Event, Segment};
 use sim::{ManeuverNode, VesselStatus, World};
 use std::f64::consts::PI;
@@ -240,7 +243,7 @@ fn node_at_the_moon_captures() {
     assert!(info.apoapsis.unwrap() < sphere_of_influence(&world.bodies, MOON));
 }
 
-/// In der Demo: Die Mondfähre fliegt mit 836 m/s nach 10 Minuten knapp am
+/// In der Demo: Frachter-4 fliegt mit 836 m/s nach 10 Minuten knapp am
 /// Mond vorbei.
 #[test]
 fn demo_ferry_reaches_the_moon() {
@@ -248,7 +251,7 @@ fn demo_ferry_reaches_the_moon() {
     let ferry = world
         .vessels
         .iter()
-        .position(|v| v.name == "Mondfähre-4")
+        .position(|v| v.name == "Frachter-4")
         .unwrap();
     let node = ManeuverNode {
         time: 600.0,
@@ -325,7 +328,7 @@ fn escape_goes_around_the_sun() {
     world.add_node(0, node).unwrap();
 }
 
-/// In der Demo: Mondfähre-4 fliegt mit 1.090 m/s prograd nach 163.400 s
+/// In der Demo: Frachter-4 fliegt mit 1.088,5 m/s prograd nach 163.400 s
 /// (gut 7 Tagen, im ersten Startfenster) aus Zorbs Sphäre zu Zunn und nach
 /// etwa 270 Tagen in Nuras Sphäre.
 #[test]
@@ -333,10 +336,10 @@ fn demo_ferry_reaches_nura() {
     let mut world = sim::scenario::demo();
     let node = ManeuverNode {
         time: 163_400.0,
-        delta_v: DVec3::new(1_090.0, 0.0, 0.0),
+        delta_v: DVec3::new(1_088.5, 0.0, 0.0),
     };
-    world.add_node(3, node).unwrap();
-    let s: Vec<Segment> = world.vessels[3].trajectory.segments().cloned().collect();
+    world.add_node(4, node).unwrap();
+    let s: Vec<Segment> = world.vessels[4].trajectory.segments().cloned().collect();
     let entry = s
         .iter()
         .position(|x| x.end_event() == Some(Event::SoiEntry(NURA)))

@@ -1,13 +1,13 @@
 //! Tests für die Landung: Fallschirm, Landebrennen, Aufsetzen, Wrack,
 //! Zielgebiete, Hop.
 
+mod common;
+
+use common::{FERRY, SATELLITE, hop};
 use glam::DVec3;
 use sim::kepler::state_from_apsides;
-use sim::scenario::{FERRY, SATELLITE, ZORB, demo, home_planet, moon};
-use sim::{
-    Crash, Launch, LaunchProfile, LogKind, ManeuverNode, StateVector, VesselParams, VesselStatus,
-    World,
-};
+use sim::scenario::{ZORB, home_planet, moon};
+use sim::{Crash, LogKind, ManeuverNode, StateVector, VesselParams, VesselStatus, World};
 
 /// Ein Schiff auf einer Kreisbahn in 100 km Höhe.
 fn in_orbit(params: VesselParams, fuel: f64) -> World {
@@ -139,108 +139,58 @@ fn satellite_is_too_weak_to_land() {
     assert!(matches!(world.vessel_status(0), VesselStatus::Wreck { .. }));
 }
 
-/// Hop von der Startbasis zum Übungsfeld der Demo: Mit Kurs 90° und einer
-/// passenden Ziel-Apoapsis landet die Fähre im Zielgebiet.
+/// Hop vom Übungsfeld zurück zur Startbasis: Mit Kurs 270° und einer
+/// passenden Ziel-Apoapsis landet der Frachter in ihrem Zielgebiet.
 #[test]
-fn hop_to_practice_field() {
-    let field = demo()
-        .zones
-        .iter()
-        .position(|z| z.name == "Übungsfeld")
-        .unwrap();
-    let hop = |apoapsis_km: f64| {
-        let mut world = demo();
-        let profile = LaunchProfile {
-            target_apoapsis: apoapsis_km * 1000.0,
-            ..LaunchProfile::default()
-        };
-        world
-            .set_launch(
-                2,
-                Launch {
-                    time: 60.0,
-                    profile,
-                },
-            )
-            .unwrap();
-        world.set_armed(2, true).unwrap();
-        world
-    };
-    let mut world = (20..35)
-        .map(|km| hop(km as f64))
-        .find(|w| w.touchdown(2).is_some_and(|t| t.zone == Some(field)))
-        .expect("eine Ziel-Apoapsis zwischen 20 und 35 km trifft das Übungsfeld");
-    let touchdown = world.touchdown(2).unwrap();
+fn hop_to_the_depot() {
+    let (mut world, ship) = (40..60)
+        .map(|km| hop(270.0, km as f64))
+        .find(|(w, ship)| {
+            w.touchdown(*ship)
+                .is_some_and(|t| t.zone.is_some_and(|z| w.zones[z].name == "Startbasis"))
+        })
+        .expect("eine Ziel-Apoapsis zwischen 40 und 60 km trifft die Startbasis");
+    let touchdown = world.touchdown(ship).unwrap();
     assert!(touchdown.landing.is_ok());
 
     world.advance_to(touchdown.time + 10.0);
-    let VesselStatus::Landed { point } = world.vessel_status(2) else {
+    let VesselStatus::Landed { point } = world.vessel_status(ship) else {
         panic!("gelandet erwartet");
     };
-    assert_eq!(world.zone_at(ZORB, &point), Some(field));
+    assert_eq!(world.zone_at(ZORB, &point), touchdown.zone);
+    // Dort steht er wieder an der Startbasis.
+    assert_eq!(world.base_of(ship), Some(0));
 }
 
 /// Außerhalb eines Zielgebiets: aufgesetzt, die Entfernung zum nächsten wird
 /// angegeben.
 #[test]
 fn outside_zone_reports_distance() {
-    let mut world = demo();
-    let profile = LaunchProfile {
-        target_apoapsis: 20_000.0,
-        heading: 0.0,
-        ..LaunchProfile::default()
-    };
-    world
-        .set_launch(
-            2,
-            Launch {
-                time: 60.0,
-                profile,
-            },
-        )
-        .unwrap();
-    let touchdown = world.touchdown(2).unwrap();
+    let (world, ship) = hop(0.0, 20.0);
+    let touchdown = world.touchdown(ship).unwrap();
     assert!(touchdown.landing.is_ok());
     assert_eq!(touchdown.zone, None);
     let (nearest, distance) = touchdown.nearest.unwrap();
-    assert_eq!(world.zones[nearest].name, "Startbasis");
+    assert_eq!(world.zones[nearest].name, "Übungsfeld");
     assert!(distance > 10_000.0, "{distance}");
 }
 
 /// Regel 6 mit Landung: 1 Schritt == 10 000 Schritte, bitgenau.
 #[test]
 fn landing_is_independent_of_step_size() {
-    let setup = || {
-        let mut world = demo();
-        let profile = LaunchProfile {
-            target_apoapsis: 25_000.0,
-            ..LaunchProfile::default()
-        };
-        world
-            .set_launch(
-                2,
-                Launch {
-                    time: 60.0,
-                    profile,
-                },
-            )
-            .unwrap();
-        world.set_armed(2, true).unwrap();
-        world
-    };
     let target = 1_200.0;
-    let mut one_step = setup();
+    let (mut one_step, ship) = hop(90.0, 25.0);
     one_step.advance_to(target);
-    let mut many_steps = setup();
+    let (mut many_steps, _) = hop(90.0, 25.0);
     for i in 1..=10_000 {
         many_steps.advance_to(target * i as f64 / 10_000.0);
     }
     assert!(matches!(
-        one_step.vessel_status(2),
+        one_step.vessel_status(ship),
         VesselStatus::Landed { .. }
     ));
-    assert_eq!(one_step.vessel_status(2), many_steps.vessel_status(2));
-    assert_eq!(one_step.vessel_mass(2), many_steps.vessel_mass(2));
+    assert_eq!(one_step.vessel_status(ship), many_steps.vessel_status(ship));
+    assert_eq!(one_step.vessel_mass(ship), many_steps.vessel_mass(ship));
 }
 
 /// Zorb und Zoon, eine Fähre mit `thrust` N und 2000 kg Treibstoff auf einer

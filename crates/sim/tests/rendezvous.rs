@@ -1,8 +1,11 @@
 //! Tests fürs Rendezvous: Ziel, nächste Annäherung, Bahnebenen.
 
+mod common;
+
+use common::{FERRY, SATELLITE};
 use glam::DVec3;
 use sim::kepler::{period, state_from_apsides};
-use sim::scenario::{FERRY, SATELLITE, home_planet};
+use sim::scenario::home_planet;
 use sim::{ManeuverNode, World};
 use std::f64::consts::{FRAC_PI_2, PI};
 
@@ -157,25 +160,25 @@ fn no_target_or_no_orbit() {
 #[test]
 fn approach_only_in_flight() {
     let mut world = sim::scenario::demo();
-    world.set_target(2, Some(0));
-    assert_eq!(world.approach(2), None);
-    let liftoff = 11_299.0;
+    world.set_target(3, Some(1));
+    assert_eq!(world.approach(3), None);
+    let liftoff = 11_333.0;
     let profile = sim::LaunchProfile {
-        heading: 120.0,
+        heading: 125.0,
         ..sim::LaunchProfile::default()
     };
     world
         .set_launch(
-            2,
+            3,
             sim::Launch {
                 time: liftoff,
                 profile,
             },
         )
         .unwrap();
-    let approach = world.approach(2).expect("Annäherung nach dem Start");
+    let approach = world.approach(3).expect("Annäherung nach dem Start");
     assert!(approach.time > liftoff, "{approach:?}");
-    let plane = world.plane_to_target(2).unwrap();
+    let plane = world.plane_to_target(3).unwrap();
     assert!(
         plane.inclination.to_degrees() < 1.0,
         "Startfenster: {plane:?}"
