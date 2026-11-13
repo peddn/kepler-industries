@@ -13,7 +13,7 @@ use crate::zahl::De;
 use bevy_egui::egui;
 use sim::base::SITE_RADIUS;
 use sim::goods::LOT;
-use sim::{BaseError, BaseKind, Good, Segment, World};
+use sim::{BaseError, BaseKind, Good, Module, Segment, World};
 
 /// Was eine Schaltfläche tut.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -68,7 +68,9 @@ fn actions(world: &World, vessel: usize) -> Vec<Action> {
         return Vec::new();
     }
     match world.base_of(vessel).map(|k| &world.bases[k]) {
-        None if v.params.base_kit => vec![Action::FoundMine, Action::FoundStation],
+        None if v.params.modules.has(Module::Foundation) => {
+            vec![Action::FoundMine, Action::FoundStation]
+        }
         Some(base) if base.complete() && base.kind != BaseKind::Mine => {
             let depot = base.kind == BaseKind::Depot;
             let room = world.vessel_fuel(vessel) < v.params.fuel_capacity;
@@ -122,7 +124,7 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
     }
     if let Some(base) = v.foundation_of {
         lines.push(format!("Fundament von {}", world.bases[base].name));
-    } else if v.params.base_kit {
+    } else if v.params.modules.has(Module::Foundation) {
         lines.push(
             "Basisschiff: wird am Landeplatz zum Fundament einer Mine oder Tankstelle.".into(),
         );

@@ -2,7 +2,7 @@
 //! lässt.
 
 use sim::Good;
-use sim::design::{Chassis, Design, DesignError, Engine, FOUNDATION_SPACE, Part, SPACE_STEP};
+use sim::design::{Chassis, Design, DesignError, Engine, Module, Modules, Part, SPACE_STEP};
 use sim::scenario::start;
 use sim::tech::Tech;
 use sim::{BaseError, Launch, LaunchProfile, VesselParams};
@@ -25,7 +25,7 @@ fn start_designs_match_the_catalogue() {
             fuel_capacity: 14_000.0,
             parachute_area: 1_000.0,
             cargo_capacity: 2_000.0,
-            base_kit: false,
+            modules: Modules::NONE,
         }
     );
     assert_eq!(freighter.cargo(), 2_000.0);
@@ -42,11 +42,13 @@ fn start_designs_match_the_catalogue() {
             fuel_capacity: 7_000.0,
             parachute_area: 400.0,
             cargo_capacity: 0.0,
-            base_kit: true,
+            modules: Modules::NONE.with(Module::Foundation),
         }
     );
-    assert_eq!(base_ship.free_space(), 10_000.0 - FOUNDATION_SPACE);
+    // Module brauchen keinen Innenraum: Er gehört Tank und Fracht.
+    assert_eq!(base_ship.free_space(), 7_000.0);
     assert_eq!(base_ship.cargo(), 0.0);
+    assert_eq!(base_ship.module_slots(), 2);
     assert_eq!(base_ship.price(), 1_000.0);
 
     let unlocked = Part::from_start();
@@ -72,7 +74,7 @@ fn interior_splits_into_tank_and_cargo() {
     let mut base_ship = Design::base_ship();
     base_ship.tank = 6_000.0;
     assert_eq!(base_ship.params().cargo_capacity, 1_000.0);
-    assert!(base_ship.params().base_kit);
+    assert!(base_ship.params().modules.has(Module::Foundation));
 }
 
 /// Triebwerke: Schub und Masse je Stück, die Sorte bestimmt die
@@ -123,10 +125,16 @@ fn invalid_designs_are_refused() {
         with(|d| d.chassis = Chassis::Large),
         Err(DesignError::Locked(Part::Chassis(Chassis::Large)))
     );
-    // Mit Fundament ist weniger Platz.
+    // Module belegen Plätze, keinen Innenraum: Das Fundament (2 Plätze)
+    // passt ins mittlere Chassis (4), aber nur einmal.
+    assert_eq!(with(|d| d.modules = vec![Module::Foundation]), Ok(()));
     assert_eq!(
-        with(|d| d.foundation = true),
-        Err(DesignError::TankOutOfRange { free: 13_000.0 })
+        with(|d| d.modules = vec![Module::Foundation; 2]),
+        Err(DesignError::ModuleLimit(Module::Foundation))
+    );
+    assert_eq!(
+        with(|d| d.modules = vec![Module::Foundation; 3]),
+        Err(DesignError::TooManyModules { slots: 4 })
     );
     // Ganz ohne Tank oder ohne Triebwerk lässt es sich bauen (fliegen nicht).
     assert_eq!(with(|d| d.tank = 0.0), Ok(()));
@@ -186,7 +194,7 @@ fn refit_costs_the_price_difference() {
     // Kleiner Frachter aus dem Basisschiff: ohne Fundament, 0,4 t billiger.
     let mut small = Design::base_ship();
     small.name = "Klein".into();
-    small.foundation = false;
+    small.modules.clear();
     world.designs.extend([fast.clone(), small]);
 
     assert_eq!(world.refit(ship, 2), Ok(400.0));
@@ -206,9 +214,19 @@ fn refit_costs_the_price_difference() {
     // Fundament ein- und ausbauen geht auch: Basisschiff zu kleinem Frachter.
     let base_ship = world.order_ship(0).unwrap();
     assert_eq!(world.refit(base_ship, 3), Ok(-400.0));
-    assert!(!world.vessels[base_ship].params.base_kit);
+    assert!(
+        !world.vessels[base_ship]
+            .params
+            .modules
+            .has(Module::Foundation)
+    );
     assert_eq!(world.refit(base_ship, 0), Ok(400.0));
-    assert!(world.vessels[base_ship].params.base_kit);
+    assert!(
+        world.vessels[base_ship]
+            .params
+            .modules
+            .has(Module::Foundation)
+    );
 
     // Spielstand: Das umgebaute Schiff bleibt, wie es ist.
     world.refit(ship, 2).unwrap();

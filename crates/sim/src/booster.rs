@@ -17,6 +17,7 @@
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::design::Design;
+use crate::design::Modules;
 use crate::kepler::{self, StateVector};
 use crate::launch::{Launch, LaunchProfile};
 use crate::maneuver::{self, ManeuverNode, PlanError};
@@ -37,7 +38,7 @@ pub const B1: VesselParams = VesselParams {
     fuel_capacity: 30_000.0,
     parachute_area: 0.0,
     cargo_capacity: 0.0,
-    base_kit: false,
+    modules: Modules::NONE,
 };
 
 /// Booster B-2 (Techtree, siehe `tech`): doppelt so groß, für Schiffe bis
@@ -50,7 +51,7 @@ pub const B2: VesselParams = VesselParams {
     fuel_capacity: 60_000.0,
     parachute_area: 0.0,
     cargo_capacity: 0.0,
-    base_kit: false,
+    modules: Modules::NONE,
 };
 
 /// So viel Δv hält der Booster für den Boostback zurück (m/s). Fliegt der

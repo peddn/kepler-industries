@@ -3,7 +3,7 @@
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::booster::{self, BoosterPlan};
-use crate::design::Design;
+use crate::design::{Design, Modules};
 use crate::docking::{
     self, DOCKING_RANGE, DockError, DockRequest, SEPARATION_SPEED, UndockError, UndockFuel,
 };
@@ -21,7 +21,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 18;
+pub const SAVE_VERSION: u32 = 19;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -41,9 +41,8 @@ pub struct VesselParams {
     pub parachute_area: f64,
     /// Fassungsvermögen des Frachtraums in kg (0 = keiner).
     pub cargo_capacity: f64,
-    /// Basisschiff: Es gründet dort, wo es landet, eine Basis und wird ihr
-    /// Fundament (siehe `base`).
-    pub base_kit: bool,
+    /// Die eingebauten Module: was das Schiff kann (siehe `design`).
+    pub modules: Modules,
 }
 
 impl VesselParams {
@@ -247,6 +246,7 @@ pub fn combine(host: VesselParams, parts: impl IntoIterator<Item = VesselParams>
         total.fuel_capacity += p.fuel_capacity;
         total.parachute_area += p.parachute_area;
         total.cargo_capacity += p.cargo_capacity;
+        total.modules = total.modules.union(p.modules);
         if p.exhaust_velocity > 0.0 {
             mass_flow += p.thrust / p.exhaust_velocity;
         }

@@ -10,7 +10,7 @@
 use sim::design::Design;
 use sim::scenario::{ZORB, demo};
 use sim::world::VesselParams;
-use sim::{Launch, LaunchProfile, World};
+use sim::{Launch, LaunchProfile, Modules, World};
 
 /// Kleiner Satellit: 400 kg leer, 2 kN Schub (lange Brennzeiten), rund
 /// 1,2 km/s Δv bei 200 kg Treibstoff, kein Fallschirm.
@@ -22,7 +22,7 @@ pub const SATELLITE: VesselParams = VesselParams {
     fuel_capacity: 200.0,
     parachute_area: 0.0,
     cargo_capacity: 0.0,
-    base_kit: false,
+    modules: Modules::NONE,
 };
 
 /// Fähre, die selbst vom Boden startet: 1,5 t leer, Schub für das 1,5-fache
@@ -35,7 +35,7 @@ pub const FERRY: VesselParams = VesselParams {
     fuel_capacity: 4_000.0,
     parachute_area: 400.0,
     cargo_capacity: 0.0,
-    base_kit: false,
+    modules: Modules::NONE,
 };
 
 /// Der Frachter und das Basisschiff aus den Startentwürfen.
