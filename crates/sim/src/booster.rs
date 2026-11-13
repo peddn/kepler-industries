@@ -25,6 +25,34 @@ use crate::world::{BaseKind, VesselParams, World};
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 
+/// Der erste Booster: hebt Schiffe bis etwa 19 t so hoch und schnell, dass
+/// sie mit rund 1,5 km/s eigenem Δv die Umlaufbahn erreichen, und kommt
+/// zurück: Er landet ohne Fallschirm mit einem Landebrennen kurz über dem
+/// Boden. Schub: das 1,5-fache des Startgewichts mit einem vollen Frachter.
+pub const B1: VesselParams = VesselParams {
+    dry_mass: 3_000.0,
+    drag_area: 8.0,
+    thrust: 760_000.0,
+    exhaust_velocity: 3_000.0,
+    fuel_capacity: 30_000.0,
+    parachute_area: 0.0,
+    cargo_capacity: 0.0,
+    base_kit: false,
+};
+
+/// Booster B-2 (Techtree, siehe `tech`): doppelt so groß, für Schiffe bis
+/// etwa 38 t, also ein volles großes Chassis.
+pub const B2: VesselParams = VesselParams {
+    dry_mass: 6_000.0,
+    drag_area: 12.0,
+    thrust: 1_520_000.0,
+    exhaust_velocity: 3_000.0,
+    fuel_capacity: 60_000.0,
+    parachute_area: 0.0,
+    cargo_capacity: 0.0,
+    base_kit: false,
+};
+
 /// So viel Δv hält der Booster für den Boostback zurück (m/s). Fliegt der
 /// Stapel bei der Trennung schneller waagerecht, als sich damit umkehren
 /// lässt, gibt es keinen Rückweg.
@@ -275,6 +303,23 @@ struct Landing {
     aside: f64,
 }
 
+/// Nach dem geplanten Aufstieg: wann das Schiff die Apoapsis erreicht und
+/// wie viel Δv es dort für die Kreisbahn braucht (m/s). `None`, wenn der
+/// Aufstieg nicht über die Luft führt.
+pub fn to_orbit(bodies: &[Body], trajectory: &Trajectory) -> Option<(f64, f64)> {
+    let end = trajectory.launch()?.burn.end;
+    trajectory.segments().find_map(|s| match s {
+        Segment::Kepler { start, state, .. } if *start >= end => {
+            let gm = bodies[s.body()].gm;
+            let apoapsis = kepler::orbit_info(gm, state).apoapsis?;
+            let coast = kepler::time_to_radius_outbound(gm, state, apoapsis - 1.0)?;
+            let speed = state.position.cross(state.velocity).length() / apoapsis;
+            Some((start + coast, (gm / apoapsis).sqrt() - speed))
+        }
+        _ => None,
+    })
+}
+
 /// Was ein Start auf dem Booster für einen Entwurf ergibt (für den Editor).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LaunchEstimate {
@@ -326,17 +371,7 @@ impl World {
         };
         world.set_launch(ship, launch)?;
 
-        let trajectory = &world.vessels[ship].trajectory;
-        let end = trajectory.launch().map_or(0.0, |plan| plan.burn.end);
-        let gm = world.bodies[body].gm;
-        let to_orbit = trajectory.segments().find_map(|s| match s {
-            Segment::Kepler { start, state, .. } if *start >= end => {
-                let apoapsis = kepler::orbit_info(gm, state).apoapsis?;
-                let speed = state.position.cross(state.velocity).length() / apoapsis;
-                Some((gm / apoapsis).sqrt() - speed)
-            }
-            _ => None,
-        });
+        let to_orbit = to_orbit(&world.bodies, &world.vessels[ship].trajectory).map(|(_, dv)| dv);
         let dry = params.dry_mass + cargo;
         let on_board = if params.exhaust_velocity > 0.0 && params.thrust > 0.0 {
             params.exhaust_velocity * ((dry + params.fuel_capacity) / dry).ln()

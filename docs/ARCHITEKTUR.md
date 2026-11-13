@@ -919,14 +919,20 @@ zum Schiff; es gibt genau einen.
   Dutzend Meter über dem Boden, mit vollem Schub in unter einer Sekunde. So
   ist er gut fünf Minuten nach der Trennung zurück statt nach einer
   Viertelstunde am Schirm.
-- *Bis zur Trennung* fliegt der Booster am Schiff mit: Die Welt liefert für
-  ihn die Lage des Schiffs (`vessel_state`), als Masse den Stapel ohne das
-  Schiff (`vessel_mass`) und einen Δv-Haushalt aus dem Plan des Starts
-  (Aufstieg und Boostback, der Rest bleibt für die Landung). Erst danach hat
-  er eine eigene Zeitleiste. An der Startbasis gelandet ist er sofort wieder
-  vollgetankt. Seinen Rückflug zeichnet die Karte bis zur Trennung als
-  Vorschau aus dem Plan (`World::booster_preview`, neu gerechnet nur, wenn
-  sich der Start ändert); bei der Trennung übernimmt er genau diese Bahn.
+- *Bis zur Trennung* ist der Booster „am Schiff" (`VesselStatus::Carried`):
+  Er hat keine eigene Zeitleiste und fliegt als Teil des Stapels mit. Eine
+  Stelle in der Welt (`World::carried`) sagt für ihn, an welchem Schiff er
+  hängt; daraus folgen Lage (die des Schiffs), Masse (der Stapel ohne das
+  Schiff) und Status. Die Oberfläche fragt nicht nach „dem Booster", sondern
+  nach diesem Status und danach, ob sich ein Fahrzeug steuern lässt
+  (`World::steerable`). Seinen Δv-Haushalt vor der Trennung gibt es aus dem
+  Plan des Starts (Aufstieg und Boostback, der Rest bleibt für die Landung),
+  seinen Rückflug zeichnet die Karte bis dahin als Vorschau
+  (`World::booster_preview`, neu gerechnet nur, wenn sich der Start ändert);
+  bei der Trennung übernimmt er genau diese Bahn. An der Startbasis gelandet
+  ist er sofort wieder vollgetankt.
+- *Die Werte der Booster* (B-1, B-2) stehen in `sim::booster`, die der
+  Schiffsteile in `sim::design`.
 - *Die Demo hat keinen Booster* (die Fähre dort startet aus eigener Kraft),
   damit Tests und Beispiele bleiben, wie sie sind.
 

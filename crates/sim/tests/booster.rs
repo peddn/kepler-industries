@@ -2,12 +2,11 @@
 //! Boostback und Landung mit Landebrennen.
 
 use glam::DVec3;
-use sim::booster::{self, RETURN_RADIUS};
-use sim::kepler;
+use sim::booster::{self, B1, RETURN_RADIUS};
 use sim::save::{from_json, to_json};
-use sim::scenario::{BASE_SHIP, BOOSTER, FREIGHTER, ZOON, ZORB, start};
+use sim::scenario::{BASE_SHIP, FREIGHTER, ZOON, ZORB, start};
 use sim::{
-    BoosterStatus, Launch, LaunchProfile, LogKind, ManeuverNode, PlanError, Segment, SurfacePoint,
+    BoosterStatus, Launch, LaunchProfile, LogKind, ManeuverNode, PlanError, SurfacePoint,
     VesselParams, VesselStatus, World,
 };
 
@@ -54,20 +53,8 @@ fn ready_freighter() -> (World, usize) {
 /// Zeitpunkt der Apoapsis nach dem Aufstieg und das Δv dort für die
 /// Kreisbahn.
 fn circularize(world: &World, ship: usize) -> (f64, f64) {
-    let trajectory = &world.vessels[ship].trajectory;
-    let end = trajectory.launch().unwrap().burn.end;
-    let (start, state) = trajectory
-        .segments()
-        .find_map(|s| match s {
-            Segment::Kepler { start, state, .. } if *start >= end => Some((*start, *state)),
-            _ => None,
-        })
-        .expect("der Aufstieg muss über die Luft führen");
-    let gm = world.bodies[ZORB].gm;
-    let apoapsis = kepler::orbit_info(gm, &state).apoapsis.unwrap();
-    let to_apoapsis = kepler::time_to_radius_outbound(gm, &state, apoapsis - 1.0).unwrap();
-    let speed = state.position.cross(state.velocity).length() / apoapsis;
-    (start + to_apoapsis, (gm / apoapsis).sqrt() - speed)
+    booster::to_orbit(&world.bodies, &world.vessels[ship].trajectory)
+        .expect("der Aufstieg muss über die Luft führen")
 }
 
 /// Der ganze Ablauf: Der Stapel hebt ab, das Schiff verbraucht dabei nichts,
@@ -84,13 +71,10 @@ fn ship_reaches_orbit_and_booster_returns() {
         Some(BoosterStatus::Reserved { ship })
     );
     // Der Stapel wiegt beim Abheben Schiff und vollen Booster.
-    assert_eq!(
-        plan.burn.start_mass,
-        full + BOOSTER.dry_mass + BOOSTER.fuel_capacity
-    );
+    assert_eq!(plan.burn.start_mass, full + B1.dry_mass + B1.fuel_capacity);
     // Der Aufstieg kostet das Schiff nichts.
     assert!(world.delta_v_budget(ship).burns.len() == 1);
-    assert!(booster.mass >= BOOSTER.dry_mass + booster::reserve(&BOOSTER) - 1e-6);
+    assert!(booster.mass >= B1.dry_mass + booster::reserve(&B1) - 1e-6);
 
     // Vor dem Start: voller Tank, verplant für Aufstieg und Boostback.
     let budget = world.delta_v_budget(BOOSTER_INDEX);
@@ -110,7 +94,7 @@ fn ship_reaches_orbit_and_booster_returns() {
     );
     // Der Booster verbrennt dabei seinen Treibstoff, nicht den des Schiffs.
     let burned = 30.0 * plan.burn.mass_flow;
-    assert!((world.vessel_fuel(BOOSTER_INDEX) - (BOOSTER.fuel_capacity - burned)).abs() < 1e-6);
+    assert!((world.vessel_fuel(BOOSTER_INDEX) - (B1.fuel_capacity - burned)).abs() < 1e-6);
     let rising = world.delta_v_budget(BOOSTER_INDEX);
     assert!(rising.available < budget.available && rising.burns[0].1 < budget.burns[0].1);
     assert!((rising.rest - budget.rest).abs() < 1e-9);
@@ -145,8 +129,8 @@ fn ship_reaches_orbit_and_booster_returns() {
     };
     assert_eq!(landing_burns(&world), 1);
     // An der Startbasis ist er sofort wieder vollgetankt.
-    assert!((world.vessel_fuel(BOOSTER_INDEX) - BOOSTER.fuel_capacity).abs() < 1e-9);
-    assert_eq!(BOOSTER.parachute_area, 0.0);
+    assert!((world.vessel_fuel(BOOSTER_INDEX) - B1.fuel_capacity).abs() < 1e-9);
+    assert_eq!(B1.parachute_area, 0.0);
     assert!(booster.back.landing - plan.burn.end < 400.0);
 
     // Das Schiff ist auf einer Bahn über der Luft und hat genug für Zoon.

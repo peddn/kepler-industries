@@ -1,6 +1,7 @@
 //! Startszenario für die Vorführung.
 
 use crate::body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint, circular_period};
+use crate::booster;
 use crate::design::Design;
 use crate::kepler::state_from_apsides;
 use crate::landing::LandingZone;
@@ -188,35 +189,6 @@ pub const FERRY: VesselParams = VesselParams {
     base_kit: false,
 };
 
-/// Booster der Startbasis (siehe `booster`): hebt Schiffe bis etwa 19 t so
-/// hoch und schnell, dass sie mit rund 1,5 km/s eigenem Δv die Umlaufbahn
-/// erreichen, und kommt zurück: Er landet ohne Fallschirm mit einem
-/// Landebrennen kurz über dem Boden. Schub: das 1,5-fache des
-/// Startgewichts mit einem vollen Frachter.
-pub const BOOSTER: VesselParams = VesselParams {
-    dry_mass: 3_000.0,
-    drag_area: 8.0,
-    thrust: 760_000.0,
-    exhaust_velocity: 3_000.0,
-    fuel_capacity: 30_000.0,
-    parachute_area: 0.0,
-    cargo_capacity: 0.0,
-    base_kit: false,
-};
-
-/// Booster B-2 (Techtree, siehe `tech`): doppelt so groß wie der erste, für
-/// Schiffe bis etwa 38 t, also ein volles großes Chassis.
-pub const BOOSTER_B2: VesselParams = VesselParams {
-    dry_mass: 6_000.0,
-    drag_area: 12.0,
-    thrust: 1_520_000.0,
-    exhaust_velocity: 3_000.0,
-    fuel_capacity: 60_000.0,
-    parachute_area: 0.0,
-    cargo_capacity: 0.0,
-    base_kit: false,
-};
-
 /// Frachter der Demo (feste Werte; im Spiel kommen Schiffe aus Entwürfen,
 /// siehe `design`, der Frachter dort hat zwei Z-1 mit zusammen 500 kN):
 /// 2 t Frachtraum. So groß, dass er voll beladen auf dem Booster
@@ -269,7 +241,7 @@ pub fn start() -> World {
 /// Der Booster steht vollgetankt an der Startbasis.
 fn add_booster(world: &mut World) {
     let pad = world.bases[0].location;
-    let booster = world.spawn_landed("Booster", BOOSTER, BOOSTER.fuel_capacity, ZORB, pad);
+    let booster = world.spawn_landed("Booster", booster::B1, booster::B1.fuel_capacity, ZORB, pad);
     world.booster = Some(booster);
 }
 

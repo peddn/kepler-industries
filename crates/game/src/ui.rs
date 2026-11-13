@@ -274,7 +274,9 @@ pub fn draw(
             PANEL_WIDTH,
             |_| {},
             |ui| {
-                if vessel.is_some() && vessel == world.booster {
+                // Was sich nicht steuern lässt (der Booster), hat statt der
+                // Karten eines Schiffs seine eigene.
+                if vessel.is_some_and(|v| !world.steerable(v)) {
                     booster_card::show(ui, world);
                 } else if let Some(vessel) = vessel {
                     start_card::show(ui, world, vessel, &mut notes);

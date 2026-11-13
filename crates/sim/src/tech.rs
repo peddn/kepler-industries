@@ -8,8 +8,8 @@
 //! Protokoll steht es nicht: Das gehört den Schiffen, und was freigeschaltet
 //! ist, sagt `World::techs`.
 
+use crate::booster::B2;
 use crate::design::{Chassis, Engine, Part};
-use crate::scenario::BOOSTER_B2;
 use crate::world::{BoosterStatus, World};
 use serde::{Deserialize, Serialize};
 
@@ -131,10 +131,10 @@ impl World {
             && let Some(booster) = self.booster
         {
             let vessel = &mut self.vessels[booster];
-            vessel.params = BOOSTER_B2;
+            vessel.params = B2;
             vessel
                 .trajectory
-                .set_landed_mass(BOOSTER_B2.dry_mass + BOOSTER_B2.fuel_capacity);
+                .set_landed_mass(B2.dry_mass + B2.fuel_capacity);
         }
         Ok(())
     }
