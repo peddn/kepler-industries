@@ -807,7 +807,7 @@ Orbit bleibt, kommt aus einer echten Probeplanung (`World::launch_estimate`:
 dieselbe Startplanung in einer eigenen kleinen Welt, neu nur, wenn sich der
 Entwurf ändert). Solange jemand in ein Textfeld tippt, laufen die Systeme
 mit Tasten nicht (`ui::not_typing`). Jedes bestellte Schiff merkt sich seinen
-Entwurf (`Vessel::design`); was man bauen darf, steht in `World::unlocked`
+Entwurf (`Vessel::design`); was man bauen darf, sagt `World::unlocked`
 (zu Beginn die Ausstattung vom Spielbeginn, Weiteres über die Technik). Nur der Booster hat
 feste Werte ohne Entwurf; auch die Schiffe der Demo kommen aus den
 Startentwürfen.
@@ -864,8 +864,9 @@ gutgeschrieben.
 - *Techtree* (`sim::tech`; eine Liste mit Voraussetzungen):
   Z-2 (30 GB), Chassis Groß (30 GB), Booster B-2 (50 GB und 3 t Zorit), Z-3
   (100 GB, braucht Z-2); zusammen 210 von 290 GB. Freischalten geschieht
-  sofort (eine Forschungszeit wäre wirkungslos, Regel 14). Teile kommen in
-  `World::unlocked`; der B-2 ersetzt die Werte des Boosters an der
+  sofort (eine Forschungszeit wäre wirkungslos, Regel 14). Gespeichert
+  sind nur die Technologien (`World::techs`); welche Teile baubar sind,
+  leitet `World::unlocked` daraus ab. Der B-2 ersetzt die Werte des Boosters an der
   Startbasis, endgültig und nur, wenn er dort frei steht. Gemessen trägt er
   ein volles großes Chassis (37 t) und kommt zurück. Das große Chassis hat
   keine Voraussetzung: Mit kleinem Tank fliegt es auch auf dem B-1, der

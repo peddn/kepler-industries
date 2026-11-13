@@ -3,7 +3,7 @@
 
 use crate::body::{Body, BodyId, SurfacePoint};
 use crate::booster::{self, BoosterPlan};
-use crate::design::{Design, Part};
+use crate::design::Design;
 use crate::docking::{
     self, DOCKING_RANGE, DockError, DockRequest, SEPARATION_SPEED, UndockError, UndockFuel,
 };
@@ -20,7 +20,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 15;
+pub const SAVE_VERSION: u32 = 16;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -302,9 +302,6 @@ pub struct World {
     /// Die Schiffsentwürfe, nach denen man bestellen kann (siehe `design`).
     #[serde(default)]
     pub designs: Vec<Design>,
-    /// Was freigeschaltet ist und in Entwürfen vorkommen darf.
-    #[serde(default = "Part::from_start")]
-    pub unlocked: Vec<Part>,
     /// Daten in GB: was erfüllte Aufgaben gebracht haben (siehe `task`).
     #[serde(default)]
     pub data: f64,
@@ -330,7 +327,6 @@ impl World {
             log: Vec::new(),
             booster: None,
             designs: Vec::new(),
-            unlocked: Part::from_start(),
             data: 0.0,
             tasks: Vec::new(),
             techs: Vec::new(),

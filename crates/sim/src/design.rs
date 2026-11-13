@@ -18,8 +18,8 @@
 //! Zorit (`Design::price`). Bestellt wird an der Startbasis
 //! (`World::order_ship`); das Schiff merkt sich seinen Entwurf.
 //!
-//! Was man bauen darf, steht in `World::unlocked`. Bis es den Techtree gibt,
-//! ist das die Ausstattung vom Spielbeginn (`Part::from_start`).
+//! Was man bauen darf, sagt `World::unlocked`: die Ausstattung vom Spielbeginn
+//! (`Part::from_start`) und was die Technik freigeschaltet hat (siehe `tech`).
 
 use crate::world::VesselParams;
 use serde::{Deserialize, Serialize};

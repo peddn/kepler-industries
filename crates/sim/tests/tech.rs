@@ -23,13 +23,21 @@ fn unlocking_costs_data_and_frees_the_part() {
     let mut design = Design::freighter();
     design.engine = Engine::Z2;
     let z2 = Part::Engine(Engine::Z2);
-    assert_eq!(design.check(&world.unlocked), Err(DesignError::Locked(z2)));
+    assert_eq!(
+        design.check(&world.unlocked()),
+        Err(DesignError::Locked(z2))
+    );
 
     assert_eq!(world.can_unlock(Tech::EngineZ2), Ok(()));
     world.unlock(Tech::EngineZ2).unwrap();
     assert_eq!(world.data, 10.0);
     assert_eq!(world.techs, vec![Tech::EngineZ2]);
-    assert_eq!(design.check(&world.unlocked), Ok(()));
+    assert_eq!(design.check(&world.unlocked()), Ok(()));
+    // Im Spielstand stehen nur die Technologien; das Teil bleibt nach dem
+    // Laden frei.
+    let loaded = sim::save::from_json(&sim::save::to_json(&world)).unwrap();
+    assert_eq!(loaded.unlocked(), world.unlocked());
+    assert_eq!(design.check(&loaded.unlocked()), Ok(()));
     // Im Protokoll steht es nicht: Das gehört den Schiffen.
     assert!(world.log.is_empty());
     assert_eq!(world.unlock(Tech::EngineZ2), Err(TechError::Done));
@@ -63,7 +71,7 @@ fn prerequisites_come_first() {
         Part::Engine(Engine::Z3),
         Part::Chassis(Chassis::Large),
     ] {
-        assert!(world.unlocked.contains(&part), "{part:?}");
+        assert!(world.unlocked().contains(&part), "{part:?}");
     }
     // Alle zusammen kosten 210 GB.
     let total: f64 = Tech::ALL.iter().map(|t| t.spec().data).sum();
@@ -120,7 +128,7 @@ fn b2_carries_a_full_large_chassis() {
         foundation: false,
         tank: 28_000.0,
     };
-    assert_eq!(large.check(&world.unlocked), Ok(()));
+    assert_eq!(large.check(&world.unlocked()), Ok(()));
     assert_eq!(
         world.launch_estimate(&large, large.cargo()),
         Err(PlanError::BoosterNoReturn)
