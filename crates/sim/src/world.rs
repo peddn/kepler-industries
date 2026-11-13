@@ -14,6 +14,7 @@ use crate::log::{LOG_LIMIT, LogEntry, LogKind};
 use crate::maneuver::{self, Burn, ManeuverNode, PlanError};
 use crate::rendezvous::{self, Approach, PlaneCrossing};
 use crate::task::Task;
+use crate::tech::Tech;
 use crate::trajectory::{Event, Segment, Trajectory};
 use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
@@ -306,6 +307,9 @@ pub struct World {
     /// Die Aufgaben, offene und erfüllte.
     #[serde(default)]
     pub tasks: Vec<Task>,
+    /// Freigeschaltete Technologien (siehe `tech`).
+    #[serde(default)]
+    pub techs: Vec<Tech>,
 }
 
 impl World {
@@ -325,6 +329,7 @@ impl World {
             unlocked: Part::from_start(),
             data: 0.0,
             tasks: Vec::new(),
+            techs: Vec::new(),
         }
     }
 

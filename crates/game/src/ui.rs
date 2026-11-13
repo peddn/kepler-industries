@@ -288,7 +288,21 @@ pub fn draw(
     }
     // Zuletzt die Leiste oben: Sie liegt zwischen den Seitenleisten.
     top_bar::show(&mut root, world, &warp, &rig, &mut panels);
-    wirtschaft::show(root.ctx(), world, &mut selected, &mut panels.economy);
+    {
+        let Panels {
+            economy,
+            economy_tab,
+            ..
+        } = &mut *panels;
+        wirtschaft::show(
+            root.ctx(),
+            world,
+            &mut selected,
+            economy,
+            economy_tab,
+            &mut notes,
+        );
+    }
     let ordered = entwurf::show(
         root.ctx(),
         world,

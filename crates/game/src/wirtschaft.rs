@@ -1,15 +1,16 @@
-//! Fenster "Wirtschaft": der Überblick über alle Basen (Vorrat, wann das
-//! Lager voll ist), über die Fracht an Bord der Schiffe und über die
-//! Aufgaben, die Daten bringen (siehe `sim::task`). Reine Anzeige;
+//! Fenster "Wirtschaft" mit drei Reitern: die Übersicht über alle Basen
+//! (Vorrat, wann das Lager voll ist) und die Fracht an Bord der Schiffe, die
+//! Aufgaben, die Daten bringen (siehe `sim::task`), und die Technik, die
+//! Daten kostet (siehe `sim::tech`). Reine Anzeige;
 //! ein Klick auf eine Zeile wählt die Basis oder das Schiff. Preise und
 //! Bestellen stehen in der Karte "Startbasis".
 
 use crate::fracht::{tons, tons_fine};
 use crate::hud;
-use crate::ui::Selected;
+use crate::ui::{Notes, Selected};
 use bevy_egui::egui;
 use sim::body::sphere_of_influence;
-use sim::{BaseKind, Goal, Task, VesselStatus, World};
+use sim::{BaseKind, Goal, Task, Tech, TechError, VesselStatus, World};
 
 /// Vorrat einer Basis und der Stand dazu: bei der Startbasis das Zorit im
 /// Lager, auf einer Baustelle die Bauteile, sonst der hergestellte Stoff und
@@ -125,7 +126,7 @@ fn cargo(ui: &mut egui::Ui, world: &World, selected: &mut Selected) {
 }
 
 /// So hoch ist die Liste der Aufgaben höchstens; darüber scrollt sie.
-const TASKS_HEIGHT: f32 = 260.0;
+const TASKS_HEIGHT: f32 = 420.0;
 
 /// Was eine Aufgabe verlangt, in Worten.
 fn goal(world: &World, task: &Task) -> String {
@@ -202,17 +203,90 @@ fn tasks(ui: &mut egui::Ui, world: &World) {
         });
 }
 
-pub fn show(ctx: &egui::Context, world: &World, selected: &mut Selected, open: &mut bool) {
+/// Was eine Technologie bringt, in Worten.
+fn effect(tech: Tech) -> &'static str {
+    match tech {
+        Tech::EngineZ2 => "3.600 m/s Ausströmgeschw. (Z-1: 3.200)",
+        Tech::EngineZ3 => "4.000 m/s Ausströmgeschwindigkeit",
+        Tech::ChassisLarge => "32 t Innenraum, 4 Triebwerksplätze",
+        Tech::BoosterB2 => "neuer Booster: trägt 38 t statt 19 t",
+    }
+}
+
+/// Der Techtree als Liste: was es gibt, was es bringt und kostet, und der
+/// Knopf zum Freischalten (oder warum es gerade nicht geht).
+fn techs(ui: &mut egui::Ui, world: &mut World, notes: &mut Notes) {
+    ui.heading(format!("Technik (Daten: {:.0} GB)", world.data));
+    ui.weak("Freischalten kostet Daten und gilt sofort und für immer.");
+    egui::Grid::new("techs").striped(true).show(ui, |ui| {
+        header(ui, &["Technologie", "bringt", "Preis", ""]);
+        for tech in Tech::ALL {
+            let spec = tech.spec();
+            ui.label(spec.name);
+            ui.label(effect(tech));
+            ui.label(if spec.zorit > 0.0 {
+                format!("{:.0} GB + {} Zorit", spec.data, tons_fine(spec.zorit))
+            } else {
+                format!("{:.0} GB", spec.data)
+            });
+            match world.can_unlock(tech) {
+                Ok(()) => {
+                    if ui.button("Freischalten").clicked() {
+                        notes.check(world.unlock(tech));
+                    }
+                }
+                Err(TechError::Done) => {
+                    ui.label("freigeschaltet");
+                }
+                Err(reason) => {
+                    ui.weak(reason.to_string());
+                }
+            }
+            ui.end_row();
+        }
+    });
+}
+
+/// Die Reiter des Fensters.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum Tab {
+    /// Basen und Fracht an Bord.
+    #[default]
+    Overview,
+    /// Was Daten bringt.
+    Tasks,
+    /// Was Daten kostet.
+    Tech,
+}
+
+pub fn show(
+    ctx: &egui::Context,
+    world: &mut World,
+    selected: &mut Selected,
+    open: &mut bool,
+    tab: &mut Tab,
+    notes: &mut Notes,
+) {
     egui::Window::new("Wirtschaft")
         .open(open)
         .resizable(false)
         .collapsible(false)
         .default_pos([320.0, 60.0])
         .show(ctx, |ui| {
-            bases(ui, world, selected);
-            ui.add_space(8.0);
-            cargo(ui, world, selected);
-            ui.add_space(8.0);
-            tasks(ui, world);
+            ui.horizontal(|ui| {
+                ui.selectable_value(tab, Tab::Overview, "Übersicht");
+                ui.selectable_value(tab, Tab::Tasks, "Aufgaben");
+                ui.selectable_value(tab, Tab::Tech, "Technik");
+            });
+            ui.separator();
+            match tab {
+                Tab::Overview => {
+                    bases(ui, world, selected);
+                    ui.add_space(8.0);
+                    cargo(ui, world, selected);
+                }
+                Tab::Tasks => tasks(ui, world),
+                Tab::Tech => techs(ui, world, notes),
+            }
         });
 }

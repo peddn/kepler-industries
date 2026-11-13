@@ -8,7 +8,7 @@ use crate::camera::CameraRig;
 use crate::fracht::tons_fine;
 use crate::hud::{self, format_time};
 use crate::side::{Edge, Side};
-use crate::{TimeWarp, focus};
+use crate::{TimeWarp, focus, wirtschaft};
 use bevy::prelude::*;
 use bevy_egui::egui;
 use sim::World;
@@ -20,8 +20,10 @@ pub struct Panels {
     pub ships: bool,
     /// Angaben zur Auswahl in der linken Leiste.
     pub info: bool,
-    /// Fenster mit dem Überblick über Basen, Fracht und Aufgaben.
+    /// Fenster mit dem Überblick über Basen, Fracht, Aufgaben und Technik,
+    /// und sein Reiter.
     pub economy: bool,
+    pub economy_tab: wirtschaft::Tab,
     /// Fenster mit dem Schiffseditor.
     pub designs: bool,
     /// Fenster mit der Bedienhilfe.
@@ -36,6 +38,7 @@ impl Default for Panels {
             ships: true,
             info: true,
             economy: false,
+            economy_tab: wirtschaft::Tab::default(),
             designs: false,
             help: false,
             left: Side::new(Edge::Left),
@@ -64,7 +67,7 @@ pub fn show(
             // deshalb hier; ein Klick öffnet die Übersicht dazu.
             ui.toggle_value(&mut panels.economy, format!("Daten {:.0} GB", world.data))
                 .on_hover_text(format!(
-                    "Daten aus erfüllten Aufgaben. Klick: Wirtschaft und Aufgaben.\n\
+                    "Daten aus erfüllten Aufgaben. Klick: Übersicht, Aufgaben und Technik.\n\
                      Im Lager der Startbasis: Zorit {}",
                     tons_fine(world.zorit)
                 ));

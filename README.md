@@ -47,8 +47,18 @@ Vorbeiflug zählt nicht, ein Absturz auch nicht. Die Karte „Manöver" zeigt
 beim Node schon vorab, welche offenen Aufgaben die Bahn danach erfüllt
 („Erfüllt: …"). Eine Bahn darf mehrere Aufgaben zugleich erfüllen. Oben in
 der Leiste steht der Stand („Daten 15 GB"); ein Klick öffnet das Fenster
-„Wirtschaft" mit der Liste der Aufgaben. Ausgeben kann man Daten noch nicht
-(das wird der Techtree).
+„Wirtschaft" mit den Reitern Übersicht, Aufgaben und Technik.
+
+**Technik (Techtree):** Im Reiter „Technik" schaltet man mit Daten frei:
+das Triebwerk Z-2 (30 GB; 3.600 statt 3.200 m/s Ausströmgeschwindigkeit),
+das Chassis Groß (30 GB; 32 t Innenraum, 4 Triebwerksplätze), den Booster
+B-2 (50 GB und 3 t Zorit; trägt Schiffe bis etwa 38 t statt 19 t) und das
+Triebwerk Z-3 (100 GB, braucht Z-2; 4.000 m/s). Freischalten gilt sofort und
+für immer; Chassis und Triebwerke sind dann im Editor wählbar. Der B-2
+ersetzt den Booster der Startbasis endgültig (nur möglich, wenn er dort frei
+steht). Er wirft kleine Schiffe steiler als der erste: Sie brauchen mit dem
+Standardprofil etwas mehr eigenes Δv, ein größerer Wendewinkel gleicht das
+aus.
 
 **Booster:** Jeder Start von der Startbasis läuft mit dem Booster. Schiff und
 Booster heben als Stapel ab, nur der Booster brennt; das Startprofil in der
@@ -432,7 +442,7 @@ Der erste Build dauert einige Minuten, danach geht es schnell.
 | Schalter „Schiffe“ und „Info“ im Kopf der linken Leiste, „Hilfe“ oben rechts | Liste der Schiffe, Angaben zur Auswahl und die Bedienhilfe ein- und ausblenden (`F1`: Hilfe) |
 | ◀ / ▶ im Kopf jeder Seitenleiste | Leiste ein- und ausklappen |
 | Schalter „Entwürfe“ oben rechts | Schiffseditor: Entwürfe anlegen, ändern, löschen und bestellen |
-| „Daten … GB“ oben rechts | Stand der Daten; Klick: Fenster „Wirtschaft“ mit allen Basen (Vorrat, wann das Lager voll ist), der Fracht an Bord der Schiffe und den Aufgaben; Klick auf eine Zeile wählt die Basis oder das Schiff |
+| „Daten … GB“ oben rechts | Stand der Daten; Klick: Fenster „Wirtschaft“ mit drei Reitern: Übersicht (Basen mit Vorrat, Fracht an Bord; Klick auf eine Zeile wählt die Basis oder das Schiff), Aufgaben, Technik (mit Daten freischalten) |
 | Klick auf einen Node in der Karte „Manöver“ | Node wählen |
 | Regler unten in jeder Seitenleiste (Tooltip „Deckkraft“) | Wie durchscheinend diese Leiste ist (die Karte läuft dahinter weiter) |
 | Linksklick auf die Raute in einem Zielgebiet | Zielgebiet wählen |
