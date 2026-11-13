@@ -17,6 +17,7 @@ use crate::Sim;
 use crate::camera::{CameraRig, Focus, MainCamera, OVERLAY_LAYER, dir_to_view, to_view};
 use crate::ui::WorldLabels;
 use crate::view::{self, orbit_points};
+use crate::zahl::De;
 use bevy::camera::visibility::RenderLayers;
 use bevy::math::DVec3;
 use bevy::prelude::*;
@@ -630,7 +631,10 @@ pub fn input(
                         node.delta_v = limited;
                         if hit {
                             message.say(
-                                format!("Tank leer: höchstens {available:.0} m/s"),
+                                format!(
+                                    "Tank leer: höchstens {available:.0} m/s",
+                                    available = De(available)
+                                ),
                                 world.time,
                                 real_time.elapsed_secs_f64(),
                             );

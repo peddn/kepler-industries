@@ -179,3 +179,12 @@ fn launch_estimate_matches_the_real_launch() {
         Err(sim::PlanError::BoosterNoReturn)
     );
 }
+
+/// Ein Entwurf ohne Namen ergibt trotzdem ein benanntes Schiff.
+#[test]
+fn unnamed_design_names_the_ship() {
+    let mut world = start();
+    world.designs[1].name = "  ".into();
+    let ship = world.order_ship(1).unwrap();
+    assert_eq!(world.vessels[ship].name, "Schiff-1");
+}

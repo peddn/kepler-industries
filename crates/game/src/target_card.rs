@@ -5,6 +5,7 @@
 use crate::hud::{self, format_span, km};
 use crate::rendezvous::{Rendezvous, TARGET_COLOR, TargetInfo, TransferInfo, distance_text};
 use crate::ui::{Notes, card, color32, stepper, wide_button};
+use crate::zahl::De;
 use bevy_egui::egui;
 use sim::World;
 
@@ -58,8 +59,8 @@ fn transfer_result(world: &World, info: &TransferInfo) -> String {
                 "Phasenwinkel",
                 format!(
                     "{:.1}° (nötig {:.1}°)",
-                    w.phase.to_degrees(),
-                    w.needed.to_degrees()
+                    De(w.phase.to_degrees()),
+                    De(w.needed.to_degrees())
                 ),
             ));
             // Auf ein Grad genau ist "jetzt".
@@ -134,7 +135,7 @@ fn target_result(
                     ));
                     lines.push(row(
                         "  Δv",
-                        format!("{:.0} m/s", plan.matching.node.delta_v.length()),
+                        format!("{:.0} m/s", De(plan.matching.node.delta_v.length())),
                     ));
                 }
                 lines.push(row(
@@ -150,7 +151,7 @@ fn target_result(
                 {
                     lines.push(row("  noch", distance_text(distance)));
                 }
-                lines.push(row("  Δv", format!("{:.1} m/s", plan.approach_delta_v)));
+                lines.push(row("  Δv", format!("{:.1} m/s", De(plan.approach_delta_v))));
                 lines.push(row(
                     "Kontakt",
                     format!("in {}", format_span(plan.contact - now, hud::day(world))),
@@ -179,14 +180,14 @@ fn target_result(
                 ));
             }
             lines.push(row("  auf", distance_text(a.distance)));
-            lines.push(row("  relativ", format!("{:.0} m/s", a.relative_speed)));
+            lines.push(row("  relativ", format!("{:.0} m/s", De(a.relative_speed))));
         }
         None => lines.push(row("Annäherung", "–".into())),
     }
     if let Some(plane) = &info.plane {
         lines.push(row(
             "Neigung",
-            format!("{:.1}°", plane.inclination.to_degrees()),
+            format!("{:.1}°", De(plane.inclination.to_degrees())),
         ));
         if plane.coplanar {
             lines.push(row("", "gleiche Ebene".into()));

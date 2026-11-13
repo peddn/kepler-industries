@@ -12,6 +12,7 @@
 
 use crate::fracht::{tons, tons_fine};
 use crate::ui::{Notes, stepper, wide_button};
+use crate::zahl::De;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use sim::design::SPACE_STEP;
@@ -98,8 +99,8 @@ fn choose<T: Copy + PartialEq>(
     }
 }
 
-/// Die Bedienung des Entwurfs.
-fn edit(ui: &mut egui::Ui, design: &mut Design, unlocked: &[Part]) {
+/// Die Bedienung des Entwurfs; liefert, ob gerade am Regler gezogen wird.
+fn edit(ui: &mut egui::Ui, design: &mut Design, unlocked: &[Part]) -> bool {
     row(ui, "Name", |ui| {
         ui.text_edit_singleline(&mut design.name);
     });
@@ -132,12 +133,13 @@ fn edit(ui: &mut egui::Ui, design: &mut Design, unlocked: &[Part]) {
     let mut tank = design.tank / 1_000.0;
     ui.add_space(4.0);
     ui.spacing_mut().slider_width = ui.available_width();
-    ui.add(
-        egui::Slider::new(&mut tank, 0.0..=free / 1_000.0)
-            .step_by(SPACE_STEP / 1_000.0)
-            .show_value(false),
-    )
-    .on_hover_text("Teilt den freien Innenraum: links mehr Fracht, rechts mehr Tank");
+    let slider = ui
+        .add(
+            egui::Slider::new(&mut tank, 0.0..=free / 1_000.0)
+                .step_by(SPACE_STEP / 1_000.0)
+                .show_value(false),
+        )
+        .on_hover_text("Teilt den freien Innenraum: links mehr Fracht, rechts mehr Tank");
     design.tank = (tank * 1_000.0 / SPACE_STEP).round() * SPACE_STEP;
     ui.horizontal(|ui| {
         ui.label(format!("Tank {}", tons(design.tank)));
@@ -145,10 +147,11 @@ fn edit(ui: &mut egui::Ui, design: &mut Design, unlocked: &[Part]) {
             ui.label(format!("Fracht {}", tons(design.cargo())));
         });
     });
+    slider.dragged()
 }
 
 /// Was aus dem Entwurf folgt, als Zeilen in festen Spalten.
-fn values(world: &World, design: &Design, estimates: &Estimates) -> String {
+fn values(world: &World, design: &Design, estimates: Option<&Estimates>) -> String {
     let params = design.params();
     let cargo = design.cargo();
     let full = params.dry_mass + params.fuel_capacity + cargo;
@@ -164,7 +167,7 @@ fn values(world: &World, design: &Design, estimates: &Estimates) -> String {
     let weight = full * home.gm / (home.radius * home.radius);
     let in_orbit = |estimate: &Result<LaunchEstimate, PlanError>| match estimate {
         Ok(estimate) => match estimate.left() {
-            Some(left) => format!("{left:.0} m/s"),
+            Some(left) => format!("{left:.0} m/s", left = De(left)),
             None => "–".into(),
         },
         Err(_) => "–".into(),
@@ -177,25 +180,29 @@ fn values(world: &World, design: &Design, estimates: &Estimates) -> String {
         line(
             "Schub",
             format!(
-                "{:.0} kN, {}× Gewicht",
-                params.thrust / 1_000.0,
-                format!("{:.1}", params.thrust / weight).replace('.', ",")
+                "{:.0} kN, {:.1}× Gewicht",
+                De(params.thrust / 1_000.0),
+                De(params.thrust / weight)
             ),
         ),
         line(
             "Δv leer / beladen",
-            format!("{:.0} / {:.0} m/s", delta_v(0.0), delta_v(cargo)),
+            format!("{:.0} / {:.0} m/s", De(delta_v(0.0)), De(delta_v(cargo))),
         ),
         line(
             "Im Orbit leer / bel.",
-            format!("{} / {}", in_orbit(&estimates[0]), in_orbit(&estimates[1])),
+            match estimates {
+                Some([empty, loaded]) => format!("{} / {}", in_orbit(empty), in_orbit(loaded)),
+                // Wird gerechnet, sobald der Regler losgelassen ist.
+                None => "…".into(),
+            },
         ),
     ]
     .join("\n")
 }
 
 /// Was am Entwurf nicht taugt.
-fn warnings(design: &Design, unlocked: &[Part], estimates: &Estimates) -> Vec<String> {
+fn warnings(design: &Design, unlocked: &[Part], estimates: Option<&Estimates>) -> Vec<String> {
     let mut lines = Vec::new();
     if let Err(error) = design.check(unlocked) {
         lines.push(format!("Lässt sich nicht bauen: {error}."));
@@ -216,7 +223,10 @@ fn warnings(design: &Design, unlocked: &[Part], estimates: &Estimates) -> Vec<St
             Some(_) => None,
         },
     };
-    match (verdict(&estimates[0]), verdict(&estimates[1])) {
+    let Some([empty, loaded]) = estimates else {
+        return lines;
+    };
+    match (verdict(empty), verdict(loaded)) {
         (Some(empty), Some(_)) => lines.push(format!("{empty}.")),
         (None, Some(loaded)) => lines.push(format!("Voll beladen: {loaded}.")),
         (Some(empty), None) => lines.push(format!("Ohne Fracht: {empty}.")),
@@ -238,7 +248,7 @@ pub fn show(
         .open(open)
         .resizable(false)
         .collapsible(false)
-        .default_pos([320.0, 60.0])
+        .default_pos(crate::ui::window_pos(1))
         .show(ctx, |ui| {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
@@ -253,21 +263,26 @@ pub fn show(
                         return;
                     };
                     let unlocked = world.unlocked.clone();
-                    edit(ui, &mut design, &unlocked);
+                    let dragging = edit(ui, &mut design, &unlocked);
                     world.designs[editor.selected] = design.clone();
 
-                    // Der Name ändert an der Rechnung nichts.
+                    // Der Name ändert an der Rechnung nichts. Die Probeplanung
+                    // des Starts dauert spürbar: Sie läuft erst, wenn der
+                    // Regler losgelassen ist, und nur für einen neuen Entwurf.
                     let key = Design {
                         name: String::new(),
                         ..design.clone()
                     };
-                    if editor.estimates.as_ref().map(|(d, _)| d) != Some(&key) {
+                    let current = editor.estimates.as_ref().is_some_and(|(d, _)| *d == key);
+                    if !current && !dragging {
                         let estimates = [0.0, key.cargo()].map(|c| world.launch_estimate(&key, c));
-                        editor.estimates = Some((key, estimates));
+                        editor.estimates = Some((key.clone(), estimates));
                     }
-                    let Some((_, estimates)) = &editor.estimates else {
-                        return;
-                    };
+                    let estimates = editor
+                        .estimates
+                        .as_ref()
+                        .filter(|(d, _)| *d == key)
+                        .map(|(_, estimates)| estimates);
                     ui.separator();
                     ui.label(values(world, &design, estimates));
                     for line in warnings(&design, &unlocked, estimates) {

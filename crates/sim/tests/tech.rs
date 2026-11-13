@@ -3,8 +3,8 @@
 
 use sim::scenario::{BOOSTER, BOOSTER_B2, ZORB, start};
 use sim::{
-    BoosterStatus, Chassis, Design, DesignError, Engine, Launch, LaunchProfile, LogKind, Part,
-    PlanError, Tech, TechError, World,
+    BoosterStatus, Chassis, Design, DesignError, Engine, Launch, LaunchProfile, Part, PlanError,
+    Tech, TechError, World,
 };
 
 /// Spielbeginn mit `data` GB.
@@ -29,12 +29,8 @@ fn unlocking_costs_data_and_frees_the_part() {
     assert_eq!(world.data, 10.0);
     assert_eq!(world.techs, vec![Tech::EngineZ2]);
     assert_eq!(design.check(&world.unlocked), Ok(()));
-    assert!(matches!(
-        world.log.last().unwrap().kind,
-        LogKind::Unlocked {
-            tech: Tech::EngineZ2
-        }
-    ));
+    // Im Protokoll steht es nicht: Das gehört den Schiffen.
+    assert!(world.log.is_empty());
     assert_eq!(world.unlock(Tech::EngineZ2), Err(TechError::Done));
     // Der Rest reicht nicht für das große Chassis.
     assert_eq!(

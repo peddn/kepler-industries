@@ -201,6 +201,13 @@ impl MapPointer<'_, '_> {
     }
 }
 
+/// Wo sich das Fenster Nummer `index` zuerst öffnet: versetzt, damit sie
+/// nicht genau übereinander liegen.
+pub fn window_pos(index: usize) -> [f32; 2] {
+    let step = 28.0 * index as f32;
+    [320.0 + step, 60.0 + step]
+}
+
 /// Laufbedingung: Niemand tippt gerade in ein Textfeld der Oberfläche; die
 /// Tasten gehören dem Spiel.
 pub fn not_typing(egui: Res<bevy_egui::input::EguiWantsInput>) -> bool {

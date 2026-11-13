@@ -20,7 +20,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 14;
+pub const SAVE_VERSION: u32 = 15;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -1279,7 +1279,7 @@ impl World {
         let params = &plan.params;
         let ve = params.exhaust_velocity;
         let mass = self.vessel_mass(index);
-        let back = plan.back.node.delta_v.length();
+        let back = plan.back.delta_v();
         let after = plan.mass * (-back / ve).exp();
         DeltaVBudget {
             full: params.full_delta_v(),

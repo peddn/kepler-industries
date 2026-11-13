@@ -372,7 +372,12 @@ impl World {
             return Err(BaseError::NotEnoughZorit);
         }
         self.zorit -= price;
-        let name = format!("{}-{}", design.name, self.ship_count() + 1);
+        // Ein Entwurf ohne Namen ergibt trotzdem ein benanntes Schiff.
+        let label = match design.name.trim() {
+            "" => "Schiff",
+            name => name,
+        };
+        let name = format!("{label}-{}", self.ship_count() + 1);
         let params = design.params();
         let vessel = self.spawn_landed(&name, params, params.fuel_capacity, body, pad);
         self.vessels[vessel].design = Some(design);

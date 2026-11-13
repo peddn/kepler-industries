@@ -556,6 +556,9 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
     Schalters die Anzeige der Daten (in GB): Klick öffnet das Fenster,
     Überfahren zeigt die Stoffe im Lager der Startbasis.
   - *Einheiten:* Lager und Fracht in Tonnen, der Tank eines Schiffs in kg.
+  - *Zahlen:* überall mit Dezimalkomma und ab fünf Stellen mit Punkten
+    zwischen den Tausendern (`zahl::De`: eine Hülle um die Zahl, die
+    Genauigkeit kommt wie gewohnt aus dem Format).
 - **Oberfläche mit egui** (`bevy_egui`; Entscheidung vor dem Schiffseditor,
   der Regler, Listen und Textfelder braucht). Die ganze Oberfläche ist in
   egui, daneben gibt es nur die 3D-Ansicht; Bevys eigenes UI ist nicht mehr
@@ -879,7 +882,12 @@ zum Schiff; es gibt genau einen.
   für 1.200 m/s zurück (B-1: knapp 1,5 t): 1.000 für den Boostback, 200 für
   die Landung.
 - *Rückflug:* Beim Planen des Starts wird der Boostback gesucht: ein Stoß
-  waagerecht gegen die Bewegung über dem Boden, 10 s nach der Trennung.
+  waagerecht gegen den Kurs (dessen Richtung dort, wo der Booster ist; die
+  Bewegung über dem Boden taugt nicht als Richtung, nach einem steilen
+  Aufstieg ist sie fast null), 10 s nach der Trennung. Nach einem sehr
+  steilen Aufstieg fiele der Booster hinter den Startplatz, weil sich der
+  Planet unter ihm weiterdreht: Dann geht der Stoß nach vorn; trifft er
+  ohnehin, gibt es keinen.
   Gesucht wird sein Betrag (Regula falsi; der Aufsetzpunkt wandert damit
   stetig entlang des Kurses zurück) und, weil die Drehung des Planeten den
   Booster je nach Kurs zur Seite trägt, ein Winkel dagegen
@@ -996,7 +1004,9 @@ gutgeschrieben.
   Startbasis, endgültig und nur, wenn er dort frei steht. Gemessen trägt er
   ein volles großes Chassis (37 t) und kommt zurück. Das große Chassis hat
   keine Voraussetzung: Mit kleinem Tank fliegt es auch auf dem B-1, der
-  Editor warnt sonst.
+  Editor warnt sonst. Was freigeschaltet wird, meldet die Statusleiste als
+  Hinweis; im Protokoll der Simulation steht es nicht, das gehört den
+  Schiffen.
 - *Fenster:* Daten verdienen und ausgeben liegen an einer Stelle, hinter
   „Daten … GB" oben: Reiter Übersicht, Aufgaben, Technik.
 - *Noch offen:* Proben zurückbringen (eine neue Fracht; mehr Masse bringt

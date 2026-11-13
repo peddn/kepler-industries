@@ -14,6 +14,7 @@ use crate::hud::km;
 use crate::node_ui::{Projector, Selection};
 use crate::ui::WorldLabels;
 use crate::view;
+use crate::zahl::De;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use sim::{Approach, BodyApproach, BodyId, PlaneCrossing, Window, World};
@@ -55,7 +56,7 @@ pub struct Rendezvous {
 /// Abstand lesbar: unter 1 km in m, sonst in km.
 pub fn distance_text(meters: f64) -> String {
     if meters < 1_000.0 {
-        format!("{meters:.0} m")
+        format!("{meters:.0} m", meters = De(meters))
     } else {
         km(meters)
     }
@@ -228,7 +229,7 @@ pub fn labels(
                         let position = own_position(&sim, info, time)?;
                         (
                             position,
-                            format!("{name} {:.1}°", plane.inclination.to_degrees()),
+                            format!("{name} {:.1}°", De(plane.inclination.to_degrees())),
                         )
                     }
                 };
