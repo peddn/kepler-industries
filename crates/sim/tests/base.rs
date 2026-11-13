@@ -4,7 +4,6 @@
 use glam::DVec3;
 use sim::base::{BASE_KIT, FUEL_RATE, FUEL_STORAGE, PARTS_PRICE, SITE_RADIUS, ZORIT_RATE};
 use sim::body::SurfacePoint;
-use sim::kepler;
 use sim::scenario::{
     BASE_SHIP, FERRY, FREIGHTER, NURA, START_ZORIT, ZILL, ZOON, ZORB, demo, start,
 };
@@ -399,17 +398,8 @@ fn left_in_orbit(params: VesselParams, parts: f64) -> f64 {
     world.set_launch(ship, start).unwrap();
     let trajectory = &world.vessels[ship].trajectory;
     let burn = trajectory.launch().unwrap().burn;
-    let state = trajectory
-        .segments()
-        .find_map(|s| match s {
-            Segment::Kepler { start, state, .. } if *start >= burn.end => Some(*state),
-            _ => None,
-        })
+    let (_, circularize) = sim::booster::to_orbit(&world.bodies, trajectory)
         .expect("der Aufstieg muss über die Luft führen");
-    let gm = world.bodies[ZORB].gm;
-    let apoapsis = kepler::orbit_info(gm, &state).apoapsis.unwrap();
-    let circularize =
-        (gm / apoapsis).sqrt() - state.position.cross(state.velocity).length() / apoapsis;
     // Das Schiff verbraucht auf dem Booster nichts.
     let full = params.dry_mass + parts + params.fuel_capacity;
     assert_eq!(burn.ship_end_mass(), full);

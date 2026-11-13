@@ -7,7 +7,7 @@ use crate::hud::{self, format_span, km};
 use crate::ui::{Notes, card, stepper, wide_button};
 use crate::zahl::De;
 use bevy_egui::egui;
-use sim::{BaseKind, Launch, LaunchProfile, PlanError, Segment, World, kepler};
+use sim::{Launch, LaunchProfile, PlanError, Segment, World, kepler};
 
 /// Vorgabe für einen neuen Start: so lange bis zum Abheben.
 const DEFAULT_COUNTDOWN: f64 = 120.0;
@@ -84,10 +84,8 @@ fn launch_result(world: &World, i: usize) -> String {
                 .into(),
         };
         // An der Startbasis geht es nur mit dem Booster.
-        let at_depot =
-            matches!(world.base_of(i), Some(k) if world.bases[k].kind == BaseKind::Depot);
         let booster = match booster_card::status(world) {
-            Some(status) if at_depot => format!("\nStart mit dem Booster. {status}"),
+            Some(status) if world.at_depot(i) => format!("\nStart mit dem Booster. {status}"),
             _ => String::new(),
         };
         return format!(

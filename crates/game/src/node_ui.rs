@@ -441,7 +441,7 @@ fn closest_on_segment(ray: &Ray3d, a: Vec3, b: Vec3) -> f32 {
 fn editable(world: &World, i: usize) -> bool {
     let trajectory = &world.vessels[i].trajectory;
     let current = trajectory.current();
-    world.booster != Some(i)
+    world.steerable(i)
         && !current.is_burn()
         && !matches!(current, Segment::Approach { .. })
         && (trajectory.launch().is_some() || !matches!(current, Segment::Surface { .. }))

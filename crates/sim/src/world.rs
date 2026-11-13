@@ -230,6 +230,10 @@ pub enum VesselStatus {
     Docked {
         host: usize,
     },
+    /// Der Booster am Schiff `ship`, vom Abheben bis zur Trennung.
+    Carried {
+        ship: usize,
+    },
 }
 
 /// Wirksame Werte eines Verbunds: Hauptschiff `host` und angedockte Teile.
@@ -587,9 +591,7 @@ impl World {
         if booster == vessel {
             return Err(PlanError::Booster);
         }
-        let at_depot =
-            |i: usize| matches!(self.base_of(i), Some(k) if self.bases[k].kind == BaseKind::Depot);
-        if !at_depot(self.host(vessel)) {
+        if !self.at_depot(self.host(vessel)) {
             return Ok(None);
         }
         let reserved = (0..self.vessels.len()).any(|i| {
@@ -602,10 +604,34 @@ impl World {
         if reserved {
             return Err(PlanError::BoosterBusy);
         }
-        if !at_depot(booster) {
+        if !self.at_depot(booster) {
             return Err(PlanError::BoosterAway);
         }
         Ok(Some(self.vessels[booster].params))
+    }
+
+    /// Steht das Schiff heil an der Startbasis?
+    pub fn at_depot(&self, vessel: usize) -> bool {
+        matches!(self.base_of(vessel), Some(k) if self.bases[k].kind == BaseKind::Depot)
+    }
+
+    /// Lässt sich das Fahrzeug steuern? Der Booster nicht: Er fliegt selbst.
+    pub fn steerable(&self, vessel: usize) -> bool {
+        self.booster != Some(vessel)
+    }
+
+    /// Der Booster am Schiff: Vom Abheben bis zur Trennung hat er keine
+    /// eigene Zeitleiste, er fliegt als Teil des Stapels mit. Für ihn (und
+    /// nur dann) liefert das hier das Schiff und den Plan des Starts. Lage,
+    /// Masse und Status des Boosters folgen daraus.
+    fn carried(&self, index: usize) -> Option<(usize, LaunchPlan)> {
+        if self.booster != Some(index) {
+            return None;
+        }
+        match self.booster_launch()? {
+            (ship, plan, true) => Some((ship, plan)),
+            _ => None,
+        }
     }
 
     /// Zahl der Schiffe; der Booster zählt nicht dazu.
@@ -664,7 +690,7 @@ impl World {
             Some((ship, _, true)) => BoosterStatus::Ascending { ship },
             Some((ship, _, false)) => BoosterStatus::Reserved { ship },
             None => match self.vessels[booster].trajectory.current() {
-                Segment::Surface { wreck: false, .. } if matches!(self.base_of(booster), Some(k) if self.bases[k].kind == BaseKind::Depot) => {
+                Segment::Surface { wreck: false, .. } if self.at_depot(booster) => {
                     BoosterStatus::Ready
                 }
                 _ => BoosterStatus::Returning,
@@ -1143,11 +1169,8 @@ impl World {
     /// Körper und Zustand eines Schiffs zur aktuellen Zeit (angedockt: des
     /// Hauptschiffs).
     pub fn vessel_state(&self, index: usize) -> (BodyId, StateVector) {
-        // Der Booster fliegt bis zur Trennung am Schiff mit.
-        let index = match self.booster_status() {
-            Some(BoosterStatus::Ascending { ship }) if self.booster == Some(index) => ship,
-            _ => index,
-        };
+        // Der Booster am Schiff ist dort, wo das Schiff ist.
+        let index = self.carried(index).map_or(index, |(ship, _)| ship);
         self.vessels[self.host(index)]
             .trajectory
             .state_at(&self.bodies, self.time)
@@ -1156,9 +1179,7 @@ impl World {
     /// Aktuelle Masse in kg (angedockt: des ganzen Verbunds).
     pub fn vessel_mass(&self, index: usize) -> f64 {
         // Der Booster am Schiff: der Stapel ohne das Schiff.
-        if self.booster == Some(index)
-            && let Some((_, plan, true)) = self.booster_launch()
-        {
+        if let Some((_, plan)) = self.carried(index) {
             return plan.burn.mass_at(self.time) - plan.burn.payload().unwrap_or(0.0);
         }
         self.vessels[self.host(index)]
@@ -1296,6 +1317,9 @@ impl World {
     pub fn vessel_status(&self, index: usize) -> VesselStatus {
         if let Some(host) = self.vessels[index].docked_to {
             return VesselStatus::Docked { host };
+        }
+        if let Some((ship, _)) = self.carried(index) {
+            return VesselStatus::Carried { ship };
         }
         let segment = self.vessels[index].trajectory.current();
         let body = &self.bodies[segment.body()];

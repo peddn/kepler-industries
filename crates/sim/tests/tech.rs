@@ -1,7 +1,8 @@
 //! Tests für den Techtree: Preise, Voraussetzungen und was das Freischalten
 //! bewirkt.
 
-use sim::scenario::{BOOSTER, BOOSTER_B2, ZORB, start};
+use sim::booster::{B1, B2};
+use sim::scenario::{ZORB, start};
 use sim::{
     BoosterStatus, Chassis, Design, DesignError, Engine, Launch, LaunchProfile, Part, PlanError,
     Tech, TechError, World,
@@ -75,7 +76,7 @@ fn prerequisites_come_first() {
 fn booster_b2_replaces_the_booster() {
     let mut world = with_data(60.0);
     let booster = world.booster.unwrap();
-    assert_eq!(world.vessels[booster].params, BOOSTER);
+    assert_eq!(world.vessels[booster].params, B1);
 
     world.zorit = 2_000.0;
     assert_eq!(
@@ -95,13 +96,13 @@ fn booster_b2_replaces_the_booster() {
 
     world.unlock(Tech::BoosterB2).unwrap();
     assert_eq!((world.data, world.zorit), (10.0, 0.0));
-    assert_eq!(world.vessels[booster].params, BOOSTER_B2);
+    assert_eq!(world.vessels[booster].params, B2);
     assert_eq!(world.booster_status(), Some(BoosterStatus::Ready));
-    assert!((world.vessel_fuel(booster) - BOOSTER_B2.fuel_capacity).abs() < 1e-9);
+    assert!((world.vessel_fuel(booster) - B2.fuel_capacity).abs() < 1e-9);
     // Der nächste Start läuft mit ihm.
     world.set_launch(ship, launch).unwrap();
     let plan = world.vessels[ship].trajectory.launch().unwrap();
-    assert_eq!(plan.booster.unwrap().params, BOOSTER_B2);
+    assert_eq!(plan.booster.unwrap().params, B2);
 }
 
 /// Wofür der B-2 da ist: Ein volles großes Chassis trägt der erste Booster

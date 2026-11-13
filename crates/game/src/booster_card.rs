@@ -16,17 +16,8 @@ pub fn status(world: &World) -> Option<String> {
         BoosterStatus::Reserved { ship } => {
             format!("Vorgesehen für den Start von {}.", world.vessels[ship].name)
         }
-        BoosterStatus::Ascending { ship } => {
-            let end = world.vessels[ship]
-                .trajectory
-                .launch()
-                .map_or(world.time, |plan| plan.burn.end);
-            format!(
-                "Trägt {} nach oben, Trennung in {}.",
-                world.vessels[ship].name,
-                span(end)
-            )
-        }
+        // Am Schiff: der Status wie bei jedem Fahrzeug.
+        BoosterStatus::Ascending { .. } => format!("{}.", hud::ship_status(world, booster)),
         BoosterStatus::Returning => match world.touchdown(booster) {
             Some(touchdown) => format!("Fliegt zurück, Landung in {}.", span(touchdown.time)),
             None => "Nicht an der Startbasis.".into(),
