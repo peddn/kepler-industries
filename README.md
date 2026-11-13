@@ -33,11 +33,13 @@ Beginn offen. Ein Entwurf ist ein Chassis mit Triebwerken, optional dem
 Fundament einer Basis und einer Aufteilung des Innenraums in Tank und
 Fracht; daraus ergeben sich Flugwerte und Preis. Zu Beginn gibt es die
 Entwürfe „Basisschiff" und „Frachter".
+Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
+(etwa als Erstes eine Tankstelle baut oder ein Schiff verliert), steckt fest.
 
 ### Schiffe und Entwürfe
 
-Links die Liste der Entwürfe: einen
-wählen, mit „Neu (Kopie)" einen weiteren anlegen, mit „Löschen" entfernen
+Das Fenster „Entwürfe" (Schalter oben rechts) ist der Schiffseditor. Links
+die Liste der Entwürfe: einen wählen, mit „Neu (Kopie)" einen weiteren anlegen, mit „Löschen" entfernen
 (auch die beiden vom Beginn). Rechts der gewählte Entwurf: Name, Chassis,
 Triebwerkssorte und Anzahl, Fundament und ein Regler, der den freien
 Innenraum in Tank und Fracht teilt (0,5-t-Schritte). Darunter stehen Preis,
@@ -46,11 +48,17 @@ Standardprofil im Orbit übrig bleibt, jeweils leer und voll beladen (dafür
 wird der Start wirklich probeweise geplant). Was nicht taugt, steht als
 Warnung da (kein Triebwerk, kein Tank, zu schwer für den Booster, reicht
 nicht bis in die Umlaufbahn); bestellen lässt es sich trotzdem. Gesperrte
-Teile (Groß, Z-2, Z-3) sind sichtbar, aber nicht wählbar, bis es den
-Techtree gibt. Änderungen gelten für künftige Bestellungen; gebaute Schiffe
-bleiben, wie sie sind. Die Entwürfe gehören zum Spielstand.
-Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
-(etwa als Erstes eine Tankstelle baut oder ein Schiff verliert), steckt fest.
+Teile (Groß, Z-2, Z-3) sind sichtbar, aber nicht wählbar, bis sie in der
+Technik freigeschaltet sind. Änderungen gelten für künftige Bestellungen;
+gebaute Schiffe bleiben, wie sie sind. Die Entwürfe gehören zum Spielstand.
+
+**Umbau:** Ein Schiff, das an der Startbasis steht, lässt sich auf einen
+anderen Entwurf mit demselben Chassis umbauen: andere Triebwerke, Fundament
+ein- oder ausbauen, Tank und Fracht anders teilen. Die Karte „Startbasis"
+zeigt dafür unter den Bestellungen eine Schaltfläche je passendem Entwurf mit
+dem Preisunterschied; ein billigerer Entwurf bringt Zorit zurück. Das Schiff
+steht danach vollgetankt da und behält Namen und Fracht. Passt die Fracht
+nicht in den neuen Frachtraum oder ist ein Start geplant, geht es nicht.
 
 ### Start und Booster
 

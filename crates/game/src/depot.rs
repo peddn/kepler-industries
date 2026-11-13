@@ -1,8 +1,9 @@
 //! Karte "Startbasis" der Seitenleiste: erscheint, wenn ein Schiff gewählt
 //! ist, das an der Startbasis steht, oder ihr Zielgebiet (Klick auf seine
 //! Raute; das geht nur, wenn dort kein Schiff steht, denn Schiffe haben beim
-//! Klicken Vorrang). Sie zeigt das Zorit im Lager und bestellt Schiffe nach
-//! den Entwürfen der Welt (siehe `sim::base` und `sim::design`).
+//! Klicken Vorrang). Sie zeigt das Zorit im Lager, bestellt Schiffe nach den
+//! Entwürfen der Welt und baut das gewählte Schiff auf einen anderen Entwurf
+//! mit demselben Chassis um (siehe `sim::base` und `sim::design`).
 
 use crate::fracht::tons_fine;
 use crate::node_ui::{SelectedZone, Selection};
@@ -24,9 +25,56 @@ pub fn selected(world: &World, zone: &SelectedZone, selection: &Selection) -> bo
         .is_some_and(|base| world.bases[base].kind == BaseKind::Depot)
 }
 
-/// Zeichnet die Karte; liefert ein eben bestelltes Schiff (es steht im
-/// Protokoll und wird gewählt).
-pub fn show(ui: &mut egui::Ui, world: &mut World, notes: &mut Notes) -> Option<usize> {
+/// Preisunterschied eines Umbaus als Text: „+0,4 t", „−0,4 t" oder
+/// „kostenlos".
+fn difference(price: f64) -> String {
+    if price > 0.0 {
+        format!("+{}", tons_fine(price))
+    } else if price < 0.0 {
+        format!("−{}", tons_fine(-price))
+    } else {
+        "kostenlos".into()
+    }
+}
+
+/// Umbau des Schiffs `vessel`, wenn es nach einem Entwurf gebaut ist und an
+/// der Startbasis steht: eine Schaltfläche je anderem Entwurf mit demselben
+/// Chassis, mit dem Preisunterschied.
+fn refit(ui: &mut egui::Ui, world: &mut World, vessel: usize, notes: &mut Notes) {
+    let v = &world.vessels[vessel];
+    let Some(current) = v.design.clone().filter(|_| world.at_depot(vessel)) else {
+        return;
+    };
+    ui.separator();
+    ui.label(format!("Umbau von {}:", v.name));
+    let fitting: Vec<usize> = (0..world.designs.len())
+        .filter(|&k| world.designs[k].chassis == current.chassis && world.designs[k] != current)
+        .collect();
+    if fitting.is_empty() {
+        ui.weak("Kein anderer Entwurf mit diesem Chassis (Fenster „Entwürfe\").");
+    }
+    for design in fitting {
+        let d = &world.designs[design];
+        let price = d.price() - current.price();
+        let label = format!("auf {} ({})", d.name, difference(price));
+        if wide_button(ui, label)
+            && let Some(paid) = notes.check(world.refit(vessel, design))
+        {
+            let (ship, name) = (&world.vessels[vessel].name, &world.designs[design].name);
+            notes.say(format!("{ship} umgebaut auf {name} ({})", difference(paid)));
+        }
+    }
+}
+
+/// Zeichnet die Karte, mit dem Umbau für das gewählte Schiff `vessel`;
+/// liefert ein eben bestelltes Schiff (es steht im Protokoll und wird
+/// gewählt).
+pub fn show(
+    ui: &mut egui::Ui,
+    world: &mut World,
+    vessel: Option<usize>,
+    notes: &mut Notes,
+) -> Option<usize> {
     card(ui, "Startbasis", |ui| {
         ui.label(format!(
             "Zorit im Lager: {}\nPreise in Zorit:\nBauteile: {} je Tonne",
@@ -40,6 +88,9 @@ pub fn show(ui: &mut egui::Ui, world: &mut World, notes: &mut Notes) -> Option<u
             if wide_button(ui, label) {
                 ordered = notes.check(world.order_ship(design)).or(ordered);
             }
+        }
+        if let Some(vessel) = vessel {
+            refit(ui, world, vessel, notes);
         }
         ordered
     })

@@ -289,7 +289,7 @@ pub fn draw(
                     verbund::show(ui, world, vessel, &mut choice, &mut notes);
                     fracht::show(ui, world, vessel, &mut notes);
                 }
-                if at_depot && let Some(ordered) = depot::show(ui, world, &mut notes) {
+                if at_depot && let Some(ordered) = depot::show(ui, world, vessel, &mut notes) {
                     selected.vessel.0 = Some(ordered);
                 }
             },
