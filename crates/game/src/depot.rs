@@ -1,8 +1,8 @@
 //! Karte "Startbasis" der Seitenleiste: erscheint, wenn ein Schiff gewählt
 //! ist, das an der Startbasis steht, oder ihr Zielgebiet (Klick auf seine
 //! Raute; das geht nur, wenn dort kein Schiff steht, denn Schiffe haben beim
-//! Klicken Vorrang). Sie zeigt das Zorit im Lager, bestellt Schiffe nach den
-//! Entwürfen der Welt und baut das gewählte Schiff auf einen anderen Entwurf
+//! Klicken Vorrang). Sie zeigt das Lager (Zorit und Bauteile), tauscht Zorit
+//! gegen Bauteile, bestellt Schiffe nach den Entwürfen der Welt und baut das gewählte Schiff auf einen anderen Entwurf
 //! mit demselben Chassis um (siehe `sim::base` und `sim::design`).
 
 use crate::fracht::tons_fine;
@@ -11,6 +11,9 @@ use crate::ui::{Notes, card, wide_button};
 use bevy_egui::egui;
 use sim::base::PARTS_PRICE;
 use sim::{BaseKind, World};
+
+/// So viele Bauteile tauscht ein Klick ein (kg).
+const PARTS_LOT: f64 = 1_000.0;
 
 /// Ist die Startbasis gewählt: ihr Zielgebiet oder ein Schiff, das dort
 /// steht?
@@ -77,10 +80,28 @@ pub fn show(
 ) -> Option<usize> {
     card(ui, "Startbasis", |ui| {
         ui.label(format!(
-            "Zorit im Lager: {}\nPreise in Zorit:\nBauteile: {} je Tonne",
+            "Lager:\n  Zorit {}\n  Bauteile {}",
             tons_fine(world.zorit),
-            tons_fine(PARTS_PRICE * 1_000.0)
+            tons_fine(world.parts)
         ));
+        // Tauschen ist ein eigener Schritt: Die Bauteile kommen ins Lager,
+        // geladen wird in der Karte „Fracht & Basis".
+        ui.label("Zorit gegen Bauteile tauschen:");
+        let label = format!(
+            "{} Bauteile ({} Zorit)",
+            tons_fine(PARTS_LOT),
+            tons_fine(PARTS_LOT * PARTS_PRICE)
+        );
+        if wide_button(ui, label)
+            && let Some(bought) = notes.check(world.buy_parts(PARTS_LOT))
+        {
+            notes.say(format!(
+                "{} Bauteile eingetauscht, im Lager {}",
+                tons_fine(bought),
+                tons_fine(world.parts)
+            ));
+        }
+        ui.label("Preise in Zorit:");
         let mut ordered = None;
         for design in 0..world.designs.len() {
             let d = &world.designs[design];

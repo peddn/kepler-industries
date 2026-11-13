@@ -234,10 +234,12 @@ teilen sich den Frachtraum, Treibstoff liegt im Tank. Fracht zählt als Masse
 (weniger Δv, zu sehen am Δv-Balken). Alles läuft über die Karte „Fracht &
 Basis" der Seitenleiste.
 
-- **Startbasis:** Schiffe in ihrem Zielgebiet laden Bauteile, tanken und
-  laden Zorit ab; das Zorit kommt in ihr Lager. Die Karte „Startbasis"
-  (ein Schiff dort oder ihr Zielgebiet gewählt) zeigt das Lager und bestellt
-  neue Schiffe, die sofort vollgetankt dort stehen.
+- **Startbasis:** Sie hat ein Lager für Zorit und Bauteile. Die Karte
+  „Startbasis" (ein Schiff dort oder ihr Zielgebiet gewählt) zeigt es,
+  tauscht Zorit gegen Bauteile (sie kommen ins Lager) und bestellt neue
+  Schiffe, die sofort vollgetankt dort stehen. Schiffe in ihrem Zielgebiet
+  laden Bauteile und Zorit aus dem Lager, laden beides dorthin ab und
+  tanken. Tauschen und Laden sind zwei Schritte.
 - **Preise in Zorit:** Basisschiff 1 t, Frachter 1 t, Bauteile 0,25 t je
   Tonne; Treibstoff ist an der Startbasis frei. Eine neue Basis kostet damit
   2 t Zorit.
@@ -333,7 +335,7 @@ zum Spielstand.
 | Seitenleiste „Ziel“: Andocken bei Annäherung | Andocken als letzten Schritt der Kette planen / abbrechen |
 | Seitenleiste „Verbund“ | Teil wählen (◄ ►), Treibstoff zum Mitnehmen (− / +, `Umschalt`: fein), Abdocken |
 | Seitenleiste „Startbasis“ (Schiff an der Startbasis oder ihr Zielgebiet gewählt) | Zorit im Lager, Preise; „Basisschiff bestellen“, „Frachter bestellen“ |
-| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; je nach Lage „Mine gründen“ / „Tankstelle gründen“, „Bauteile abladen“, „Tanken“, „Zorit laden“, an der Startbasis „Bauteile laden“, „Tanken“, „Zorit abladen“ |
+| Seitenleiste „Fracht & Basis“ (Frachter, Basisschiff oder Schiff an einer Basis gewählt) | Fracht, Baustelle und Lager; je nach Lage „Mine gründen“ / „Tankstelle gründen“, „Bauteile abladen“, „Tanken“, „Zorit laden“, an der Startbasis Bauteile und Zorit laden und abladen, „Tanken“ |
 | Linksklick auf die Bahn des gewählten Schiffs | Node setzen (auch auf die Bahn nach einem geplanten Manöver) |
 | Linksklick auf einen Node / `↑` `↓` | Node wählen (nur der gewählte hat Griffe) |
 | Griff ziehen | Δv in diese Richtung ändern (je weiter, desto schneller; `Umschalt`: fein; höchstens bis der Tank leer ist) |

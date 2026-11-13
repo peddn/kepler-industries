@@ -13,13 +13,20 @@ use bevy_egui::egui;
 use sim::body::sphere_of_influence;
 use sim::{BaseKind, Goal, Task, Tech, TechError, VesselStatus, World};
 
-/// Vorrat einer Basis und der Stand dazu: bei der Startbasis das Zorit im
-/// Lager, auf einer Baustelle die Bauteile, sonst der hergestellte Stoff und
+/// Vorrat einer Basis und der Stand dazu: bei der Startbasis Zorit und
+/// Bauteile im Lager, auf einer Baustelle die Bauteile, sonst der hergestellte Stoff und
 /// wann das Lager voll ist.
 fn stock(world: &World, k: usize) -> (String, String) {
     let base = &world.bases[k];
     if base.kind == BaseKind::Depot {
-        return (format!("Zorit {}", tons_fine(world.zorit)), String::new());
+        return (
+            format!(
+                "Zorit {}, Bauteile {}",
+                tons_fine(world.zorit),
+                tons_fine(world.parts)
+            ),
+            String::new(),
+        );
     }
     if !base.complete() {
         return (

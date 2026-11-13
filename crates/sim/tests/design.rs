@@ -244,8 +244,14 @@ fn refit_is_refused() {
     assert_eq!((world.zorit, world.vessels[ship].clone()), before);
 
     // Mit Bauteilen an Bord passt der Entwurf ohne Frachtraum nicht.
+    world.buy_parts(2_000.0).unwrap();
     world.load_parts(ship).unwrap();
     assert_eq!(world.refit(ship, 3), Err(BaseError::CargoInTheWay));
+    // Abgeladen geht es, und zurück auch.
+    world.unload(ship).unwrap();
+    assert_eq!(world.refit(ship, 3), Ok(0.0));
+    assert_eq!(world.refit(ship, 1), Ok(0.0));
+    world.load_parts(ship).unwrap();
     // Der mit gleichem Frachtraum geht, die Fracht bleibt an Bord.
     world.refit(ship, 2).unwrap();
     assert_eq!(world.vessels[ship].cargo.parts, 2_000.0);
