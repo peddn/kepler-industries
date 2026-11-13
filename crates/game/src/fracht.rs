@@ -1,28 +1,26 @@
-//! Karte "Fracht & Basis" der Seitenleiste (siehe `sim::base`).
+//! Karte "Fracht & Basis" der Seitenleiste (siehe `sim::base` und
+//! `sim::goods`).
 //!
 //! Sie erscheint für Schiffe mit Frachtraum, für Basisschiffe und für jedes
 //! Schiff, das im Umkreis einer Basis steht. Sie zeigt Fracht, Baustelle und
-//! Lager; die Schaltflächen darunter tun, was dort gerade geht: an der
-//! Startbasis Bauteile und Zorit aus dem Lager laden und dorthin abladen und
-//! tanken, mit dem Basisschiff gründen,
-//! an der Baustelle abladen, an der Tankstelle tanken, an der Mine laden.
+//! Lager. Steht das Schiff an einer Basis, hat jedes Gut, das sich dort
+//! bewegen lässt, eine Zeile mit − (abladen) und + (laden) in Schritten von
+//! `LOT`. Die Schaltflächen darunter sind, was keine Lagerbewegung ist: mit
+//! dem Basisschiff gründen und tanken.
 
-use crate::ui::{Notes, card, wide_button};
+use crate::ui::{Notes, card, stepper, wide_button};
 use crate::zahl::De;
 use bevy_egui::egui;
 use sim::base::SITE_RADIUS;
-use sim::{BaseError, BaseKind, Segment, World};
+use sim::goods::LOT;
+use sim::{BaseError, BaseKind, Good, Segment, World};
 
 /// Was eine Schaltfläche tut.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Action {
     FoundMine,
     FoundStation,
-    Unload,
     Refuel,
-    LoadZorit,
-    LoadParts,
-    DeliverZorit,
 }
 
 impl Action {
@@ -30,11 +28,7 @@ impl Action {
         match self {
             Action::FoundMine => "Mine gründen",
             Action::FoundStation => "Tankstelle gründen",
-            Action::Unload => "Bauteile abladen",
             Action::Refuel => "Tanken",
-            Action::LoadZorit => "Zorit laden",
-            Action::LoadParts => "Bauteile laden",
-            Action::DeliverZorit => "Zorit abladen",
         }
     }
 }
@@ -60,54 +54,54 @@ fn landed(world: &World, vessel: usize) -> bool {
     )
 }
 
-/// Was für das Schiff gerade geht (höchstens `BUTTONS`).
+/// Kann das Schiff gerade etwas tun: heil am Boden, nicht angedockt, kein
+/// Fundament?
+fn ready(world: &World, vessel: usize) -> bool {
+    let v = &world.vessels[vessel];
+    landed(world, vessel) && v.docked_to.is_none() && v.foundation_of.is_none()
+}
+
+/// Was für das Schiff gerade geht.
 fn actions(world: &World, vessel: usize) -> Vec<Action> {
     let v = &world.vessels[vessel];
-    if !landed(world, vessel) || v.docked_to.is_some() || v.foundation_of.is_some() {
+    if !ready(world, vessel) {
         return Vec::new();
     }
-    let base = world.base_of(vessel).map(|k| &world.bases[k]);
-    let mut actions = Vec::new();
-    match base {
-        None if v.params.base_kit => {
-            actions.extend([Action::FoundMine, Action::FoundStation]);
-        }
-        None => {}
-        Some(base) if !base.complete() => {
-            if v.cargo.parts > 0.0 {
-                actions.push(Action::Unload);
+    match world.base_of(vessel).map(|k| &world.bases[k]) {
+        None if v.params.base_kit => vec![Action::FoundMine, Action::FoundStation],
+        Some(base) if base.complete() && base.kind != BaseKind::Mine => {
+            let depot = base.kind == BaseKind::Depot;
+            let room = world.vessel_fuel(vessel) < v.params.fuel_capacity;
+            // An der Tankstelle immer, damit man sieht, dass es dort geht.
+            if room || !depot {
+                vec![Action::Refuel]
+            } else {
+                Vec::new()
             }
         }
-        Some(base) => match base.kind {
-            BaseKind::Depot => {
-                // Aus dem Lager laden, was dort liegt; ins Lager abladen,
-                // was an Bord ist.
-                let room = v.cargo.total() < v.params.cargo_capacity;
-                if room && world.parts > 0.0 {
-                    actions.push(Action::LoadParts);
-                }
-                if room && world.zorit > 0.0 {
-                    actions.push(Action::LoadZorit);
-                }
-                if v.cargo.parts > 0.0 {
-                    actions.push(Action::Unload);
-                }
-                if v.cargo.zorit > 0.0 {
-                    actions.push(Action::DeliverZorit);
-                }
-                if world.vessel_fuel(vessel) < v.params.fuel_capacity {
-                    actions.push(Action::Refuel);
-                }
-            }
-            BaseKind::FuelStation => actions.push(Action::Refuel),
-            BaseKind::Mine => {
-                if v.params.cargo_capacity > 0.0 {
-                    actions.push(Action::LoadZorit);
-                }
-            }
-        },
+        _ => Vec::new(),
     }
-    actions
+}
+
+/// Die Güter, die sich hier zwischen Schiff und Basis bewegen lassen: an der
+/// Startbasis alles, was im Lager oder an Bord ist, an der Mine Zorit, an
+/// einer Baustelle die Bauteile an Bord.
+fn movable(world: &World, vessel: usize) -> Vec<Good> {
+    let v = &world.vessels[vessel];
+    let Some(k) = world.base_of(vessel).filter(|_| ready(world, vessel)) else {
+        return Vec::new();
+    };
+    let base = &world.bases[k];
+    let aboard = |good: Good| v.cargo.get(good) > 0.0;
+    [Good::Parts, Good::Zorit]
+        .into_iter()
+        .filter(|&good| match base.kind {
+            _ if !base.complete() => good == Good::Parts && aboard(good),
+            BaseKind::Depot => aboard(good) || world.stock(k, good) > 0.0,
+            BaseKind::Mine => good == Good::Zorit && v.params.cargo_capacity > 0.0,
+            BaseKind::FuelStation => false,
+        })
+        .collect()
 }
 
 /// Die Zeilen der Karte; leer: keine Karte.
@@ -120,11 +114,10 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
             tons(v.cargo.total()),
             tons(v.params.cargo_capacity)
         ));
-        if v.cargo.parts > 0.0 {
-            lines.push(format!("  Bauteile {}", tons(v.cargo.parts)));
-        }
-        if v.cargo.zorit > 0.0 {
-            lines.push(format!("  Zorit {}", tons(v.cargo.zorit)));
+        // Was eine eigene Zeile zum Laden hat, steht dort.
+        let rows = movable(world, vessel);
+        for (good, kg) in v.cargo.iter().filter(|(good, _)| !rows.contains(good)) {
+            lines.push(format!("  {} {}", good.name(), tons(kg)));
         }
     }
     if let Some(base) = v.foundation_of {
@@ -210,20 +203,7 @@ impl Action {
                 world.found_base(vessel, BaseKind::FuelStation)?;
                 String::new()
             }
-            Action::Unload => format!("{name}: {} Bauteile abgeladen", tons(world.unload(vessel)?)),
             Action::Refuel => format!("{name}: {:.0} kg getankt", De(world.refuel(vessel)?)),
-            Action::LoadZorit => {
-                format!("{name}: {} Zorit geladen", tons(world.load_zorit(vessel)?))
-            }
-            Action::LoadParts => format!(
-                "{name}: {} Bauteile geladen",
-                tons(world.load_parts(vessel)?)
-            ),
-            Action::DeliverZorit => format!(
-                "{name}: {} Zorit abgeladen, im Lager {}",
-                tons(world.deliver_zorit(vessel)?),
-                tons_fine(world.zorit)
-            ),
         })
     }
 }
@@ -235,6 +215,23 @@ pub fn show(ui: &mut egui::Ui, world: &mut World, vessel: usize, notes: &mut Not
     }
     card(ui, "Fracht & Basis", |ui| {
         ui.label(lines.join("\n"));
+        let goods = movable(world, vessel);
+        if !goods.is_empty() {
+            ui.weak(format!("− abladen, + laden (je {})", tons(LOT)));
+        }
+        for good in goods {
+            let aboard = world.vessels[vessel].cargo.get(good);
+            let label = format!("{} {}", good.name(), tons(aboard));
+            let moved = match stepper(ui, ["−", "+"], egui::RichText::new(label)) {
+                1 => world.load(vessel, good, LOT).map(|kg| (kg, "geladen")),
+                -1 => world.unload(vessel, good, LOT).map(|kg| (kg, "abgeladen")),
+                _ => continue,
+            };
+            if let Some((kg, done)) = notes.check(moved) {
+                let ship = &world.vessels[vessel].name;
+                notes.say(format!("{ship}: {} {} {done}", tons(kg), good.name()));
+            }
+        }
         for action in actions(world, vessel) {
             if wide_button(ui, action.label())
                 && let Some(text) = notes.check(action.run(world, vessel))

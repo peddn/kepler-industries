@@ -5,9 +5,13 @@ mod common;
 
 use common::{FERRY, base_ship_params, freighter_params};
 use glam::DVec3;
+use sim::Good;
 use sim::kepler::state_from_apsides;
 use sim::scenario::{NURA, ZILL, ZOON, ZORB, demo, start};
 use sim::{BaseKind, Goal, LogKind, ManeuverNode, Orbit, OrbitSpec, SurfacePoint, World};
+
+/// Laden und Abladen ohne Grenze: so viel, wie da ist und passt.
+const ALL: f64 = f64::INFINITY;
 
 fn prograde(time: f64, delta_v: f64) -> ManeuverNode {
     ManeuverNode {
@@ -236,7 +240,7 @@ fn base_counts_when_it_is_complete() {
     for _ in 0..2 {
         let freighter = world.spawn_landed("Frachter", freighter_params(), 1_000.0, ZOON, site);
         world.load_cargo(freighter, 2_000.0);
-        world.unload(freighter).unwrap();
+        world.unload(freighter, Good::Parts, ALL).unwrap();
     }
     assert!(world.bases[base].complete());
     assert_eq!(done(&world), vec![(ZOON, "Basis")]);

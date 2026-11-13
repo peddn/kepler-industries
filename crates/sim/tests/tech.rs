@@ -1,6 +1,7 @@
 //! Tests für den Techtree: Preise, Voraussetzungen und was das Freischalten
 //! bewirkt.
 
+use sim::Good;
 use sim::booster::{B1, B2};
 use sim::scenario::{ZORB, start};
 use sim::{
@@ -86,12 +87,12 @@ fn booster_b2_replaces_the_booster() {
     let booster = world.booster.unwrap();
     assert_eq!(world.vessels[booster].params, B1);
 
-    world.zorit = 2_000.0;
+    world.depot_stock_mut().set(Good::Zorit, 2_000.0);
     assert_eq!(
         world.unlock(Tech::BoosterB2),
         Err(TechError::NotEnoughZorit)
     );
-    world.zorit = 4_000.0;
+    world.depot_stock_mut().set(Good::Zorit, 4_000.0);
     // Verplant für einen Start: kein Tausch.
     let ship = world.order_ship(1).unwrap();
     let launch = Launch {
@@ -103,7 +104,7 @@ fn booster_b2_replaces_the_booster() {
     world.clear_launch(ship).unwrap();
 
     world.unlock(Tech::BoosterB2).unwrap();
-    assert_eq!((world.data, world.zorit), (10.0, 0.0));
+    assert_eq!((world.data, world.zorit()), (10.0, 0.0));
     assert_eq!(world.vessels[booster].params, B2);
     assert_eq!(world.booster_status(), Some(BoosterStatus::Ready));
     assert!((world.vessel_fuel(booster) - B2.fuel_capacity).abs() < 1e-9);
@@ -118,7 +119,7 @@ fn booster_b2_replaces_the_booster() {
 #[test]
 fn b2_carries_a_full_large_chassis() {
     let mut world = with_data(500.0);
-    world.zorit = 10_000.0;
+    world.depot_stock_mut().set(Good::Zorit, 10_000.0);
     world.unlock(Tech::ChassisLarge).unwrap();
     let large = Design {
         name: "Schwer".into(),

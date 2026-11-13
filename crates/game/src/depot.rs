@@ -10,10 +10,28 @@ use crate::node_ui::{SelectedZone, Selection};
 use crate::ui::{Notes, card, wide_button};
 use bevy_egui::egui;
 use sim::base::PARTS_PRICE;
-use sim::{BaseKind, World};
+use sim::{BaseKind, Good, World};
 
 /// So viele Bauteile tauscht ein Klick ein (kg).
 const PARTS_LOT: f64 = 1_000.0;
+
+/// Das Lager der Startbasis, ein Gut je Zeile: Zorit und Bauteile immer (mit
+/// dem einen bezahlt man, das andere tauscht man hier ein), alles Weitere,
+/// wenn es da ist.
+pub fn stock(world: &World) -> Vec<String> {
+    let fixed = [Good::Zorit, Good::Parts];
+    let more = world
+        .depot()
+        .into_iter()
+        .flat_map(|depot| world.bases[depot].stock.iter())
+        .map(|(good, _)| good)
+        .filter(|good| !fixed.contains(good));
+    fixed
+        .into_iter()
+        .chain(more)
+        .map(|good| format!("{} {}", good.name(), tons_fine(world.in_depot(good))))
+        .collect()
+}
 
 /// Ist die Startbasis gewählt: ihr Zielgebiet oder ein Schiff, das dort
 /// steht?
@@ -79,11 +97,7 @@ pub fn show(
     notes: &mut Notes,
 ) -> Option<usize> {
     card(ui, "Startbasis", |ui| {
-        ui.label(format!(
-            "Lager:\n  Zorit {}\n  Bauteile {}",
-            tons_fine(world.zorit),
-            tons_fine(world.parts)
-        ));
+        ui.label(format!("Lager:\n  {}", stock(world).join("\n  ")));
         // Tauschen ist ein eigener Schritt: Die Bauteile kommen ins Lager,
         // geladen wird in der Karte „Fracht & Basis".
         ui.label("Zorit gegen Bauteile tauschen:");
@@ -98,7 +112,7 @@ pub fn show(
             notes.say(format!(
                 "{} Bauteile eingetauscht, im Lager {}",
                 tons_fine(bought),
-                tons_fine(world.parts)
+                tons_fine(world.in_depot(Good::Parts))
             ));
         }
         ui.label("Preise in Zorit:");

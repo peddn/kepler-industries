@@ -19,14 +19,7 @@ use sim::{BaseKind, Goal, Task, Tech, TechError, VesselStatus, World};
 fn stock(world: &World, k: usize) -> (String, String) {
     let base = &world.bases[k];
     if base.kind == BaseKind::Depot {
-        return (
-            format!(
-                "Zorit {}, Bauteile {}",
-                tons_fine(world.zorit),
-                tons_fine(world.parts)
-            ),
-            String::new(),
-        );
+        return (crate::depot::stock(world).join(", "), String::new());
     }
     if !base.complete() {
         return (
@@ -121,10 +114,10 @@ fn cargo(ui: &mut egui::Ui, world: &World, selected: &mut Selected) {
             {
                 selected.select_vessel(host);
             }
-            let goods: Vec<String> = [("Bauteile", v.cargo.parts), ("Zorit", v.cargo.zorit)]
-                .into_iter()
-                .filter(|&(_, kg)| kg > 0.0)
-                .map(|(name, kg)| format!("{name} {}", tons(kg)))
+            let goods: Vec<String> = v
+                .cargo
+                .iter()
+                .map(|(good, kg)| format!("{} {}", good.name(), tons(kg)))
                 .collect();
             ui.label(goods.join(", "));
             ui.label(place(world, host));
