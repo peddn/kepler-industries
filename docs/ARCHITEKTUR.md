@@ -5,6 +5,10 @@ stammen aus einer Analyse der technischen Probleme von Kerbal Space Program 1
 und 2. Wer etwas ändert, das einer Regel widerspricht, ändert bitte zuerst
 dieses Dokument (mit Begründung).
 
+Das Dokument hat zwei Teile. Bis einschließlich „Stand und nächste Schritte“
+steht, was gilt und gebaut ist. Unter „Ideen (nicht gebaut)“ steht, was
+gesammelt, aber nicht beschlossen ist; nichts davon bindet den Code.
+
 ## Aufbau
 
 | Crate | Aufgabe | Abhängigkeiten |
@@ -442,7 +446,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Umläufe weiter innen; zieht man dorthin, kommt der Node auf einen späteren
   Umlauf. Das zeigen das Etikett „+N Umläufe“ am gewählten Node und die Liste.
   Auf einer stabilen Bahn liegen die Umläufe übereinander, dort bleibt der
-  Node im ersten (später: „+1 Umlauf“ im Node-Manager).
+  Node im ersten (eine Schaltfläche „+1 Umlauf“ steht bei den UI-Ideen).
 - **Scharf schalten pro Kette** (`Trajectory::armed`): Nur eine scharfe Kette
   wird ausgeführt. In der Simulation ist eine neue Kette nicht scharf. Eine
   nicht scharfe rückt bei Brennbeginn als Ganzes einen Umlauf weiter, so geht
@@ -620,166 +624,23 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Mitnehmen mit − / + (Vorschlag nach Tankgröße), Vorschau beider Schiffe,
   „Abdocken“. Planbares Abdocken als Schritt der Kette kommt mit den
   automatischen Routen.
-- **Basis-Schiff:** Rohbau im Orbit, Transporter liefern „Bauteile" per
-  Andocken, voll → Vorlage wechselt zum Basis-Schiff. Landet einmalig und
-  gründet die Basis dort, wo es aufsetzt.
-- **Booster:** abstrahierte Dienstleistung eines Raumhafens (Gebäude einer Basis):
-  Kapazität, Rohstoffkosten, Abklingzeit. Das Schiff erscheint mit vollen Tanks
-  in einer Parkbahn (echte Keplerbahn aus Breite und Richtung). Boost-back nur
-  als Animation.
-- **Vessel-Klassen und Gebäude** sind Vorlagen mit Werten; Upgrades ändern Werte.
-  Fähigkeiten (Fracht, Antenne, Scanner) sind optionale Felder, keine eigene
-  Logik pro Klasse. Später stellt der Spieler Schiffe, Satelliten und Sonden
-  selbst zusammen: ein Chassis pro Klasse, darin Module (Triebwerk, Tank,
-  Fallschirm, …). Die Summe der Module ergibt die `VesselParams`; die
-  Simulation bleibt dabei unverändert.
-- **Ein Auftragssystem** für Daten (kein Geld, siehe „Wirtschaft“).
+- **Schiffe sind Werte:** Ein Entwurf (Chassis, Triebwerke, Fundament, Tank;
+  siehe „Katalog“) ergibt die `VesselParams`. Fähigkeiten sind Felder, keine
+  eigene Logik pro Klasse; die Simulation kennt nur diese Werte.
 
-## Wirtschaft (Konzept; gebaut ist der erste Schritt)
+## Wirtschaft
 
-Stand der Planung. Vorbilder sind Aufbauspiele wie die Anno-Reihe; der
-Engpass ist hier aber immer der Transport, damit die Orbitalmechanik das
-Tempo der Wirtschaft bestimmt. Grundlage ist Regel 14.
+Der Engpass ist immer der Transport, damit die Orbitalmechanik das Tempo
+der Wirtschaft bestimmt. Grundlage ist Regel 14. Es gibt zwei Zähler: Zorit
+(ein Stoff, bezahlt Schiffe und Bauteile) und Daten (schalten Technik frei).
 
-**Aufbau wie bei den Bahnen:** Die Wirtschaft einer Basis ist eine Folge von
-Abschnitten zwischen Ereignissen (ein Gebäude wird fertig, ein Lager ist
-voll oder leer, ein Schiff kommt an, Bewohner ziehen ein oder aus). Jeder
-Abschnitt speichert seinen Zustand zu Beginn; alles dazwischen (Lagerstände,
-Batterie, geförderte Menge) wird für jeden Zeitpunkt direkt berechnet, nie
-Schritt für Schritt. Ein Ereignis beendet den Abschnitt, der nächste beginnt
-mit dem Zustand, der gerade herrscht: kein Sprung, nichts wird rückwirkend
-neu berechnet. So gelten die Regeln 3, 5, 6 und 12 auch hier (keine Drift,
-gleich bei jedem Zeitraffer, unabhängig von der Schrittgröße, Vorschau =
-Ausführung).
-
-**Zwei Währungen, kein Geld:**
-
-| | entsteht durch | vergeht durch |
-|---|---|---|
-| Stoffe | Minen, Fabriken, Ernte | Bauen, Tanken, Arbeit (Verschleiß) |
-| Daten | Entdeckungen, Scans, Proben; spät auch Labore | Tausch bei Zorb, Forschung |
-
-Geld, Markt, Preise, Steuern und Unterhalt gibt es nicht (alle Fassungen
-davon liefen auf eine endlos wiederholbare Route hinaus oder auf etwas, das
-irgendwann wertlos wird). Das Unternehmen „Kepler Industries“ ist der
-Rahmen, ohne Bilanz.
-
-**Zorb und die Daten:**
-- Zorb ist nicht ausbaubar: Startplatz und Partner, der Aufbau findet im All
-  statt.
-- Zorb gibt eine Startausstattung (einmalig: erste Schiffe, Bauteile für die
-  erste Basis), beliebig viele Zorbels, und im Tausch gegen Daten alles, was
-  man noch nicht selbst herstellt (Bauteile, Ersatzteile, Treibstoff, Module).
-  Freien Nachschub gibt es nicht: Weil Warten nichts kostet, wäre er mit
-  genug Flügen unbegrenzt, und eigene Produktion hätte keinen Sinn. Für einen
-  Start betankt Zorb nur den Aufstieg (das Schiff kommt mit fester Füllung im
-  Orbit an, siehe Booster), keinen Tanker.
-- Zorb will Daten, in zwei Stufen: **gefunkte Daten** (Scans, Messungen;
-  sofort da, wenig wert, später abhängig vom Kommunikationsnetz) und
-  **Proben**, die man zurückbringen und heil landen muss (viel wert). So gibt
-  es Fracht in beide Richtungen.
-- Jede Entdeckung zählt nur einmal. Daten lassen sich also nicht durch
-  Wiederholen vermehren; die Karten ganzer Körper zu scannen liefert viele
-  kleine Portionen.
-- Die Entscheidung, die immer wiederkehrt: Daten gegen Nachschub tauschen
-  oder in die eigene Forschung stecken (Upgrades für bessere Module).
-- **Aufträge** geben Richtung und Bonus („scanne Nura: doppelt“). Es gibt
-  eine feste Zahl offener Aufträge; ein neuer erscheint, wenn einer erledigt
-  ist, nicht mit der Zeit. Ein Grundauftrag, der immer geht und Bauteile
-  bringt, verhindert, dass man festsitzt; dazu ein Vorschuss.
-- **Ziel ist die völlige Unabhängigkeit:** Am Ende stellt man alles selbst
-  her und braucht Zorb nur noch für Zorbels.
-- **Endlos danach:** Labore (spätes Gebäude) machen aus hochwertigen Gütern
-  Daten, pro Arbeit; damit wiederholbare Upgrades, jedes Mal teurer. Sie
-  dürfen nicht zu früh kommen, sonst entwerten sie das Erkunden. Als
-  Erweiterung: neue Ziele (Asteroiden, Kometen), die erscheinen, sobald eines
-  erkundet ist.
-
-**Rohstoffe und Landezonen:**
-- Pro Körper und Rohstoff eine Karte wie eine Höhenkarte, aus einem Startwert
-  erzeugt (gespeichert wird nur der Startwert).
-- Scans decken sie auf: Ein Satellit sieht die Streifen, die er überfliegt
-  (die Bahnneigung entscheidet, was er je zu sehen bekommt). Das gibt
-  Satelliten einen Zweck und liefert Forschungsdaten.
-- Eine Zone wird nicht vorher gewählt: **Der Landepunkt wird zur Zone.** Ihr
-  Ertrag ist die Summe der Karten in ihrem Einzugsradius.
-- Wie viele Zonen ein Körper trägt, folgt aus seiner Größe (Mindestabstand
-  zwischen Zonen). Vorkommen erschöpfen sich nicht.
-- Körper werden nicht als Ganzes beansprucht; „erschlossen“ ist, wo Basen
-  stehen. Die festen Zielgebiete der Demo werden dadurch abgelöst.
-
-**Basis:** entsteht, sobald an einer Zone ein Kontingent an Bauteilen
-abgeladen ist. Gebäude: Mine, Fabrik, Raffinerie, Kraftwerk, Wohnraum, Lager,
-Raumhafen. Lager haben Obergrenzen; ist eines voll, steht die Produktion
-davor still.
-
-**Bewohner (Zorbels, kleine Roboterwesen):**
-- Auf Zorb gibt es beliebig viele. In die Startbasis ziehen so viele, wie
-  Wohnraum und Versorgung tragen; das stellt sich schnell ein und hängt nicht
-  an der Zeit.
-- Überall sonst gibt es nur die, die man hinbringt: Sie reisen als Passagiere
-  in einem Wohnmodul, in jede Richtung (auch umsiedeln). Sie vermehren sich
-  nicht.
-- Sie arbeiten (Gebäude brauchen Bewohner) und verbrauchen dabei.
-- Bedürfnisse: **Strom** (Grundbedürfnis) und **Ersatzteile** (Verschleiß,
-  pro Arbeit, nicht pro Tag). Nahrung, Wasser und Luft entfallen. Höhere
-  Bedürfnisse („Upgrades“ mit seltenen Stoffen) erst später.
-- Fehlt die Versorgung, stehen sie still (mild): Sie arbeiten nicht, bleiben
-  aber, und nichts geht kaputt.
-
-**Strom als Leistungsbilanz:** Erzeuger liefern Leistung (kW): Solarpanele
-nur im Licht und je nach Abstand zur Sonne, ein Reaktor immer (teuer im Bau,
-kein Brennstoff pro Zeit). Verbraucher ziehen Leistung. Eine Batterie (kWh)
-ist ein Puffer: Sie nimmt Überschuss auf und gibt ihn bei Mangel ab, bis sie
-leer ist; dann stehen die Verbraucher, bis wieder Licht ist. Weil sich Licht
-und Dunkel wiederholen, ist der Füllstand für jeden Zeitpunkt direkt
-berechenbar, und man sieht bei langsamem Zeitraffer, wie sie lädt und
-entlädt. Nach einer Änderung (z. B. mehr Panele mitten am Tag) beginnt ein
-neuer Abschnitt mit dem Füllstand von eben; der erste Tag ist ein Übergang,
-spätestens nach dem ersten „voll“ oder „leer“ wiederholt sich der Verlauf
-(Sonderfall zum Testen: Erzeugung und Verbrauch genau gleich, dann bleibt der
-Startwert als Versatz). Produktion und Verschleiß folgen dem echten Verlauf
-(nachts Stillstand), nicht einem Mittelwert. Die Standorte unterscheiden sich
-damit von selbst: Zorb 3 h Nacht, Zoon gut 19 h, Nura etwa 43 % der
-Sonnenleistung. Dasselbe Modell gilt für Schiffe (Wohnmodule brauchen
-Leistung, keinen Vorrat für die Flugdauer); Energiezellen als Frachtgut gibt
-es deshalb vorerst nicht.
-
-**Erste Kette (im All):** Mit der Startausstattung entsteht die erste Basis,
-naheliegend auf Zoon: Mine (Erz) → Fabrik (Bauteile, Ersatzteile), dazu eine
-Raffinerie (Treibstoff). Von Zoon ist der Weg in den Orbit viel billiger als
-von Zorb (etwa 670 statt 3.400 m/s). Zorb gibt den Anfang, Zoon macht das
-Fliegen billig, Nura liefert das Seltene.
-
-**Schiffe aus Chassis und Modulen** (siehe „Vessel-Klassen“ oben): ein
-festes Set von Chassis mit Plätzen, darin Module (Triebwerk, Tank,
-Frachtraum, Wohnmodul, Dockingport, Solarpanel, Batterie, Reaktor, Radiator
-…). Module liefern Werte, keine Geometrie (Regel 7); die Form hat keinen
-Einfluss auf die Simulation. Module kommen in der Reihenfolge, in der ihre
-Wirkung existiert. Zuerst als Liste; ein 3D-Editor zum Zusammenstellen ist
-reine Darstellung und kommt später. Größere Schiffe entstehen als Rohbau im
-Orbit, dem Teile angeliefert werden (wie das Kontingent einer Basis); der
-Verbund aus angedockten Schiffen bleibt daneben bestehen.
-
-**Später:** Sammler, die Gas beim Flug durch eine Atmosphäre ernten (mit der
-Wärme eine Abwägung), Asteroiden als Körper, automatische Routen (früh
-nötig, sobald Bewohner laufend versorgt werden), Kommunikationsnetz.
-
-**Offen (wird am ersten spielbaren Schritt entlang geklärt):**
-- Stoffliste und Raten im Einzelnen; Bauteile und Ersatzteile: ein Gut oder
-  zwei?
-- Tauschwerte bei Zorb und wie großzügig die ersten Entdeckungen sind (früh
-  braucht man Nachschub und Upgrades zugleich).
-- Auftragsarten und ihre Steigerung: Sie müssen ohne Zeitdruck antreiben.
-- Chassis, Plätze und Module im Einzelnen.
-
-**Der Kreislauf (gebaut, `sim::base`):** bewusst klein, um den Spielspaß zu
+**Der Kreislauf (`sim::base`):** bewusst klein, um den Spielspaß zu
 prüfen. Leitgedanke: Der Engpass ist die Leistung der Schiffe. Bauteile sind
 eine Investition (kein Verbrauch): Eine Basis erweitert dauerhaft, wie weit
 man kommt und was man zurückbringt.
 
 - **Kreislauf:** Bauteile von Zorb hinaus → Basen → Zorit zurück nach Zorb →
-  daraus (nächster Schritt) Schiffe und Bauteile → weiter hinaus. Hinaus ist
+  daraus Schiffe und Bauteile → weiter hinaus. Hinaus ist
   teuer (Start von Zorb, voll beladen), zurück billig (schwache Schwerkraft,
   auf Zorb bremst die Luft).
 - **Stoffe:** Bauteile und Zorit sind Fracht und teilen sich den Frachtraum
@@ -813,8 +674,7 @@ man kommt und was man zurückbringt.
   Zoon 1 t, Zill 2 t, Nura 4 t), also den Ertrag pro Abholung. Später ersetzt
   die Rohstoffkarte diese eine Zahl je Körper; reiche Stellen sollen dort
   liegen, wo das Hinkommen teuer ist. Endliche Vorkommen bleiben eine Option.
-- **Schiffe als Werte**, noch ohne Chassis und Module: Der Frachter (2 t
-  Frachtraum) startet voll beladen von Zorb, landet auf Zoon und kommt ohne
+- **Die Startentwürfe passen dazu:** Der Frachter (2 t Frachtraum) startet voll beladen von Zorb, landet auf Zoon und kommt ohne
   Tanken mit Zorit zurück; das Basisschiff (`base_kit`) fliegt nur hin.
 - Laden, Abladen und Tanken gehen nur am Boden, ohne geplanten Start und
   ohne angedockte Schiffe: Dann ändert sich nur die Masse des stehenden
@@ -823,9 +683,9 @@ man kommt und was man zurückbringt.
   zusammen 4 t Bauteilen um Zorb (mit dem Treibstoff, der nach einem Start
   übrig wäre).
 
-**Preise und Bestellen (gebaut):** Mit dem Zorit im Lager der Startbasis
-bezahlt man dort Bauteile (0,25 t je Tonne) und bestellt Basisschiffe und
-Frachter (je 1 t; `World::order_ship`). Eine neue Basis kostet damit 2 t
+**Preise und Bestellen:** Mit dem Zorit im Lager der Startbasis bezahlt man
+dort Bauteile (0,25 t je Tonne) und bestellt Schiffe nach Entwurf (die
+Startentwürfe kosten je 1 t; `World::order_ship`). Eine neue Basis kostet damit 2 t
 Zorit: zwei Abholungen auf Zoon, eine auf Zill. Treibstoff ist an der
 Startbasis frei.
 - Ein bestelltes Schiff steht sofort vollgetankt an der Startbasis: Eine
@@ -864,12 +724,12 @@ Im Orbit haben nach dem Start von Zorb (auf dem Booster, siehe unten) das
 Basisschiff rund 2.150 und der Frachter mit 2 t Bauteilen rund 3.000 übrig;
 mit vollem Tank rund 3.850 und 4.500. Teuer macht ein Ziel nicht die Entfernung,
 sondern Landen ohne Luft in tiefer Schwerkraft. Daraus die Stufen: Zoon
-geht direkt, Zill braucht eine Tankstelle (oder später bessere Triebwerke).
+geht direkt, Zill braucht eine Tankstelle (oder bessere Triebwerke).
 Nura ist beim Hinflug am billigsten, weil Luft und Fallschirm die Landung
 übernehmen (der Fallschirm hält im Modell bei jeder Geschwindigkeit); teuer
 sind dort Rückflug, Startfenster und Flugzeit.
 
-**Booster** (`sim::booster`; gebaut): Jeder Start von der Startbasis läuft
+**Booster** (`sim::booster`): Jeder Start von der Startbasis läuft
 als Stapel aus Schiff und Booster. Der Booster gehört zur Startbasis, nicht
 zum Schiff; es gibt genau einen.
 
@@ -939,9 +799,8 @@ zum Schiff; es gibt genau einen.
 - *Die Werte der Booster* (B-1, B-2) stehen in `sim::booster`, die der
   Schiffsteile in `sim::design`.
 
-**Katalog** (`sim::design`; gebaut sind der Katalog, Entwürfe mit ihren
-Flugwerten und Preisen, das Bestellen nach Entwurf und der Editor, noch
-nicht Umbau, Daten und Techtree). Der Editor (`entwurf.rs`, Fenster
+**Katalog** (`sim::design`): Chassis, Triebwerke und Fundament, daraus
+Entwürfe mit ihren Flugwerten und Preisen. Der Editor (`entwurf.rs`, Fenster
 „Entwürfe") ändert die Entwürfe der Welt direkt; einstellen lässt sich nur,
 was sich bauen lässt, alles Weitere sind Warnungen. Was nach dem Start im
 Orbit bleibt, kommt aus einer echten Probeplanung (`World::launch_estimate`:
@@ -949,7 +808,7 @@ dieselbe Startplanung in einer eigenen kleinen Welt, neu nur, wenn sich der
 Entwurf ändert). Solange jemand in ein Textfeld tippt, laufen die Systeme
 mit Tasten nicht (`ui::not_typing`). Jedes bestellte Schiff merkt sich seinen
 Entwurf (`Vessel::design`); was man bauen darf, steht in `World::unlocked`
-(bis zum Techtree: die Ausstattung vom Spielbeginn). Nur der Booster hat
+(zu Beginn die Ausstattung vom Spielbeginn, Weiteres über die Technik). Nur der Booster hat
 feste Werte ohne Entwurf; auch die Schiffe der Demo kommen aus den
 Startentwürfen.
 
@@ -976,12 +835,9 @@ Fundament wiegt 1.500 kg und belegt 3 t (0,4 t Zorit). Ein Schiff trägt nur
 eine Sorte Triebwerk. Startentwürfe: Frachter = Mittel + 2 × Z-1, 14 t Tank,
 2 t Fracht; Basisschiff = Klein + Z-1 + Fundament, 7 t Tank; beide 1 t Zorit,
 beide löschbar. Ein Basisschiff mit freiem Innenraum darf Fracht tragen.
-Daten kommen von Aufgaben (siehe unten); die Preise im Techtree werden mit
-ihm festgelegt. Umbau am gelandeten Schiff an der Startbasis,
-das alte Teil wird voll in Zorit erstattet.
 
-**Daten und Aufgaben** (`sim::task`; gebaut): Daten (GB) sind der zweite
-Zähler (bestimmen später, *was* man bauen kann; Zorit, *wie viel*). Sie sind
+**Daten und Aufgaben** (`sim::task`): Daten (GB) sind der zweite
+Zähler (bestimmen, *was* man bauen kann; Zorit, *wie viel*). Sie sind
 keine Fracht und gehören keinem Ort: Sie werden gefunkt und sofort
 gutgeschrieben.
 
@@ -1005,7 +861,7 @@ gutgeschrieben.
 - *Vorschau statt Fummeln:* Die Karte „Manöver" zeigt beim Node, welche
   offenen Aufgaben die Bahn danach erfüllt (`World::tasks_met_by`, dieselbe
   Prüfung wie beim Zählen).
-- *Techtree* (`sim::tech`; gebaut, vorerst als Liste mit Voraussetzungen):
+- *Techtree* (`sim::tech`; eine Liste mit Voraussetzungen):
   Z-2 (30 GB), Chassis Groß (30 GB), Booster B-2 (50 GB und 3 t Zorit), Z-3
   (100 GB, braucht Z-2); zusammen 210 von 290 GB. Freischalten geschieht
   sofort (eine Forschungszeit wäre wirkungslos, Regel 14). Teile kommen in
@@ -1018,19 +874,148 @@ gutgeschrieben.
   Schiffen.
 - *Fenster:* Daten verdienen und ausgeben liegen an einer Stelle, hinter
   „Daten … GB" oben: Reiter Übersicht, Aufgaben, Technik.
-- *Noch offen:* Proben zurückbringen (eine neue Fracht; mehr Masse bringt
-  mehr Daten, mit einer Obergrenze je Körper, damit sich Daten nicht endlos
-  farmen lassen). Zufällig erzeugte Vorgaben: Der Zufall müsste in den
-  Spielstand, und Daten wären nicht mehr endlich; das entscheidet sich mit
-  der Story-Kampagne. Die Preise im Techtree richten sich nach der Menge an
-  Daten, die es dann gibt.
 
-Noch offen: Umladen im Verbund (im Orbit).
+## Stand und nächste Schritte
 
-## Merkliste (nicht vergessen)
+Gebaut und spielbar: Fliegen (Manöverketten, Start auf dem Booster, Landung,
+Rendezvous, Andocken, Flüge zu Monden und Planeten), der Kreislauf aus
+Bauteilen, Basen und Zorit, Entwürfe aus dem Katalog, Aufgaben für Daten und
+die Technik.
+
+Vereinbart, noch nicht gebaut:
+
+- **Umbau:** Ein Schiff an der Startbasis bekommt einen anderen Entwurf mit
+  demselben Chassis. Bezahlt wird der Preisunterschied, das alte Teil wird
+  voll in Zorit erstattet.
+- **Proben:** eine neue Fracht, die man zurückbringt und heil landet. Mehr
+  Masse bringt mehr Daten, mit einer Obergrenze je Körper, damit sich Daten
+  nicht endlos farmen lassen.
+- **Erzeugte Aufgaben** mit ungewöhnlichen Bahnen und kleiner Toleranz: Der
+  Zufall müsste in den Spielstand, und Daten wären nicht mehr endlich. Das
+  entscheidet sich mit der Story-Kampagne; die Preise der Technik richten
+  sich nach der Menge an Daten, die es dann gibt.
+
+# Ideen (nicht gebaut)
+
+Gesammelt, damit nichts verloren geht. Was hiervon gebaut wird, wandert nach
+oben.
+
+## Wirtschaft
+
+Vorbilder sind Aufbauspiele wie die Anno-Reihe.
+
+**Aufbau wie bei den Bahnen** (gilt schon für das Lager einer Basis, `Store`):
+Die Wirtschaft einer Basis ist eine Folge von
+Abschnitten zwischen Ereignissen (ein Gebäude wird fertig, ein Lager ist
+voll oder leer, ein Schiff kommt an, Bewohner ziehen ein oder aus). Jeder
+Abschnitt speichert seinen Zustand zu Beginn; alles dazwischen (Lagerstände,
+Batterie, geförderte Menge) wird für jeden Zeitpunkt direkt berechnet, nie
+Schritt für Schritt. Ein Ereignis beendet den Abschnitt, der nächste beginnt
+mit dem Zustand, der gerade herrscht: kein Sprung, nichts wird rückwirkend
+neu berechnet. So gelten die Regeln 3, 5, 6 und 12 auch hier (keine Drift,
+gleich bei jedem Zeitraffer, unabhängig von der Schrittgröße, Vorschau =
+Ausführung).
+
+**Zorb und die Daten:**
+- Zorb ist nicht ausbaubar: Startplatz und Partner, der Aufbau findet im All
+  statt.
+- Daten in zwei Stufen: **gefunkte Daten** (Scans, Messungen;
+  sofort da, wenig wert, später abhängig vom Kommunikationsnetz) und
+  **Proben**, die man zurückbringen und heil landen muss (viel wert). So gibt
+  es Fracht in beide Richtungen.
+- Jede Entdeckung zählt nur einmal. Daten lassen sich also nicht durch
+  Wiederholen vermehren; die Karten ganzer Körper zu scannen liefert viele
+  kleine Portionen.
+- **Aufträge** geben Richtung und Bonus („scanne Nura: doppelt“). Es gibt
+  eine feste Zahl offener Aufträge; ein neuer erscheint, wenn einer erledigt
+  ist, nicht mit der Zeit.
+- **Ziel ist die völlige Unabhängigkeit:** Am Ende stellt man alles selbst
+  her und braucht Zorb nur noch für Zorbels.
+- **Endlos danach:** Labore (spätes Gebäude) machen aus hochwertigen Gütern
+  Daten, pro Arbeit; damit wiederholbare Upgrades, jedes Mal teurer. Sie
+  dürfen nicht zu früh kommen, sonst entwerten sie das Erkunden. Als
+  Erweiterung: neue Ziele (Asteroiden, Kometen), die erscheinen, sobald eines
+  erkundet ist.
+
+**Rohstoffe und Landezonen:**
+- Pro Körper und Rohstoff eine Karte wie eine Höhenkarte, aus einem Startwert
+  erzeugt (gespeichert wird nur der Startwert).
+- Scans decken sie auf: Ein Satellit sieht die Streifen, die er überfliegt
+  (die Bahnneigung entscheidet, was er je zu sehen bekommt). Das gibt
+  Satelliten einen Zweck und liefert Forschungsdaten.
+- Eine Zone wird nicht vorher gewählt: **Der Landepunkt wird zur Zone.** Ihr
+  Ertrag ist die Summe der Karten in ihrem Einzugsradius.
+- Wie viele Zonen ein Körper trägt, folgt aus seiner Größe (Mindestabstand
+  zwischen Zonen). Vorkommen erschöpfen sich nicht.
+- Körper werden nicht als Ganzes beansprucht; „erschlossen“ ist, wo Basen
+  stehen. Die festen Zielgebiete der Demo werden dadurch abgelöst.
+
+**Basis:** entsteht, sobald an einer Zone ein Kontingent an Bauteilen
+abgeladen ist. Gebäude: Mine, Fabrik, Raffinerie, Kraftwerk, Wohnraum, Lager,
+Raumhafen. Lager haben Obergrenzen; ist eines voll, steht die Produktion
+davor still.
+
+**Bewohner (Zorbels, kleine Roboterwesen):**
+- Auf Zorb gibt es beliebig viele. In die Startbasis ziehen so viele, wie
+  Wohnraum und Versorgung tragen; das stellt sich schnell ein und hängt nicht
+  an der Zeit.
+- Überall sonst gibt es nur die, die man hinbringt: Sie reisen als Passagiere
+  in einem Wohnmodul, in jede Richtung (auch umsiedeln). Sie vermehren sich
+  nicht.
+- Sie arbeiten (Gebäude brauchen Bewohner) und verbrauchen dabei.
+- Bedürfnisse: **Strom** (Grundbedürfnis) und **Ersatzteile** (Verschleiß,
+  pro Arbeit, nicht pro Tag). Nahrung, Wasser und Luft entfallen. Höhere
+  Bedürfnisse („Upgrades“ mit seltenen Stoffen) erst später.
+- Fehlt die Versorgung, stehen sie still (mild): Sie arbeiten nicht, bleiben
+  aber, und nichts geht kaputt.
+
+**Strom als Leistungsbilanz:** Erzeuger liefern Leistung (kW): Solarpanele
+nur im Licht und je nach Abstand zur Sonne, ein Reaktor immer (teuer im Bau,
+kein Brennstoff pro Zeit). Verbraucher ziehen Leistung. Eine Batterie (kWh)
+ist ein Puffer: Sie nimmt Überschuss auf und gibt ihn bei Mangel ab, bis sie
+leer ist; dann stehen die Verbraucher, bis wieder Licht ist. Weil sich Licht
+und Dunkel wiederholen, ist der Füllstand für jeden Zeitpunkt direkt
+berechenbar, und man sieht bei langsamem Zeitraffer, wie sie lädt und
+entlädt. Nach einer Änderung (z. B. mehr Panele mitten am Tag) beginnt ein
+neuer Abschnitt mit dem Füllstand von eben; der erste Tag ist ein Übergang,
+spätestens nach dem ersten „voll“ oder „leer“ wiederholt sich der Verlauf
+(Sonderfall zum Testen: Erzeugung und Verbrauch genau gleich, dann bleibt der
+Startwert als Versatz). Produktion und Verschleiß folgen dem echten Verlauf
+(nachts Stillstand), nicht einem Mittelwert. Die Standorte unterscheiden sich
+damit von selbst: Zorb 3 h Nacht, Zoon gut 19 h, Nura etwa 43 % der
+Sonnenleistung. Dasselbe Modell gilt für Schiffe (Wohnmodule brauchen
+Leistung, keinen Vorrat für die Flugdauer); Energiezellen als Frachtgut gibt
+es deshalb vorerst nicht.
+
+**Erste Kette (im All):** Die erste Basis entsteht naheliegend auf Zoon: Mine (Erz) → Fabrik (Bauteile, Ersatzteile), dazu eine
+Raffinerie (Treibstoff). Von Zoon ist der Weg in den Orbit viel billiger als
+von Zorb (etwa 670 statt 3.400 m/s). Zorb gibt den Anfang, Zoon macht das
+Fliegen billig, Nura liefert das Seltene.
+
+**Weitere Module** (gebaut sind Chassis, Triebwerk, Tank und Fundament,
+siehe „Katalog“): ein festes Set von Chassis mit Plätzen, darin Module (Triebwerk, Tank,
+Frachtraum, Wohnmodul, Dockingport, Solarpanel, Batterie, Reaktor, Radiator
+…). Module liefern Werte, keine Geometrie (Regel 7); die Form hat keinen
+Einfluss auf die Simulation. Module kommen in der Reihenfolge, in der ihre
+Wirkung existiert. Zuerst als Liste; ein 3D-Editor zum Zusammenstellen ist
+reine Darstellung und kommt später. Größere Schiffe entstehen als Rohbau im
+Orbit, dem Teile angeliefert werden (wie das Kontingent einer Basis); der
+Verbund aus angedockten Schiffen bleibt daneben bestehen.
+
+**Später:** Sammler, die Gas beim Flug durch eine Atmosphäre ernten (mit der
+Wärme eine Abwägung), Asteroiden als Körper, automatische Routen (früh
+nötig, sobald Bewohner laufend versorgt werden), Kommunikationsnetz.
+
+**Offen:**
+- Stoffliste und Raten im Einzelnen; Bauteile und Ersatzteile: ein Gut oder
+  zwei?
+- Auftragsarten und ihre Steigerung: Sie müssen ohne Zeitdruck antreiben.
+- Umladen im Verbund (im Orbit).
+
+## Merkliste
 
 - Kommunikationsnetz (Verbindung, Reichweite)
-- Scans, automatisierte Routen, Ressourcen, Basen, Wirtschaft
+- Scans, automatisierte Routen, Rohstoffkarten
 - Bergung von Wracks (über Daten)
 - **Story-Kampagne** mit Storymissionen. Passt zu den Aufträgen: Eine
   Storymission ist ein Auftrag mit fester Reihenfolge und Text, kein zweites
@@ -1041,7 +1026,7 @@ Noch offen: Umladen im Verbund (im Orbit).
   Anfluglinie, Haltepunkt vor dem Andockstutzen)
 - **Geparkt:** Bandbreite, Modulslots, Gelände/Höhenkarte
 
-## Haushalte (später, alle nach demselben Muster)
+## Haushalte (alle nach demselben Muster)
 
 Ein Vorrat pro Schiff, den jeder Abschnitt zu Beginn speichert (wie heute die
 Masse); dazwischen ändert er sich nach einer Formel oder wird mit der Bahn
@@ -1078,19 +1063,14 @@ und Modulen.
   (`body_state`).
 - **Gestrichen:** Technikalterung, Lagrange-Punkte (mit Patched Conics nicht möglich)
 
-## UI-Ideen (nach dem Grundgerüst)
+## UI-Ideen
 
-Erst kommt das Grundgerüst, dann die Bedienung. Ideen landen hier, damit
-nichts verloren geht.
-
-- **Manöver-Node-Manager:** Übersicht und Bearbeitung der geplanten Nodes
-  (sinnvoll, sobald es Manöverketten gibt)
-- **Scharf schalten:** Schaltfläche dafür, z. B. im Node-Manager. Die Mechanik
-  steckt schon in der Simulation; bis dahin ist jede Kette sofort scharf.
-- **„+1 Umlauf“ / „−1 Umlauf“** für den gewählten Node, z. B. im Node-Manager.
-  Damit kommt ein Node auch auf einer stabilen Bahn auf einen späteren Umlauf.
-- **Liste der Nodes anklickbar** statt `↑`/`↓`.
-- Alles davon als Karten in der **Seitenleiste** (gibt es seit dem Startprofil).
+- **Scharf schalten:** Schaltfläche dafür in der Karte „Manöver“. Die
+  Mechanik steckt schon in der Simulation; bis dahin ist jede Kette sofort
+  scharf.
+- **„+1 Umlauf“ / „−1 Umlauf“** für den gewählten Node in der Karte
+  „Manöver“. Damit kommt ein Node auch auf einer stabilen Bahn auf einen
+  späteren Umlauf.
 - **Startfenster automatisch:** Startzeit und Kurs suchen, bei denen die
   Bahnebene zum Ziel passt (von Hand geht es über die Neigung in der Karte
   „Ziel“).
@@ -1098,27 +1078,3 @@ nichts verloren geht.
   Flug zu einem anderen Planeten zünden muss, oder gleich ein fertiger Node
   (bewusst weggelassen: Man schiebt den Node, bis die Annäherung an den
   Zielkörper klein wird).
-
-## Reihenfolge
-
-1. Fundament ✓
-2. Manöver-Node in 3D ✓ (Schub, endliche Brenndauer, Aufschlagkreuz; dazu
-   momentane Bahn beim Brennen, Zeitraffer-Stopp, scharf schalten,
-   nächster Umlauf, Griffe mit Tank-Anschlag)
-3. Manöverketten ✓ (mehrere Nodes pro Schiff, Nodes auf zukünftigen Bahnen,
-   ungültige Nodes bleiben, Anzeige „+N Umläufe“)
-4. Startprofil ✓ (Kurs, Wendebeginn, Ziel-Apoapsis; Zirkularisieren per Node
-   in derselben Kette; Seitenleiste mit Karte „Start“)
-5. Landung ✓ (Zielgebiete, Fallschirme, Aufsetzen, Hop, Wrack)
-6. Rendezvous ✓ (Ziel, engste Annäherung, Neigung und Knoten, Startfenster
-   von Hand), Nahansicht ✓ (Kamera auf jedes gewählte Objekt, `N`),
-   Statusleiste mit Protokoll ✓, Andocken ✓ (Angleichen, Anflug, Verbund),
-   Abdocken ✓
-7. Mond: auf Schienen ✓ (Bahnelemente wie KSP, Einflusssphäre, wählen,
-   Kamera, zweiter Mond Zill), Wechsel
-   der Einflusssphäre ✓ (Zeichnung wie KSP), Landen und Starten auf Zoon ✓
-   (Wendewinkel, Zielgebiete), Landebrennen ✓, Sonne ✓ (Zunn als Wurzel,
-   zweiter Planet Nura, Flüge zwischen Planeten, Licht aus ihrer Richtung)
-8. Wirtschaft (Konzept im Abschnitt „Wirtschaft“): Fracht und Basis durch
-   Anlieferung → Chassis und Module → Mine und Fabrik → Bewohner und Strom →
-   Raumhafen und Booster → Rohbau im Orbit
