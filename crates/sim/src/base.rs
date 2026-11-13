@@ -4,11 +4,12 @@
 //! - **Stoffe:** Bauteile und Zorit sind Fracht (kg) und teilen sich den
 //!   Frachtraum; sie zählen beim Fliegen als Masse. Treibstoff ist der dritte
 //!   Stoff und liegt im Tank.
-//! - **Startbasis** (auf dem Heimatplaneten): Schiffe in ihrem Umkreis laden
-//!   Bauteile, tanken und laden Zorit ab. Das Zorit kommt ins Lager der
-//!   Startbasis (`World::zorit`).
-//! - **Preise:** Mit Zorit aus dem Lager bezahlt man Bauteile
-//!   (`PARTS_PRICE`) und bestellt neue Schiffe nach einem Entwurf
+//! - **Startbasis** (auf dem Heimatplaneten): Sie hat ein Lager für Zorit
+//!   und Bauteile (`World::zorit`, `World::parts`). Schiffe in ihrem Umkreis
+//!   laden beides ein und aus und tanken.
+//! - **Preise:** Mit Zorit aus dem Lager tauscht man Bauteile ein
+//!   (`World::buy_parts`, `PARTS_PRICE`; sie kommen ins Lager, Laden ist ein
+//!   eigener Schritt) und bestellt neue Schiffe nach einem Entwurf
 //!   (`World::order_ship`, Preis siehe `design`), die dann vollgetankt an
 //!   der Startbasis stehen. Treibstoff ist dort frei.
 //!   Das Spiel beginnt mit einem Vorrat, der genau für eine Basis reicht
@@ -295,18 +296,25 @@ impl World {
         Ok(base)
     }
 
-    /// Lädt Bauteile an der Baustelle ab, in deren Umkreis das Schiff steht:
-    /// so viel, wie es hat und sie noch braucht. Liefert die Menge in kg.
+    /// Lädt Bauteile ab: an der Baustelle, in deren Umkreis das Schiff steht,
+    /// so viel, wie es hat und sie noch braucht; an der Startbasis alle, sie
+    /// kommen in ihr Lager (`World::parts`). Liefert die Menge in kg.
     pub fn unload(&mut self, vessel: usize) -> Result<f64, BaseError> {
         self.parked(vessel)?;
         let base = self.base_of(vessel).ok_or(BaseError::NoBase)?;
+        let depot = self.bases[base].kind == BaseKind::Depot;
         let needed = (self.bases[base].required - self.bases[base].delivered).max(0.0);
-        let amount = self.vessels[vessel].cargo.parts.min(needed);
+        let parts = self.vessels[vessel].cargo.parts;
+        let amount = if depot { parts } else { parts.min(needed) };
         if amount <= 0.0 {
             return Err(BaseError::NothingToUnload);
         }
         self.change_mass(vessel, -amount);
         self.vessels[vessel].cargo.parts -= amount;
+        if depot {
+            self.parts += amount;
+            return Ok(amount);
+        }
         let site = &mut self.bases[base];
         site.delivered += amount;
         if site.complete() {
@@ -346,9 +354,22 @@ impl World {
         Ok(amount)
     }
 
-    /// Lädt an einer Mine Zorit: so viel, wie im Lager ist und in den
-    /// Frachtraum passt. Liefert die Menge in kg.
+    /// Lädt Zorit aus dem Lager einer Mine oder der Startbasis: so viel, wie
+    /// dort ist und in den Frachtraum passt. Liefert die Menge in kg.
     pub fn load_zorit(&mut self, vessel: usize) -> Result<f64, BaseError> {
+        self.parked(vessel)?;
+        let base = self.base_of(vessel).ok_or(BaseError::NoBase)?;
+        if self.bases[base].kind == BaseKind::Depot {
+            let v = &self.vessels[vessel];
+            let amount = (v.params.cargo_capacity - v.cargo.total()).min(self.zorit);
+            if amount <= 0.0 {
+                return Err(BaseError::NothingToLoad);
+            }
+            self.zorit -= amount;
+            self.change_mass(vessel, amount);
+            self.vessels[vessel].cargo.zorit += amount;
+            return Ok(amount);
+        }
         let base = self.parked_at(vessel, BaseKind::Mine)?;
         let v = &self.vessels[vessel];
         let room = v.params.cargo_capacity - v.cargo.total();
@@ -434,21 +455,30 @@ impl World {
         Ok(price)
     }
 
-    /// Lädt an der Startbasis Bauteile: bis der Frachtraum voll ist, oder so
-    /// viel, wie das Zorit im Lager bezahlt (`PARTS_PRICE`). Liefert die
+    /// Tauscht an der Startbasis Zorit gegen `amount` kg Bauteile
+    /// (`PARTS_PRICE`); sie kommen in ihr Lager (`World::parts`). Reicht das
+    /// Zorit nicht für alle, gibt es so viele, wie es bezahlt. Liefert die
     /// Menge in kg.
-    pub fn load_parts(&mut self, vessel: usize) -> Result<f64, BaseError> {
-        self.parked_at(vessel, BaseKind::Depot)?;
-        let v = &self.vessels[vessel];
-        let room = v.params.cargo_capacity - v.cargo.total();
-        if room <= 0.0 {
-            return Err(BaseError::NothingToLoad);
-        }
-        let amount = room.min(self.zorit / PARTS_PRICE);
+    pub fn buy_parts(&mut self, amount: f64) -> Result<f64, BaseError> {
+        let amount = amount.min(self.zorit / PARTS_PRICE);
         if amount <= 0.0 {
             return Err(BaseError::NotEnoughZorit);
         }
         self.zorit = (self.zorit - amount * PARTS_PRICE).max(0.0);
+        self.parts += amount;
+        Ok(amount)
+    }
+
+    /// Lädt an der Startbasis Bauteile aus ihrem Lager: so viel, wie dort
+    /// liegt und in den Frachtraum passt. Liefert die Menge in kg.
+    pub fn load_parts(&mut self, vessel: usize) -> Result<f64, BaseError> {
+        self.parked_at(vessel, BaseKind::Depot)?;
+        let v = &self.vessels[vessel];
+        let amount = (v.params.cargo_capacity - v.cargo.total()).min(self.parts);
+        if amount <= 0.0 {
+            return Err(BaseError::NothingToLoad);
+        }
+        self.parts -= amount;
         self.change_mass(vessel, amount);
         self.vessels[vessel].cargo.parts += amount;
         Ok(amount)

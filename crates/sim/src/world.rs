@@ -20,7 +20,7 @@ use crate::transfer::{self, BodyApproach, Window};
 use serde::{Deserialize, Serialize};
 
 /// Version des Spielstand-Formats. Bei inkompatiblen Änderungen erhöhen.
-pub const SAVE_VERSION: u32 = 16;
+pub const SAVE_VERSION: u32 = 17;
 
 /// Feste Werte eines Schiffs. Später kommen sie aus Vorlagen (Vessel-Klassen),
 /// Upgrades ändern nur diese Werte.
@@ -290,6 +290,10 @@ pub struct World {
     pub bases: Vec<Base>,
     /// Zorit im Lager der Startbasis in kg (siehe `base`).
     pub zorit: f64,
+    /// Bauteile im Lager der Startbasis in kg: gegen Zorit getauscht oder
+    /// von Schiffen abgeladen.
+    #[serde(default)]
+    pub parts: f64,
     /// Zielgebiete zum Landen.
     pub zones: Vec<LandingZone>,
     /// Was passiert ist, nach Zeit geordnet (höchstens `LOG_LIMIT`
@@ -323,6 +327,7 @@ impl World {
             vessels: Vec::new(),
             bases: Vec::new(),
             zorit: 0.0,
+            parts: 0.0,
             zones: Vec::new(),
             log: Vec::new(),
             booster: None,

@@ -649,10 +649,12 @@ man kommt und was man zurückbringt.
   stimmen Brennen, Δv-Balken, Landung). Zorit ist ein seltenes Erz, das es
   auf Zorb nicht gibt; vorerst der einzige Rohstoff, weitere Arten kommen mit
   den Rohstoffkarten.
-- **Eine Basis, ein Stoff** (`BaseKind`): Die Startbasis gibt Bauteile und
-  Treibstoff aus und nimmt Zorit an (`World::zorit`); eine Tankstelle stellt
-  Treibstoff her, eine Mine Zorit. Wer an einem Ort beides will, baut zwei
-  Basen.
+- **Eine Basis, ein Stoff** (`BaseKind`): Eine Tankstelle stellt Treibstoff
+  her, eine Mine Zorit. Wer an einem Ort beides will, baut zwei Basen.
+- **Lager der Startbasis:** Zorit und Bauteile (`World::zorit`,
+  `World::parts`). Schiffe laden beides aus dem Lager ein und dorthin aus;
+  Treibstoff gibt sie frei aus. Ein allgemeines Lager an jeder Basis für
+  beliebige Stoffe kommt mit dem zweiten Rohstoff.
 - **Gründen:** Das Basisschiff gründet auf einem Körper außer dem
   Heimatplaneten eine Mine oder Tankstelle und wird ihr Fundament
   (`foundation_of`; ein Start ist dann gesperrt). Der Landepunkt wird zur
@@ -683,15 +685,17 @@ man kommt und was man zurückbringt.
   zusammen 4 t Bauteilen um Zorb (mit dem Treibstoff, der nach einem Start
   übrig wäre).
 
-**Preise und Bestellen:** Mit dem Zorit im Lager der Startbasis bezahlt man
-dort Bauteile (0,25 t je Tonne) und bestellt Schiffe nach Entwurf (die
+**Preise und Bestellen:** Mit dem Zorit im Lager der Startbasis tauscht man
+dort Bauteile ein (0,25 t je Tonne; `World::buy_parts`) und bestellt Schiffe nach Entwurf (die
 Startentwürfe kosten je 1 t; `World::order_ship`). Eine neue Basis kostet damit 2 t
 Zorit: zwei Abholungen auf Zoon, eine auf Zill. Treibstoff ist an der
 Startbasis frei.
 - Ein bestelltes Schiff steht sofort vollgetankt an der Startbasis: Eine
   Bauzeit wäre wirkungslos, weil Vorspulen nichts kostet.
-- Reicht das Zorit nicht für den ganzen Frachtraum, gibt es so viele
-  Bauteile, wie es bezahlt.
+- Tauschen und Laden sind zwei Schritte: Eingetauschte Bauteile liegen im
+  Lager, bis ein Schiff sie lädt. Reicht das Zorit nicht für die ganze
+  Menge, gibt es so viele Bauteile, wie es bezahlt. Zurücktauschen gibt es
+  nicht.
 - **Spielbeginn** (`scenario::start`): keine Schiffe, nur die Startbasis
   mit 3 t Zorit, genau dem Preis einer Basis (Basisschiff, ein Frachter,
   4 t Bauteile). Bewusst keine Absicherung gegen die Sackgasse: Wer damit

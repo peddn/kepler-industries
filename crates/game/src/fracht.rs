@@ -3,13 +3,14 @@
 //! Sie erscheint für Schiffe mit Frachtraum, für Basisschiffe und für jedes
 //! Schiff, das im Umkreis einer Basis steht. Sie zeigt Fracht, Baustelle und
 //! Lager; die Schaltflächen darunter tun, was dort gerade geht: an der
-//! Startbasis laden, tanken und Zorit abladen, mit dem Basisschiff gründen,
+//! Startbasis Bauteile und Zorit aus dem Lager laden und dorthin abladen und
+//! tanken, mit dem Basisschiff gründen,
 //! an der Baustelle abladen, an der Tankstelle tanken, an der Mine laden.
 
 use crate::ui::{Notes, card, wide_button};
 use crate::zahl::De;
 use bevy_egui::egui;
-use sim::base::{PARTS_PRICE, SITE_RADIUS};
+use sim::base::SITE_RADIUS;
 use sim::{BaseError, BaseKind, Segment, World};
 
 /// Was eine Schaltfläche tut.
@@ -25,14 +26,7 @@ enum Action {
 }
 
 impl Action {
-    /// Beschriftung; beim Laden von Bauteilen mit dem Preis für das, was in
-    /// den Frachtraum passt.
-    fn label(self, world: &World, vessel: usize) -> String {
-        if self == Action::LoadParts {
-            let v = &world.vessels[vessel];
-            let room = v.params.cargo_capacity - v.cargo.total();
-            return format!("Bauteile laden ({} Zorit)", tons_fine(room * PARTS_PRICE));
-        }
+    fn label(self) -> &'static str {
         match self {
             Action::FoundMine => "Mine gründen",
             Action::FoundStation => "Tankstelle gründen",
@@ -42,7 +36,6 @@ impl Action {
             Action::LoadParts => "Bauteile laden",
             Action::DeliverZorit => "Zorit abladen",
         }
-        .into()
     }
 }
 
@@ -87,11 +80,20 @@ fn actions(world: &World, vessel: usize) -> Vec<Action> {
         }
         Some(base) => match base.kind {
             BaseKind::Depot => {
+                // Aus dem Lager laden, was dort liegt; ins Lager abladen,
+                // was an Bord ist.
+                let room = v.cargo.total() < v.params.cargo_capacity;
+                if room && world.parts > 0.0 {
+                    actions.push(Action::LoadParts);
+                }
+                if room && world.zorit > 0.0 {
+                    actions.push(Action::LoadZorit);
+                }
+                if v.cargo.parts > 0.0 {
+                    actions.push(Action::Unload);
+                }
                 if v.cargo.zorit > 0.0 {
                     actions.push(Action::DeliverZorit);
-                }
-                if v.cargo.total() < v.params.cargo_capacity {
-                    actions.push(Action::LoadParts);
                 }
                 if world.vessel_fuel(vessel) < v.params.fuel_capacity {
                     actions.push(Action::Refuel);
@@ -234,7 +236,7 @@ pub fn show(ui: &mut egui::Ui, world: &mut World, vessel: usize, notes: &mut Not
     card(ui, "Fracht & Basis", |ui| {
         ui.label(lines.join("\n"));
         for action in actions(world, vessel) {
-            if wide_button(ui, action.label(world, vessel))
+            if wide_button(ui, action.label())
                 && let Some(text) = notes.check(action.run(world, vessel))
                 && !text.is_empty()
             {
