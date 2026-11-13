@@ -3,6 +3,7 @@
 
 use sim::design::{Chassis, Design, DesignError, Engine, FOUNDATION_SPACE, Part, SPACE_STEP};
 use sim::scenario::start;
+use sim::tech::Tech;
 use sim::{BaseError, VesselParams};
 
 /// Die Startentwürfe ergeben die abgestimmten Schiffe: Massen, Tanks und
@@ -137,7 +138,7 @@ fn ships_are_ordered_from_designs() {
         world.designs,
         vec![Design::base_ship(), Design::freighter()]
     );
-    assert_eq!(world.unlocked, Part::from_start());
+    assert_eq!(world.unlocked(), Part::from_start());
     assert_eq!(world.order_ship(7), Err(BaseError::NoDesign));
 
     let mut cheap = Design::freighter();
@@ -160,7 +161,7 @@ fn ships_are_ordered_from_designs() {
             Engine::Z2
         ))))
     );
-    world.unlocked.push(Part::Engine(Engine::Z2));
+    world.techs.push(Tech::EngineZ2);
     world.order_ship(2).unwrap();
     assert_eq!(world.zorit, 3_000.0 - 800.0 - 1_000.0);
 }

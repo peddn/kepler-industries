@@ -366,7 +366,7 @@ impl World {
             .ok_or(BaseError::NoBase)?;
         let (body, pad) = (depot.body, depot.location);
         let design = self.designs.get(design).ok_or(BaseError::NoDesign)?.clone();
-        design.check(&self.unlocked).map_err(BaseError::Design)?;
+        design.check(&self.unlocked()).map_err(BaseError::Design)?;
         let price = design.price();
         if price > self.zorit {
             return Err(BaseError::NotEnoughZorit);

@@ -262,7 +262,7 @@ pub fn show(
                         ui.weak("Kein Entwurf. Mit \"Neu\" einen anlegen.");
                         return;
                     };
-                    let unlocked = world.unlocked.clone();
+                    let unlocked = world.unlocked();
                     let dragging = edit(ui, &mut design, &unlocked);
                     world.designs[editor.selected] = design.clone();
 

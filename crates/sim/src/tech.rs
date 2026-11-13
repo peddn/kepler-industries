@@ -116,6 +116,15 @@ impl World {
         Ok(())
     }
 
+    /// Was in Entwürfen vorkommen darf: die Ausstattung vom Spielbeginn und
+    /// die Teile der freigeschalteten Technologien. Gespeichert sind nur die
+    /// Technologien (`World::techs`).
+    pub fn unlocked(&self) -> Vec<Part> {
+        let mut parts = Part::from_start();
+        parts.extend(self.techs.iter().filter_map(|tech| tech.part()));
+        parts
+    }
+
     /// Schaltet die Technologie frei: bucht Daten und Zorit ab, gibt das Teil
     /// frei oder stellt den neuen Booster vollgetankt an die Startbasis.
     pub fn unlock(&mut self, tech: Tech) -> Result<(), TechError> {
@@ -124,9 +133,6 @@ impl World {
         self.data -= spec.data;
         self.zorit -= spec.zorit;
         self.techs.push(tech);
-        if let Some(part) = tech.part() {
-            self.unlocked.push(part);
-        }
         if tech == Tech::BoosterB2
             && let Some(booster) = self.booster
         {
