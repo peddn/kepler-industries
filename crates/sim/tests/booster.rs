@@ -1,10 +1,13 @@
 //! Tests für den Booster der Startbasis: Aufstieg als Stapel, Trennung,
 //! Boostback und Landung mit Landebrennen.
 
+mod common;
+
+use common::{base_ship_params, freighter_params};
 use glam::DVec3;
 use sim::booster::{self, B1, RETURN_RADIUS};
 use sim::save::{from_json, to_json};
-use sim::scenario::{BASE_SHIP, FREIGHTER, ZOON, ZORB, start};
+use sim::scenario::{ZOON, ZORB, start};
 use sim::{
     BoosterStatus, Launch, LaunchProfile, LogKind, ManeuverNode, PlanError, SurfacePoint,
     VesselParams, VesselStatus, World,
@@ -37,8 +40,8 @@ fn launch(time: f64, kick: f64) -> Launch {
 
 /// Der Frachter mit geplantem Start und dem Node für die Kreisbahn an der
 /// Apoapsis, scharf.
-fn ready_freighter() -> (World, usize) {
-    let (mut world, ship) = at_depot(FREIGHTER, 2_000.0);
+fn ready_freighter_params() -> (World, usize) {
+    let (mut world, ship) = at_depot(freighter_params(), 2_000.0);
     world.set_launch(ship, launch(60.0, 10.0)).unwrap();
     let (time, delta_v) = circularize(&world, ship);
     let node = ManeuverNode {
@@ -62,10 +65,10 @@ fn circularize(world: &World, ship: usize) -> (f64, f64) {
 /// Der Booster landet heil an der Startbasis und steht wieder bereit.
 #[test]
 fn ship_reaches_orbit_and_booster_returns() {
-    let (mut world, ship) = ready_freighter();
+    let (mut world, ship) = ready_freighter_params();
     let plan = *world.vessels[ship].trajectory.launch().unwrap();
     let booster = plan.booster.unwrap();
-    let full = FREIGHTER.dry_mass + FREIGHTER.fuel_capacity + 2_000.0;
+    let full = freighter_params().dry_mass + freighter_params().fuel_capacity + 2_000.0;
     assert_eq!(
         world.booster_status(),
         Some(BoosterStatus::Reserved { ship })
@@ -150,7 +153,7 @@ fn ship_reaches_orbit_and_booster_returns() {
 #[test]
 fn booster_is_independent_of_step_size() {
     let run = |step: f64| {
-        let (mut world, _) = ready_freighter();
+        let (mut world, _) = ready_freighter_params();
         while world.time < 1_500.0 {
             world.advance(step);
         }
@@ -166,7 +169,7 @@ fn booster_is_independent_of_step_size() {
 /// Mitten im Rückflug gespeichert und geladen: Es geht genau gleich weiter.
 #[test]
 fn return_flight_is_saved() {
-    let (mut world, ship) = ready_freighter();
+    let (mut world, ship) = ready_freighter_params();
     let end = world.vessels[ship].trajectory.launch().unwrap().burn.end;
     world.advance_to(end + 200.0);
     assert_eq!(world.booster_status(), Some(BoosterStatus::Returning));
@@ -183,7 +186,7 @@ fn return_flight_is_saved() {
 /// nicht steuern.
 #[test]
 fn launch_needs_the_booster() {
-    let (mut world, ship) = ready_freighter();
+    let (mut world, ship) = ready_freighter_params();
     let other = world.order_ship(BASE_SHIP_DESIGN).unwrap();
     let later = launch(5_000.0, 10.0);
     assert_eq!(world.set_launch(other, later), Err(PlanError::BoosterBusy));
@@ -220,7 +223,7 @@ fn launch_needs_the_booster() {
 fn refused_when_the_booster_cannot_return() {
     let heavy = VesselParams {
         fuel_capacity: 26_000.0,
-        ..FREIGHTER
+        ..freighter_params()
     };
     let (mut world, ship) = at_depot(heavy, 2_000.0);
     assert_eq!(
@@ -228,7 +231,7 @@ fn refused_when_the_booster_cannot_return() {
         Err(PlanError::BoosterNoReturn)
     );
 
-    let (mut world, ship) = at_depot(FREIGHTER, 2_000.0);
+    let (mut world, ship) = at_depot(freighter_params(), 2_000.0);
     assert_eq!(
         world.set_launch(ship, launch(60.0, 20.0)),
         Err(PlanError::BoosterNoReturn)
@@ -240,7 +243,7 @@ fn refused_when_the_booster_cannot_return() {
 /// Auch das leichte Basisschiff kommt mit dem Booster in die Bahn.
 #[test]
 fn base_ship_launches_on_the_booster() {
-    let (mut world, ship) = at_depot(BASE_SHIP, 0.0);
+    let (mut world, ship) = at_depot(base_ship_params(), 0.0);
     world.set_launch(ship, launch(60.0, 12.0)).unwrap();
     let (_, delta_v) = circularize(&world, ship);
     let left = world.vessel_delta_v(ship) - delta_v;
@@ -253,10 +256,10 @@ fn base_ship_launches_on_the_booster() {
 fn elsewhere_ships_launch_on_their_own() {
     let mut world = start();
     let field = SurfacePoint::from_degrees(2.0, 60.0);
-    let on_zorb = world.spawn_landed("Feld", FREIGHTER, 14_000.0, ZORB, field);
+    let on_zorb = world.spawn_landed("Feld", freighter_params(), 14_000.0, ZORB, field);
     let on_zoon = world.spawn_landed(
         "Zoon",
-        FREIGHTER,
+        freighter_params(),
         14_000.0,
         ZOON,
         SurfacePoint::from_degrees(0.0, 0.0),
@@ -279,7 +282,7 @@ fn elsewhere_ships_launch_on_their_own() {
 /// bleibt stehen und ist weiter für dieses Schiff vorgesehen.
 #[test]
 fn unarmed_launch_keeps_the_booster_waiting() {
-    let (mut world, ship) = at_depot(FREIGHTER, 2_000.0);
+    let (mut world, ship) = at_depot(freighter_params(), 2_000.0);
     world.set_launch(ship, launch(60.0, 10.0)).unwrap();
     let first = *world.vessels[ship].trajectory.launch().unwrap();
     world.advance_to(first.burn.end + 500.0);
@@ -302,7 +305,7 @@ fn unarmed_launch_keeps_the_booster_waiting() {
 #[test]
 fn booster_returns_from_any_eastward_heading() {
     for heading in [0.0, 45.0, 75.0, 90.0, 135.0, 180.0] {
-        let (mut world, ship) = at_depot(FREIGHTER, 2_000.0);
+        let (mut world, ship) = at_depot(freighter_params(), 2_000.0);
         let start = Launch {
             time: 60.0,
             profile: LaunchProfile {
@@ -323,7 +326,7 @@ fn booster_returns_from_any_eastward_heading() {
 #[test]
 fn steep_launch_returns_too() {
     for kick in [0.0, 1.0, 2.0] {
-        let (mut world, ship) = at_depot(FREIGHTER, 2_000.0);
+        let (mut world, ship) = at_depot(freighter_params(), 2_000.0);
         world.set_launch(ship, launch(60.0, kick)).unwrap();
         world.set_armed(ship, true).unwrap();
         let plan = *world.vessels[ship].trajectory.launch().unwrap();
@@ -343,7 +346,7 @@ fn steep_launch_returns_too() {
 /// genau gleich weiter.
 #[test]
 fn ascent_is_saved() {
-    let (mut world, ship) = ready_freighter();
+    let (mut world, ship) = ready_freighter_params();
     let plan = *world.vessels[ship].trajectory.launch().unwrap();
     world.advance_to(plan.burn.start + 40.0);
     assert_eq!(

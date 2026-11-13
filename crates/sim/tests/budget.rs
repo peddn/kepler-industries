@@ -1,8 +1,11 @@
 //! Tests für den Δv-Haushalt (Grundlage des Δv-Balkens).
 
+mod common;
+
+use common::{FERRY, SATELLITE};
 use glam::DVec3;
 use sim::kepler::state_from_apsides;
-use sim::scenario::{FERRY, SATELLITE, home_planet};
+use sim::scenario::home_planet;
 use sim::{BudgetItem, DeltaVBudget, Launch, LaunchProfile, ManeuverNode, SurfacePoint, World};
 
 fn satellite(fuel: f64) -> World {

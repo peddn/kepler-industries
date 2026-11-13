@@ -82,16 +82,15 @@ Schiffe sind dafür klein: Der Frachter fasst 14 t Treibstoff, das Basisschiff
 
 **Demo (`--demo`):** Zum Ausprobieren und für alle Beispiele in diesem README,
 die Schiffe mit Nummer nennen (`--node`, `--select`, `--launch`, `--target`
-und so weiter), lädt `cargo run -p game -- --demo …` statt des Spielbeginns
-eine Welt mit Schiffen, weiteren Zielgebieten und leerem Lager: zwei
-Satelliten mit Triebwerk, eine Fähre am Boden und eine im Orbit, dazu zwei
-Basisschiffe und zwei beladene Frachter. „Relais-1" kreist stabil oberhalb
-der Atmosphäre. „Sonde-2" wurde zu tief abgesetzt, wird bei jedem Durchgang
-durch die Luft abgebremst (orange) und stürzt nach einigen Umläufen ab, außer
-man rettet sie mit einem Manöver. „Fähre-3" steht an der Startbasis und kann
-starten (die Demo hat keinen Booster, sie startet aus eigener Kraft; so
-bleiben die Beispiele unten, wie sie sind). „Mondfähre-4" kreist vollgetankt in 100 km Höhe über dem Äquator,
-bereit für den Flug zum Mond.
+und so weiter), lädt `cargo run -p game -- --demo …` den Spielbeginn mit
+weiteren Zielgebieten und mit Schiffen aus den beiden Startentwürfen, die
+schon unterwegs sind. Die Nummer im Namen ist die Nummer des Schiffs für die
+Optionen (der Booster ist Nummer 0). „Frachter-1" kreist stabil oberhalb der
+Atmosphäre. „Frachter-2" wurde zu tief abgesetzt und ist fast leer: Er wird
+bei jedem Durchgang durch die Luft abgebremst (orange) und kommt nach einigen
+Umläufen herunter, außer man rettet ihn mit einem Manöver. „Frachter-3" steht
+vollgetankt an der Startbasis, bereit zum Start auf dem Booster. „Frachter-4"
+kreist in 100 km Höhe über dem Äquator, bereit für den Flug zum Mond.
 
 **Fracht und Basen (der Kreislauf der Wirtschaft):** Es gibt drei Stoffe:
 Bauteile und Zorit (ein Erz, das es auf Zorb nicht gibt) sind Fracht und
@@ -122,10 +121,10 @@ Basis" der Seitenleiste.
 Frachter (2 t Frachtraum) und Basisschiff starten voll beladen von Zorb und
 kommen bis Zoon; der Frachter kommt von dort ohne Tanken mit Zorit zurück
 (auf Zorb bremsen Luft und Fallschirm). Zum schnellen Ausprobieren kreisen
-in der Demo schon Schiffe um Zorb, hinter Mondfähre-4: „Basisschiff-5",
+in der Demo schon Schiffe um Zorb, hinter Frachter-4: „Basisschiff-5",
 „Basisschiff-6" und die Frachter „Frachter-7" und „Frachter-8" mit je 2 t
 Bauteilen. Alle vier direkt nach Zoon:
-`--demo --node 5,600,845,0,0 --node 6,620,845,0,0 --node 7,610,845,0,0 --node 4,647.5,845,0,0`;
+`--demo --node 6,600,845,0,0 --node 7,613.5,845,0,0 --node 8,602.5,845,0,0 --node 5,647.5,845,0,0`;
 Basisschiff-5 und beide Frachter landen nach knapp 8 Stunden nebeneinander
 bei 153° Ost, Basisschiff-6 bei 157° West (mit `--time 28300` stehen sie
 schon dort).
@@ -147,11 +146,13 @@ als 5 m/s am Boden an, zündet es vorher automatisch ein Landebrennen (gelb auf
 der Bahn, „Landen“ im Δv-Balken), voller Schub gegen die Bewegung zum Boden,
 so spät, dass es knapp über dem Boden zum Stehen kommt. Das braucht Schub
 größer als das Gewicht und genug Treibstoff; sonst wird gar nicht gebremst und
-das Schiff stürzt ab. Wer daneben landet, kommt mit einem Hop ins Ziel: einem Start mit
-niedriger Ziel-Apoapsis, zum Beispiel von der Startbasis zum Übungsfeld 60 km
-östlich (Kurs 90°, Ziel-Apoapsis etwa 27 km). Relais-1 und Sonde-2 sind
-Satelliten ohne Fallschirm und mit weniger Schub als Gewicht: Sie stürzen beim
-Landen immer ab. Die Anzeige nennt dann Ort (auch das Zielgebiet) und Grund.
+das Schiff stürzt ab: Frachter-2, der mit seinem letzten Treibstoff abbremst
+(`--demo --node 2,600,-245,0,0`), kommt am Fallschirm mit gut 6 m/s an, zu
+schnell für eine Landung. Die Anzeige nennt dann Ort (auch das Zielgebiet)
+und Grund. Wer daneben landet, kommt mit einem Hop ins Ziel: einem Start aus
+eigener Kraft mit niedriger Ziel-Apoapsis, zum Beispiel mit vollem Tank vom
+Übungsfeld 60 km östlich zurück zur Startbasis (Kurs 270°, Wendewinkel 20°,
+Ziel-Apoapsis etwa 49 km).
 
 Für den Flug zu einem Planeten oder Mond wählt man ihn in der Karte „Ziel“
 (mit ◄ ► nach den Schiffen). Sie zeigt den Phasenwinkel und wann das nächste
@@ -160,8 +161,9 @@ dazu die engste Annäherung der geplanten Bahn an das Ziel, auch wenn sie
 seine Einflusssphäre noch verfehlt; in der Karte markieren zwei Ringe mit
 Linie die Stelle. So sieht man beim Ziehen am Node, ob es besser wird, bis
 aus „Annäherung“ eine „Begegnung“ mit Periapsis wird. Zum Ausprobieren:
-`--demo --select 3 --target-body 3,4 --node 3,163400,1080,0,0 --focus-body 0
---camera 30,60,55000000` verfehlt Nura um 126.000 km; mit 1.090 m/s trifft es.
+`--demo --select 4 --target-body 4,4 --node 4,163400,1080,0,0 --focus-body 0
+--camera 30,60,55000000` verfehlt Nura um rund 109.000 km; mit 1.088,5 m/s
+trifft es.
 
 Für ein Rendezvous wählt man in der Karte „Ziel“ der Seitenleiste ein
 anderes Schiff (◄ ►). Dessen Bahn wird rosa. Die Karte zeigt den Abstand,
@@ -181,7 +183,7 @@ automatischen Node „Angleichen“ (doppelter rosa Ring): Er hebt an der engste
 Stelle die Relativgeschwindigkeit auf. Danach fliegt das Schiff auf gerader
 Linie langsam ans Ziel heran (höchstens 2 m/s, Kontakt mit 0,1 m/s). Die
 Karte zeigt Zeiten und Δv, der Δv-Balken die Kosten in Rosa. Beim Kontakt
-werden die Schiffe ein Verbund („Relais-1 + Fähre-3“): Massen, Tanks und
+werden die Schiffe ein Verbund („Frachter-1 + Frachter-3“): Massen, Tanks und
 Triebwerke addieren sich, und der Verbund kann normal Manöver fliegen. Das
 Ziel muss dafür auf einer stabilen Bahn sein und darf nichts mehr planen.
 
@@ -191,7 +193,7 @@ Tankgröße, `Umschalt`: feine Schritte), darunter steht, was beide danach haben
 „Abdocken“ trennt sofort; das abgedockte Schiff bekommt 1 m/s gegen die
 Flugrichtung und entfernt sich stetig (in 100 km Höhe etwa 6 km pro Umlauf).
 Es hat danach das Hauptschiff als Ziel, zum Wiederandocken. So lässt sich zum
-Beispiel ein Satellit betanken.
+Beispiel ein Schiff im Orbit betanken.
 
 Der Mond Zoon ist wie der Mun in KSP: 200 km Radius, Schwerkraft 1,63 m/s², keine
 Luft. Er kreist in 12.000 km Abstand über dem Äquator (Umlauf etwa 38,6 h) und
@@ -206,12 +208,12 @@ Brennen. Gezeichnet wird wie in KSP: Das Stück um den Mond liegt um die
 Stelle, an der er beim Eintritt stehen wird (dort ein blasser „Geistermond“),
 kleine Ringe markieren Ein- und Austritt. Weil der Mond während des
 Vorbeiflugs weiterzieht, klafft beim Austritt eine Lücke. Links steht die
-nächste Begegnung („Begegnung: Zoon in 05:07:05, Periapsis 194 km“), im Flug
+nächste Begegnung („Begegnung: Zoon in 05:07:10, Periapsis 210,6 km“), im Flug
 „Orbit um Zoon“; Nodes um den Mond gelten relativ zu ihm, und in der
-Nahansicht liegt der Mond unten. Zum Ausprobieren: Mondfähre-4 mit 836 m/s
-prograd nach 10 Minuten (`--node 3,600,836,0,0`) fliegt in etwa 200 km Höhe
+Nahansicht liegt der Mond unten. Zum Ausprobieren: Frachter-4 mit 835 m/s
+prograd nach 10 Minuten (`--node 4,600,835,0,0`) fliegt in etwa 200 km Höhe
 am Mond vorbei; mit einem Brennen gegen die Flugrichtung an der Periapsis
-bleibt sie bei ihm. Gelandet wird auf Zoon wie auf Zorb über einen Node, nur
+bleibt er bei ihm. Gelandet wird auf Zoon wie auf Zorb über einen Node, nur
 ohne Luftbremsung und Fallschirm: Das Landebrennen bremst die ganze
 Geschwindigkeit, aus einer niedrigen Bahn mit viel Schub etwa 550 m/s. Mit
 wenig Schub kostet es mehr (bei Schub/Gewicht 1,5 etwa 700 m/s): Es beginnt
@@ -235,9 +237,9 @@ Keplerbahnen aus sechs Bahnelementen (große Halbachse, Exzentrizität,
 Neigung, aufsteigender Knoten, Argument der Periapsis, mittlere Anomalie);
 die Karte zeigt die Ellipse, die Mondkarte Abstand und Neigung. Weil Zills
 Bahn geneigt ist, steht er meist weit über oder unter der Äquatorebene:
-Mondfähre-4 mit 936 m/s prograd nach 880 s (`--demo --node 3,880,936,0,0`)
+Frachter-4 mit 936 m/s prograd nach 880 s (`--demo --node 4,880,936,0,0`)
 erreicht nach gut 4 Tagen seine Einflusssphäre, fliegt aber in rund
-6.700 km Höhe vorbei. Näher kommt man mit einer Ankunft nahe einem der
+6.600 km Höhe vorbei. Näher kommt man mit einer Ankunft nahe einem der
 Knoten seiner Bahn oder mit einer Kurskorrektur unterwegs.
 
 Zorb kreist wie Kerbin um die Sonne Zunn (13,6 Mio. km, ein Jahr hat 426
@@ -247,8 +249,8 @@ wie zu einem Mond. Nura ist Duna aus KSP nachempfunden: 320 km Radius,
 Schwerkraft 2,94 m/s², dünne Luft bis 50 km, 20,7 Mio. km von Zunn
 (leicht elliptisch), Einflusssphäre etwa 47.900 km. Ein Startfenster öffnet
 sich, wenn Nura Zorb etwa 44° vorausläuft, alle gut 900 Tage; das erste
-gleich zu Beginn. Mondfähre-4 mit 1.090 m/s prograd nach 163.400 s
-(`--node 3,163400,1090,0,0`) verlässt Zorb und erreicht nach etwa 270 Tagen
+gleich zu Beginn. Frachter-4 mit 1.088,5 m/s prograd nach 163.400 s
+(`--node 4,163400,1088.5,0,0`) verlässt Zorb und erreicht nach etwa 270 Tagen
 Nuras Einflusssphäre (Periapsis knapp 10.000 km; mit einem Korrektur-Node
 unterwegs geht es tiefer). Zunn leuchtet als Kugel, das Licht kommt aus
 ihrer Richtung, Tag- und Nachtseite der Planeten passen also. Die Karte
@@ -295,65 +297,68 @@ zeigt ein rotes Kreuz den Aufschlagpunkt.
 
 ![Rendezvous](docs/screenshots/rendezvous.png)
 
-*Fähre-3 zu Relais-1 (rosa): Start im Startfenster (Kurs 120°, Neigung zum
-Ziel 0,3°), Node 1 macht die Bahn auf 100 km rund, Node 2 hebt sie leicht
-an, damit die Fähre aufholt. Nach drei Umläufen kommt sie Relais-1 auf
-etwa 600 m nahe (Ringe mit Linie). Nachspielen mit den Optionen unten.*
+*Frachter-3 zu Frachter-1 (rosa): Start im Startfenster auf dem Booster
+(Kurs 125°, Neigung zum Ziel 0,0°), Node 1 macht die Bahn auf 100 km rund,
+Node 2 hebt sie an, damit das Ziel aufholt. Danach kommt Frachter-3 ihm auf
+418 m nahe (Ringe mit Linie). Nachspielen mit den Optionen unten.*
 
 ![Protokoll](docs/screenshots/protokoll.png)
 
-*Nach elf Stunden Spielzeit: Die aufgeklappte Statusleiste zeigt den Hop der
-Fähre ins Übungsfeld, ein Manöver von Relais-1 und wie Sonde-2 von Umlauf zu
-Umlauf tiefer in die Luft taucht, bis sie abstürzt.*
+*Nach 50 Minuten Spielzeit: Die aufgeklappte Statusleiste zeigt den Flug von
+Frachter-3 in die Umlaufbahn (dafür gibt es 5 GB Daten), die Rückkehr des
+Boosters zur Startbasis, ein Manöver von Frachter-1 und wie Frachter-2 bei
+jedem Umlauf in die Luft taucht.*
 
 ![Andocken geplant](docs/screenshots/andocken-plan.png)
 
-*Fähre-3 vor dem Andocken an Relais-1: In 10 Minuten gleicht sie an der
-engsten Stelle (624 m) mit 110 m/s an, fliegt in 6 Minuten heran (7 m/s) und
-hat danach noch gut 160 m/s.*
+*Frachter-3 vor dem Andocken an Frachter-1: In 10 Minuten gleicht er an der
+engsten Stelle (418 m) mit 133 m/s an, fliegt in 4 Minuten heran (8 m/s) und
+hat danach noch knapp 4.200 m/s.*
 
 ![Andocken aus der Nähe](docs/screenshots/andocken.png)
 
-*Im Anflug, aus der Nähe: Fähre-3 (gelb) ist noch 271 m von Relais-1 (rosa)
-entfernt, Kontakt in zweieinhalb Minuten.*
+*Im Anflug, aus der Nähe: Frachter-3 (gelb) ist noch 207 m von Frachter-1
+(rosa) entfernt, Kontakt in zwei Minuten.*
 
 ![Mondflug geplant](docs/screenshots/mondflug-plan.png)
 
-*Mondfähre-4 mit geplantem Transfer (`--node 3,600,836,0,0 --select 3
+*Frachter-4 mit geplantem Transfer (`--node 4,600,835,0,0 --select 4
 --camera 20,60,26000`): violett die Bahn zum Mond, unten links das Stück um
 den Geistermond mit Ein- und Austritt, danach die neue Bahn um den Planeten.*
 
 ![Vorbeiflug](docs/screenshots/mondflug.png)
 
-*Im Vorbeiflug (`--node 3,600,836,0,0 --time 20000 --select 3 --focus 3
---camera 120,70,7000`): Bahn um den Mond, Periapsis 194 km.*
+*Im Vorbeiflug (`--node 4,600,835,0,0 --time 20000 --select 4 --focus 4
+--camera 120,70,7000`): Bahn um den Mond, Periapsis 211 km.*
 
 ![Start von Zoon](docs/screenshots/start-zoon.png)
 
-*Mondfähre-4 nach der Landung auf Zoon, Start geplant mit der Voreinstellung
-ohne Luft (Wende ab 100 m mit 70°, Ziel 30 km). Nachspielen mit
-`--demo --node 3,600,836,0,0 --node 3,24740,-380,0,0 --time 26500 --select 3
---focus 3 --near --camera 20,25,60` und „Start planen“.*
+*Frachter-4 nach der Landung im Zielgebiet Fernseite auf Zoon, Start geplant
+mit der Voreinstellung ohne Luft (Wende ab 100 m mit 70°, Ziel 30 km).
+Nachspielen mit `--demo --node 4,600,835,0,0 --node 4,24770,-300,0,0
+--time 26700 --select 4 --focus 4 --near --camera 20,25,60` und „Start
+planen“.*
 
 ![Sonnensystem](docs/screenshots/sonnensystem.png)
 
-*Mondfähre-4 (gelb, unten) auf dem Weg nach Nura: Zunn in der Mitte, innen
+*Frachter-4 (gelb, unten) auf dem Weg nach Nura: Zunn in der Mitte, innen
 Zorbs Bahn (die grüne Markierung sind Zorbs Zielgebiete), außen die von
 Nura. Die blaue Bahn um die Sonne führt in Nuras Einflusssphäre (Ringe
-rechts unten), links steht die Begegnung in 131 Tagen. Nachspielen mit `--demo --node 3,163400,1090,0,0 --time 3000000
---select 3 --focus-body 0 --camera 30,60,55000000`.*
+rechts unten), links steht die Begegnung in 133 Tagen. Nachspielen mit
+`--demo --node 4,163400,1088.5,0,0 --time 3000000 --select 4 --focus-body 0
+--camera 30,60,64000000`.*
 
 ![Mond](docs/screenshots/mond.png)
 
-*Der Mond ist gewählt: Bahn um den Planeten, Einflusssphäre gelb, links seine
-Angaben. Nachspielen mit `--demo --time 22100 --camera 30,50,30000` und einem Klick
-auf den Mond.*
+*Der Mond ist gewählt: seine Bahn um den Planeten, die Einflusssphäre gelb,
+links seine Angaben. Nachspielen mit `--demo --time 22100 --focus-body 2
+--camera 75,50,7000` und einem Klick auf den Mond.*
 
 ![Startbasis](docs/screenshots/startbasis.png)
 
-*Spielbeginn: Der bestellte Frachter-1 steht vollgetankt an der Startbasis.
-Die Karte „Startbasis“ zeigt das Zorit im Lager und die Preise, „Fracht &
-Basis“ den Preis für eine Ladung Bauteile.*
+*Spielbeginn: Der bestellte Frachter-1 steht vollgetankt an der Startbasis,
+in der Liste über ihm der Booster. Die Karte „Startbasis“ zeigt das Zorit im
+Lager und die Preise, „Fracht & Basis“ den Preis für eine Ladung Bauteile.*
 
 ![Basis](docs/screenshots/basis.png)
 
@@ -364,43 +369,47 @@ der Basis (5 km).*
 
 ![Verbund](docs/screenshots/verbund.png)
 
-*Nach dem Kontakt: Relais-1 und Fähre-3 sind ein Verbund mit gemeinsamem Tank.
-Die Karte „Verbund“ schlägt vor, wie viel Treibstoff Fähre-3 beim Abdocken
-mitnimmt, und zeigt, was beide danach haben.*
+*Nach dem Kontakt: Frachter-1 und Frachter-3 sind ein Verbund mit gemeinsamem
+Tank. Die Karte „Verbund“ schlägt vor, wie viel Treibstoff Frachter-3 beim
+Abdocken mitnimmt, und zeigt, was beide danach haben.*
 
 ![Nahansicht](docs/screenshots/nahansicht.png)
 
-*Nahansicht beim Rendezvous aus dem Bild darüber: Kamera auf Fähre-3 (gelb),
-Relais-1 (rosa) ist 912 m entfernt, die engste Annäherung kommt in 6 s.*
+*Nahansicht beim Rendezvous aus dem Bild darüber: Kamera auf Frachter-3
+(gelb), Frachter-1 (rosa) ist 942 m entfernt, die engste Annäherung kommt in
+6 s.*
 
 ![Zielgebiet aus der Nähe](docs/screenshots/zielgebiet-nah.png)
 
-*Kamera auf das Übungsfeld in der Nahansicht, aus 12 km: Das Kreuz zeigt,
-wo der geplante Hop der Fähre aufsetzt.*
+*Kamera auf das Messfeld Ost in der Nahansicht, aus 12 km: Das Kreuz zeigt,
+wo Frachter-1 nach dem geplanten Bremsen aufsetzt (`--demo --node
+1,6375,-160,-40,0 --select 1 --focus-zone 2 --near --camera 20,35,12`).*
 
 ![Landung](docs/screenshots/landung.png)
 
-*Hop der Fähre von der Startbasis (links) zum Übungsfeld: Aufstieg gelb,
-Flug durch die Luft orange, das grüne Kreuz liegt im Zielgebiet. Die Bahn ist
-ohne Drehung des Planeten gezeichnet, das Kreuz zeigt den genauen Punkt auf
-der Oberfläche.*
+*Dieselbe Landung aus dem Orbit, kurz vor dem Brennen (dazu `--time 6300
+--camera 205,30,2800` statt der Nahansicht): Der Node bremst mit 160 m/s und
+schiebt die Bahn mit 40 m/s zur Seite, damit sie über das Messfeld Ost
+führt. Der Flug durch die Luft ist orange, das grüne Kreuz liegt im
+Zielgebiet. Die Bahn ist ohne Drehung des Planeten gezeichnet, das Kreuz
+zeigt den genauen Punkt auf der Oberfläche.*
 
 ![Startprofil](docs/screenshots/startprofil.png)
 
-*Fähre-3 vor dem Start: Aufstieg nach Osten (gelb), Freiflug durch die obere
-Luft (orange), dazu ein Node an der Apoapsis, der die Bahn auf 99 km rund
-macht. Rechts die Karte „Start“.*
+*Frachter-3 vor dem Start auf dem Booster: Aufstieg nach Osten (gelb), dazu
+ein Node an der Apoapsis, der die Bahn auf rund 100 km rund macht. Rechts
+die Karte „Start“ mit der Trennung und dem Rückflug des Boosters.*
 
 ![Manöver-Node](docs/screenshots/manoever-node.png)
 
-*Rettung von Sonde-2: Node an der Apoapsis, 30 m/s prograd. Blau die aktuelle
-Bahn, violett die Bahn danach.*
+*Rettung von Frachter-2: Node an der Apoapsis, 30 m/s prograd. Blau die
+aktuelle Bahn, violett die Bahn danach.*
 
 ![Aufschlag](docs/screenshots/aufschlag.png)
 
-*Relais-1 bremst ab: Die Bahn führt durch die Luft (orange) auf den Boden. Ein
-Satellit hat zu wenig Schub zum Abbremsen, das rote Kreuz markiert den
-Absturz.*
+*Frachter-2 bremst mit seinem letzten Treibstoff ab: Die Bahn führt durch die
+Luft (orange) auf den Boden. Am Fallschirm kommt er mit 6 m/s an, für das
+Landebrennen fehlt der Treibstoff; das rote Kreuz markiert den Absturz.*
 
 ![Manöverkette](docs/screenshots/manoeverkette.png)
 
@@ -410,14 +419,15 @@ Absturz.*
 
 ![Nächster Umlauf](docs/screenshots/naechster-umlauf.png)
 
-*Node mit 250 m/s prograd, 20 s vor Relais-1 gesetzt. Das Brennen bräuchte
-30 s Vorlauf, also liegt der Node einen Umlauf später; das Etikett „+1 Umlauf“
-zeigt es an.*
+*Node mit 250 m/s prograd, eine halbe Sekunde vor Frachter-1 gesetzt. Das
+Brennen bräuchte knapp eine Sekunde Vorlauf, also liegt der Node einen
+Umlauf später; das Etikett „+1 Umlauf“ zeigt es an.*
 
 ![Δv-Balken](docs/screenshots/dv-balken.png)
 
-*Relais-1 hat noch 669 m/s an Bord (von 1216 m/s mit vollem Tank). Die Kette
-will zweimal 400 m/s: Der zweite Node bekommt nur 269 m/s, 131 m/s fehlen.*
+*Frachter-1 hat noch 1.077 m/s an Bord (von 6.039 m/s mit vollem Tank). Die
+Kette will zweimal 600 m/s: Der zweite Node bekommt nur 477 m/s, 123 m/s
+fehlen.*
 
 ## Starten
 
@@ -473,7 +483,7 @@ nach außen/innen.
 ### Optionen
 
 ```sh
-cargo run -p game -- --demo --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera -30,50,4200
+cargo run -p game -- --demo --node 1,600,237,0,0 --node 1,2027,212,0,0 --camera -30,50,4200
 ```
 
 - `--time SEKUNDEN`: bis zu dieser Spielzeit vorrechnen; Start, Nodes und Ziel
@@ -487,10 +497,11 @@ cargo run -p game -- --demo --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera 
 - `--load DATEI`: einen Spielstand laden statt neu zu beginnen
 - `--demo`: die Demo mit Schiffen laden (siehe oben)
 - `--dock SCHIFF`: Andocken an das Ziel einschalten (nach `--target`)
-- `--select SCHIFF`: Schiff wählen (0 = Relais-1, 1 = Sonde-2, 2 = Fähre-3)
+- `--select SCHIFF`: Schiff wählen (0 = Booster; in der Demo ist die Nummer
+  im Namen die Nummer des Schiffs, 3 = Frachter-3)
 - `--launch SCHIFF,ZEIT,KURS,WENDE_KM,AP_KM[,WENDEWINKEL]`: Start planen
   (Zeitpunkt des Abhebens in s, Kurs und Wendewinkel in Grad; ohne
-  Wendewinkel die Voreinstellung des Körpers), z. B. `--launch 2,120,90,2,100`
+  Wendewinkel die Voreinstellung des Körpers), z. B. `--launch 3,120,90,1.5,100`
 - `--node SCHIFF,ZEIT,PROGRAD,NORMAL,RADIAL[,SCHARF]`: Node setzen (Zeit in s,
   Δv in m/s), mehrfach für eine Kette; scharf wie im Spiel, `SCHARF` = 0 lässt
   die Kette zum Testen nicht scharf
@@ -499,27 +510,27 @@ cargo run -p game -- --demo --node 0,600,237,0,0 --node 0,2027,212,0,0 --camera 
   bei `--focus-body`)
 - `--screenshot DATEI.png`: Bild speichern und beenden (Zeit steht dabei still)
 
-Rendezvous Fähre-3 → Relais-1 aus dem Bild oben (Start im Startfenster,
-Zirkularisieren, Aufholen):
+Rendezvous Frachter-3 → Frachter-1 aus dem Bild oben (Start im Startfenster
+auf dem Booster, Zirkularisieren, Aufholen):
 
 ```sh
-cargo run -p game -- --demo --time 11100 --launch 2,11299,120,1.5,100 --target 2,0 \
-  --node 2,11612,682,0,0 --node 2,12590,102.25,0,0
+cargo run -p game -- --demo --time 11100 --launch 3,11333,125,1.5,100 --target 3,1 \
+  --node 3,11570,1579,0,0 --node 3,12550,124.85,0,0
 ```
 
-Mit Andocken (`--dock 2`) und dann mitten im Anflug aus der Nähe (Bild
+Mit Andocken (`--dock 3`) und dann mitten im Anflug aus der Nähe (Bild
 „Andocken aus der Nähe“):
 
 ```sh
-cargo run -p game -- --demo --time 21772 --launch 2,11299,120,1.5,100 --target 2,0 \
-  --node 2,11612,682,0,0 --node 2,12590,102.25,0,0 --dock 2 --focus 2 --near --camera 40,20,0.6
+cargo run -p game -- --demo --time 19760 --launch 3,11333,125,1.5,100 --target 3,1 \
+  --node 3,11570,1579,0,0 --node 3,12550,124.85,0,0 --dock 3 --focus 3 --near --camera 40,20,0.6
 ```
 
 Dasselbe ohne Andocken kurz vor der Annäherung in der Nahansicht (Bild „Nahansicht“):
 
 ```sh
-cargo run -p game -- --demo --time 21570 --launch 2,11299,120,1.5,100 --target 2,0 \
-  --node 2,11612,682,0,0 --node 2,12590,102.25,0,0 --focus 2 --near --camera 50,25,6
+cargo run -p game -- --demo --time 19627 --launch 3,11333,125,1.5,100 --target 3,1 \
+  --node 3,11570,1579,0,0 --node 3,12550,124.85,0,0 --focus 3 --near --camera 50,25,6
 ```
 
 ## Speichern und Laden

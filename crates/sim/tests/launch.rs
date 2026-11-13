@@ -1,8 +1,11 @@
 //! Tests für den Start vom Boden mit Startprofil.
 
+mod common;
+
+use common::{FERRY, SATELLITE};
 use glam::DVec3;
 use sim::kepler::{self, StateVector};
-use sim::scenario::{FERRY, SATELLITE, demo, home_planet};
+use sim::scenario::{demo, home_planet};
 use sim::{
     Launch, LaunchProfile, ManeuverNode, PlanError, Segment, SurfacePoint, VesselParams,
     VesselStatus, World,
@@ -122,7 +125,7 @@ fn invalid_launches_are_rejected() {
     assert_eq!(world.set_launch(0, launch_at(0.0)), Err(PlanError::InPast));
     let mut world = demo();
     assert_eq!(
-        world.set_launch(0, launch_at(10.0)),
+        world.set_launch(1, launch_at(10.0)),
         Err(PlanError::NotLanded)
     );
 }
@@ -244,19 +247,19 @@ fn unarmed_launch_waits_a_day() {
     ));
 }
 
-/// Regel 6 mit Start: 1 Schritt == 10 000 Schritte, bitgenau.
+/// Regel 6 mit Start (Frachter-3 der Demo, auf dem Booster): 1 Schritt == 10 000 Schritte, bitgenau.
 #[test]
 fn launch_result_is_independent_of_step_size() {
     let setup = || {
         let mut world = demo();
-        world.set_launch(2, launch_at(60.0)).unwrap();
-        let (start, _) = coast_after_ascent_of(&world, 2);
+        world.set_launch(3, launch_at(60.0)).unwrap();
+        let (start, _) = coast_after_ascent_of(&world, 3);
         let node = ManeuverNode {
             time: start + 100.0,
             delta_v: DVec3::new(200.0, 0.0, 0.0),
         };
-        world.add_node(2, node).unwrap();
-        world.set_armed(2, true).unwrap();
+        world.add_node(3, node).unwrap();
+        world.set_armed(3, true).unwrap();
         world
     };
     let target = 3_600.0 + 7.0;
@@ -266,18 +269,18 @@ fn launch_result_is_independent_of_step_size() {
     for i in 1..=10_000 {
         many_steps.advance_to(target * i as f64 / 10_000.0);
     }
-    assert!(one_step.vessels[2].trajectory.launch().is_none());
-    assert_eq!(one_step.vessel_state(2), many_steps.vessel_state(2));
-    assert_eq!(one_step.vessel_mass(2), many_steps.vessel_mass(2));
-    assert_eq!(one_step.vessel_status(2), many_steps.vessel_status(2));
+    assert!(one_step.vessels[3].trajectory.launch().is_none());
+    assert_eq!(one_step.vessel_state(3), many_steps.vessel_state(3));
+    assert_eq!(one_step.vessel_mass(3), many_steps.vessel_mass(3));
+    assert_eq!(one_step.vessel_status(3), many_steps.vessel_status(3));
 }
 
 /// Ein Spielstand mit geplantem Start lädt bitgenau.
 #[test]
 fn save_and_load_with_launch() {
     let mut world = demo();
-    world.set_launch(2, launch_at(60.0)).unwrap();
-    world.set_armed(2, true).unwrap();
+    world.set_launch(3, launch_at(60.0)).unwrap();
+    world.set_armed(3, true).unwrap();
     let json = serde_json::to_string(&world).unwrap();
     let loaded: World = serde_json::from_str(&json).unwrap();
     assert_eq!(world, loaded);

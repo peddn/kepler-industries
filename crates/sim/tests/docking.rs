@@ -1,37 +1,40 @@
 //! Tests fürs Andocken: Angleichen, Anflug, Kontakt, Verbund.
 
+mod common;
+
+use common::freighter_params;
 use glam::DVec3;
 use sim::docking::{CONTACT_SPEED, DOCKING_RANGE, SEPARATION_SPEED, angular_velocity};
 use sim::kepler;
-use sim::scenario::{FERRY, SATELLITE, ZORB, demo};
+use sim::scenario::{ZORB, demo};
 use sim::{
     BudgetItem, DockError, Launch, LaunchProfile, LogKind, ManeuverNode, Segment, UndockError,
     VesselStatus, World,
 };
 
-const RELAIS: usize = 0;
-const FERRY_ID: usize = 2;
+const RELAIS: usize = 1;
+const FERRY_ID: usize = 3;
 
-/// Das Rendezvous aus dem README: Fähre-3 startet im Startfenster zu
-/// Relais-1, zirkularisiert und holt auf (engste Annäherung etwa 640 m).
-/// `phasing`: Δv des zweiten Nodes.
+/// Das Rendezvous aus dem README: Frachter-3 startet im Startfenster auf dem
+/// Booster zu Frachter-1 (hier `RELAIS`), macht die Bahn rund und holt auf
+/// (engste Annäherung etwa 420 m). `phasing`: Δv des zweiten Nodes.
 fn rendezvous(phasing: f64) -> World {
     let mut world = demo();
     let profile = LaunchProfile {
-        heading: 120.0,
+        heading: 125.0,
         ..LaunchProfile::default()
     };
     world
         .set_launch(
             FERRY_ID,
             Launch {
-                time: 11_299.0,
+                time: 11_333.0,
                 profile,
             },
         )
         .unwrap();
     world.set_armed(FERRY_ID, true).unwrap();
-    for (time, dv) in [(11_612.0, 682.0), (12_590.0, phasing)] {
+    for (time, dv) in [(11_570.0, 1_579.0), (12_550.0, phasing)] {
         world
             .add_node(
                 FERRY_ID,
@@ -46,8 +49,11 @@ fn rendezvous(phasing: f64) -> World {
     world
 }
 
+/// Mit diesem zweiten Node kommt Frachter-3 nahe genug heran.
+const PHASING: f64 = 124.85;
+
 fn docking() -> World {
-    let mut world = rendezvous(102.25);
+    let mut world = rendezvous(PHASING);
     world.set_docking(FERRY_ID, true).unwrap();
     world
 }
@@ -63,7 +69,7 @@ fn plan(world: &World) -> sim::DockPlan {
 /// danach ein kurzer Anflug; der Δv-Haushalt zählt beides.
 #[test]
 fn plan_after_rendezvous() {
-    let before = rendezvous(102.25).approach(FERRY_ID).unwrap();
+    let before = rendezvous(PHASING).approach(FERRY_ID).unwrap();
     let world = docking();
     let plan = plan(&world);
     assert_eq!(plan.matching.node.time, before.time);
@@ -147,7 +153,7 @@ fn docking_executes_as_planned() {
     assert_eq!(entry.time, plan.contact);
     assert_eq!(entry.vessel, FERRY_ID);
     assert_eq!(entry.kind, LogKind::Docked { host: RELAIS });
-    // Relais-1 bleibt auf seiner Bahn.
+    // Das Ziel bleibt auf seiner Bahn.
     assert!(matches!(
         world.vessel_status(RELAIS),
         VesselStatus::Orbit {
@@ -165,11 +171,10 @@ fn verbund_burns_with_all_engines() {
     let contact = plan(&world).contact;
     world.advance_to(contact + 10.0);
     let params = world.params(RELAIS);
-    assert_eq!(params.thrust, FERRY.thrust + SATELLITE.thrust);
-    assert_eq!(params.dry_mass, FERRY.dry_mass + SATELLITE.dry_mass);
-    let flow =
-        FERRY.thrust / FERRY.exhaust_velocity + SATELLITE.thrust / SATELLITE.exhaust_velocity;
-    assert!((params.exhaust_velocity - params.thrust / flow).abs() < 1e-9);
+    let single = freighter_params();
+    assert_eq!(params.thrust, 2.0 * single.thrust);
+    assert_eq!(params.dry_mass, 2.0 * single.dry_mass);
+    assert!((params.exhaust_velocity - single.exhaust_velocity).abs() < 1e-9);
 
     world
         .add_node(
@@ -213,7 +218,7 @@ fn docking_is_independent_of_step_size() {
 /// Zu weit weg: ungültig mit Abstand.
 #[test]
 fn too_far_is_invalid() {
-    let mut world = rendezvous(99.0);
+    let mut world = rendezvous(124.0);
     world.set_docking(FERRY_ID, true).unwrap();
     let docking = world.vessels[FERRY_ID].trajectory.docking().unwrap();
     let Err(DockError::TooFar { distance }) = docking.plan else {
@@ -281,9 +286,9 @@ fn undock_splits_fuel_and_separates() {
     let mut world = verbund();
     let total = world.vessel_mass(RELAIS);
     let range = world.undock_fuel(FERRY_ID).unwrap();
-    let share = range.pool * FERRY.fuel_capacity / (FERRY.fuel_capacity + SATELLITE.fuel_capacity);
-    assert!((range.suggested - share).abs() < 1e-9);
-    assert_eq!(range.max, FERRY.fuel_capacity.min(range.pool));
+    // Zwei gleiche Tanks: Der Vorschlag ist die Hälfte.
+    assert!((range.suggested - 0.5 * range.pool).abs() < 1e-9);
+    assert_eq!(range.max, freighter_params().fuel_capacity.min(range.pool));
     assert_eq!(range.min, 0.0);
     let fuel = range.suggested;
     let (ferry_dv, relais_dv) = world.undock_delta_v(FERRY_ID, fuel);
@@ -291,8 +296,8 @@ fn undock_splits_fuel_and_separates() {
     world.undock(FERRY_ID, fuel).unwrap();
     assert!((world.vessel_mass(FERRY_ID) + world.vessel_mass(RELAIS) - total).abs() < 1e-9);
     assert!((world.vessel_fuel(FERRY_ID) - fuel).abs() < 1e-9);
-    assert_eq!(world.params(RELAIS), SATELLITE);
-    assert_eq!(world.params(FERRY_ID), FERRY);
+    assert_eq!(world.params(RELAIS), freighter_params());
+    assert_eq!(world.params(FERRY_ID), freighter_params());
     assert!((world.vessel_delta_v(FERRY_ID) - ferry_dv).abs() < 1e-9);
     assert!((world.vessel_delta_v(RELAIS) - relais_dv).abs() < 1e-9);
     assert_eq!(world.vessels[FERRY_ID].target, Some(RELAIS));
@@ -344,7 +349,7 @@ fn undock_keeps_the_hosts_chain() {
         .next()
         .unwrap()
         .burn;
-    assert_eq!(before.thrust, FERRY.thrust + SATELLITE.thrust);
+    assert_eq!(before.thrust, 2.0 * freighter_params().thrust);
     let fuel = world.undock_fuel(FERRY_ID).unwrap().suggested;
     world.undock(FERRY_ID, fuel).unwrap();
     let after = world.vessels[RELAIS]
@@ -353,7 +358,7 @@ fn undock_keeps_the_hosts_chain() {
         .next()
         .unwrap()
         .burn;
-    assert_eq!(after.thrust, SATELLITE.thrust);
+    assert_eq!(after.thrust, freighter_params().thrust);
     assert!((after.delta_v() - 20.0).abs() < 1e-6);
     assert!(world.vessels[FERRY_ID].trajectory.nodes().is_empty());
 }
