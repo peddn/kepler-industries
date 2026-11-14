@@ -624,7 +624,7 @@ mit Zielgebieten (die sich ebenfalls mitdrehen) ist das die richtige Größe.
   Mitnehmen mit − / + (Vorschlag nach Tankgröße), Vorschau beider Schiffe,
   „Abdocken“. Planbares Abdocken als Schritt der Kette kommt mit den
   automatischen Routen.
-- **Schiffe sind Werte:** Ein Entwurf (Chassis, Triebwerke, Fundament, Tank;
+- **Schiffe sind Werte:** Ein Entwurf (Chassis, Triebwerke, Module, Tank;
   siehe „Katalog“) ergibt die `VesselParams`. Fähigkeiten sind Felder, keine
   eigene Logik pro Klasse; die Simulation kennt nur diese Werte.
 
@@ -813,7 +813,7 @@ zum Schiff; es gibt genau einen.
 - *Die Werte der Booster* (B-1, B-2) stehen in `sim::booster`, die der
   Schiffsteile in `sim::design`.
 
-**Katalog** (`sim::design`): Chassis, Triebwerke und Fundament, daraus
+**Katalog** (`sim::design`): Chassis, Triebwerke und Module, daraus
 Entwürfe mit ihren Flugwerten und Preisen. Der Editor (`entwurf.rs`, Fenster
 „Entwürfe") ändert die Entwürfe der Welt direkt; einstellen lässt sich nur,
 was sich bauen lässt, alles Weitere sind Warnungen. Was nach dem Start im
@@ -826,11 +826,15 @@ Entwurf (`Vessel::design`); was man bauen darf, sagt `World::unlocked`
 feste Werte ohne Entwurf; auch die Schiffe der Demo kommen aus den
 Startentwürfen.
 
-| Chassis | Masse | Innenraum | Triebwerksplätze | Preis | frei |
+| Chassis | Masse | Innenraum | Triebwerksplätze | Modulplätze | Preis | frei |
+|---|---|---|---|---|---|---|
+| Klein | 1.200 kg | 7 t | 1 | 2 | 0,4 t | von Anfang an |
+| Mittel | 1.900 kg | 16 t | 2 | 4 | 0,6 t | von Anfang an |
+| Groß | 3.800 kg | 32 t | 4 | 8 | 1,2 t | 30 GB (voll nur auf dem B-2) |
+
+| Modul | Masse | Modulplätze | Preis | Wirkung | frei |
 |---|---|---|---|---|---|
-| Klein | 1.200 kg | 10 t | 1 | 0,4 t | von Anfang an |
-| Mittel | 1.900 kg | 16 t | 2 | 0,6 t | von Anfang an |
-| Groß | 3.800 kg | 32 t | 4 | 1,2 t | 30 GB (voll nur auf dem B-2) |
+| Fundament | 1.500 kg | 2 | 0,4 t | gründet eine Basis | von Anfang an |
 
 | Triebwerk | Schub | Ausströmgeschw. | Masse | Preis | frei |
 |---|---|---|---|---|---|
@@ -843,10 +847,23 @@ Startentwürfen.
 | B-1 | 3 t | 30 t | 760 kN | etwa 19 t | von Anfang an |
 | B-2 | 6 t | 60 t | 1.520 kN | etwa 38 t (37 t gemessen) | 50 GB, 3 t Zorit |
 
-Der Innenraum teilt sich per Regler in Tank und Fracht (0,5-t-Schritte, nur
-an der Startbasis änderbar). Feste Einbauten belegen zuerst Platz: das
-Fundament wiegt 1.500 kg und belegt 3 t (0,4 t Zorit). Ein Schiff trägt nur
-eine Sorte Triebwerk. Startentwürfe: Frachter = Mittel + 2 × Z-1, 14 t Tank,
+Der Innenraum gehört Tank und Fracht und teilt sich per Regler
+(0,5-t-Schritte, nur an der Startbasis änderbar). Ein Schiff trägt nur
+eine Sorte Triebwerk.
+
+*Module* (`Module`) geben dem Schiff Fähigkeiten. Sie belegen Modulplätze
+des Chassis und haben Masse und Preis, brauchen aber keinen Innenraum. Der
+Entwurf führt sie als Liste (`Design::modules`), die Flugwerte als Menge
+(`VesselParams::modules`); Regeln fragen nur „hat das Schiff Modul X?"
+(`Modules::has`), im Verbund zählen die Module aller Schiffe. Ein neues
+Modul ist damit ein Eintrag im Katalog und die Regel, die es nutzt; der
+Editor zeigt es von selbst. Der Katalogeintrag sagt auch, wie oft ein Modul
+in ein Schiff passt (bisher jedes einmal). Module mit Zahlenwerten
+(Kapazität einer Batterie, Reichweite einer Antenne) bekommen diese Werte,
+wenn das System dazu gebaut wird. Triebwerke bleiben eine eigene Angabe
+(Sorte und Anzahl, eigene Plätze), weil sie die Flugwerte bestimmen. Das
+kleine Chassis hat 7 t Innenraum, seit das Fundament keinen mehr belegt:
+So bleibt das Basisschiff, wie es abgestimmt ist. Startentwürfe: Frachter = Mittel + 2 × Z-1, 14 t Tank,
 2 t Fracht; Basisschiff = Klein + Z-1 + Fundament, 7 t Tank; beide 1 t Zorit,
 beide löschbar. Ein Basisschiff mit freiem Innenraum darf Fracht tragen.
 
@@ -1016,10 +1033,9 @@ Raffinerie (Treibstoff). Von Zoon ist der Weg in den Orbit viel billiger als
 von Zorb (etwa 670 statt 3.400 m/s). Zorb gibt den Anfang, Zoon macht das
 Fliegen billig, Nura liefert das Seltene.
 
-**Weitere Module** (gebaut sind Chassis, Triebwerk, Tank und Fundament,
-siehe „Katalog“): ein festes Set von Chassis mit Plätzen, darin Module (Triebwerk, Tank,
-Frachtraum, Wohnmodul, Dockingport, Solarpanel, Batterie, Reaktor, Radiator
-…). Module liefern Werte, keine Geometrie (Regel 7); die Form hat keinen
+**Weitere Module** (gebaut sind Modulplätze und das Fundament, siehe
+„Katalog“): Scanner, Antenne, Wohnmodul, Dockingport, Solarpanel, Batterie,
+Reaktor, Radiator …. Module liefern Werte, keine Geometrie (Regel 7); die Form hat keinen
 Einfluss auf die Simulation. Module kommen in der Reihenfolge, in der ihre
 Wirkung existiert. Zuerst als Liste; ein 3D-Editor zum Zusammenstellen ist
 reine Darstellung und kommt später. Größere Schiffe entstehen als Rohbau im

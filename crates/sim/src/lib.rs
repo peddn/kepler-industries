@@ -31,7 +31,7 @@ pub mod world;
 pub use base::BaseError;
 pub use body::{Atmosphere, Body, BodyId, BodyOrbit, SurfacePoint};
 pub use booster::{BoosterPlan, LaunchEstimate, Return};
-pub use design::{Chassis, Design, DesignError, Engine, Part};
+pub use design::{Chassis, Design, DesignError, Engine, Module, Modules, Part};
 pub use docking::{DockError, DockPlan, DockRequest, Docking, UndockError, UndockFuel};
 pub use goods::{Good, Inventory};
 pub use kepler::StateVector;

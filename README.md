@@ -29,8 +29,8 @@ Es gibt nur die Startbasis auf Zorb mit ihrem Booster, 3 t
 Zorit im Lager und keine Schiffe. Der Vorrat reicht genau für eine Basis: ein Basisschiff,
 ein Frachter und 4 t Bauteile (der Frachter fliegt dafür zweimal). Bestellt
 wird in der Karte „Startbasis" der Seitenleiste nach Entwürfen; sie ist zu
-Beginn offen. Ein Entwurf ist ein Chassis mit Triebwerken, optional dem
-Fundament einer Basis und einer Aufteilung des Innenraums in Tank und
+Beginn offen. Ein Entwurf ist ein Chassis mit Triebwerken, Modulen (bisher
+das Fundament einer Basis) und einer Aufteilung des Innenraums in Tank und
 Fracht; daraus ergeben sich Flugwerte und Preis. Zu Beginn gibt es die
 Entwürfe „Basisschiff" und „Frachter".
 Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
@@ -41,8 +41,10 @@ Eine Absicherung gibt es nicht: Wer mit dem Vorrat keine Mine fertig bekommt
 Das Fenster „Entwürfe" (Schalter oben rechts) ist der Schiffseditor. Links
 die Liste der Entwürfe: einen wählen, mit „Neu (Kopie)" einen weiteren anlegen, mit „Löschen" entfernen
 (auch die beiden vom Beginn). Rechts der gewählte Entwurf: Name, Chassis,
-Triebwerkssorte und Anzahl, Fundament und ein Regler, der den freien
-Innenraum in Tank und Fracht teilt (0,5-t-Schritte). Darunter stehen Preis,
+Triebwerkssorte und Anzahl, die Module und ein Regler, der den Innenraum in
+Tank und Fracht teilt (0,5-t-Schritte). Module belegen Modulplätze des
+Chassis (Klein 2, Mittel 4, Groß 8) und haben Masse und Preis, brauchen
+aber keinen Innenraum; das Fundament belegt zwei Plätze. Darunter stehen Preis,
 Massen, Schub, Δv und was nach einem Start auf dem Booster mit dem
 Standardprofil im Orbit übrig bleibt, jeweils leer und voll beladen (dafür
 wird der Start wirklich probeweise geplant). Was nicht taugt, steht als

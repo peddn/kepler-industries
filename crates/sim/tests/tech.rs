@@ -126,7 +126,7 @@ fn b2_carries_a_full_large_chassis() {
         chassis: Chassis::Large,
         engine: Engine::Z1,
         engines: 4,
-        foundation: false,
+        modules: Vec::new(),
         tank: 28_000.0,
     };
     assert_eq!(large.check(&world.unlocked()), Ok(()));

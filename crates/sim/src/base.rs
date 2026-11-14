@@ -40,7 +40,7 @@
 //! Schiffs.
 
 use crate::body::{BodyId, SurfacePoint};
-use crate::design::DesignError;
+use crate::design::{DesignError, Module};
 use crate::goods::{Good, Inventory};
 use crate::landing::LandingZone;
 use crate::log::{LogEntry, LogKind};
@@ -301,7 +301,7 @@ impl World {
     pub fn found_base(&mut self, vessel: usize, kind: BaseKind) -> Result<usize, BaseError> {
         let (body, point) = self.parked(vessel)?;
         let v = &self.vessels[vessel];
-        if !v.params.base_kit || v.foundation_of.is_some() {
+        if !v.params.modules.has(Module::Foundation) || v.foundation_of.is_some() {
             return Err(BaseError::NoBaseKit);
         }
         if body == self.home {

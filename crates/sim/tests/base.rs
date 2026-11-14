@@ -5,7 +5,6 @@ mod common;
 
 use common::{FERRY, base_ship_params, freighter_params};
 use glam::DVec3;
-use sim::Good;
 use sim::base::{BASE_KIT, FUEL_RATE, FUEL_STORAGE, PARTS_PRICE, SITE_RADIUS, ZORIT_RATE};
 use sim::body::SurfacePoint;
 use sim::scenario::{NURA, START_ZORIT, ZILL, ZOON, ZORB, demo, start};
@@ -13,6 +12,7 @@ use sim::{
     BaseError, BaseKind, Design, Inventory, Launch, LaunchProfile, LogKind, ManeuverNode,
     PlanError, Segment, VesselParams, World,
 };
+use sim::{Good, Module};
 
 /// Laden und Abladen ohne Grenze: so viel, wie da ist und passt.
 const ALL: f64 = f64::INFINITY;
@@ -91,7 +91,11 @@ fn cargo_counts_as_mass() {
     // Die Startausstattung: zwei Basisschiffe, Bauteile für eine Basis.
     let kit: f64 = world.vessels.iter().map(|v| v.cargo.get(Good::Parts)).sum();
     assert_eq!(kit, BASE_KIT);
-    let ships = world.vessels.iter().filter(|v| v.params.base_kit).count();
+    let ships = world
+        .vessels
+        .iter()
+        .filter(|v| v.params.modules.has(Module::Foundation))
+        .count();
     assert_eq!(ships, 2);
 }
 

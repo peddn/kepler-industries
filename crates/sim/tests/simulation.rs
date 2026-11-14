@@ -3,7 +3,7 @@
 
 use sim::kepler::{self, state_from_apsides};
 use sim::scenario::{demo, home_planet};
-use sim::{Segment, VesselParams, VesselStatus, World};
+use sim::{Modules, Segment, VesselParams, VesselStatus, World};
 
 const DAY: f64 = 86_400.0;
 
@@ -19,7 +19,7 @@ fn single_vessel(periapsis_alt: f64, apoapsis_alt: f64, drag_area: f64) -> World
         fuel_capacity: 0.0,
         parachute_area: 0.0,
         cargo_capacity: 0.0,
-        base_kit: false,
+        modules: Modules::NONE,
     };
     world.spawn_vessel("Test", params, 0.0, 0, state);
     world

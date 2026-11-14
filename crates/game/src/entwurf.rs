@@ -16,7 +16,7 @@ use crate::zahl::De;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use sim::design::SPACE_STEP;
-use sim::{Chassis, Design, Engine, LaunchEstimate, Part, PlanError, World};
+use sim::{Chassis, Design, Engine, LaunchEstimate, Module, Part, PlanError, World};
 
 /// Breite der Liste und des Entwurfs daneben.
 const LIST_WIDTH: f32 = 170.0;
@@ -65,10 +65,16 @@ fn list(ui: &mut egui::Ui, world: &mut World, editor: &mut Editor) {
     }
 }
 
-/// Passt Triebwerke und Tank an, wenn Chassis oder Fundament weniger Platz
-/// lassen.
+/// Passt Triebwerke, Module und Tank an, wenn das Chassis weniger Platz
+/// lässt.
 fn fit(design: &mut Design) {
-    design.engines = design.engines.min(design.chassis.spec().slots);
+    let chassis = design.chassis.spec();
+    design.engines = design.engines.min(chassis.engine_slots);
+    // Nach einem Wechsel auf ein kleineres Chassis: die zuletzt eingebauten
+    // Module heraus, bis die Plätze reichen.
+    while design.module_slots() > chassis.module_slots {
+        design.modules.pop();
+    }
     let free = design.free_space().max(0.0);
     design.tank = (design.tank.min(free) / SPACE_STEP).floor() * SPACE_STEP;
 }
@@ -99,6 +105,49 @@ fn choose<T: Copy + PartialEq>(
     }
 }
 
+/// Die Module aus dem Katalog, jedes zum An- und Abwählen: Name, Zweck und
+/// wie viele Plätze es belegt. Was nicht freigeschaltet ist oder nicht mehr
+/// hineinpasst, lässt sich nicht anwählen.
+fn modules(ui: &mut egui::Ui, design: &mut Design, unlocked: &[Part]) {
+    let slots = design.chassis.spec().module_slots;
+    row(ui, "Module", |ui| {
+        ui.label(format!("{} von {slots} Plätzen", design.module_slots()));
+    });
+    for module in Module::ALL {
+        let spec = module.spec();
+        let mut built_in = design.has(module);
+        let fits = design.module_slots() + spec.slots <= slots;
+        let reason = if !unlocked.contains(&Part::Module(module)) {
+            Some("noch nicht freigeschaltet")
+        } else if !built_in && !fits {
+            Some("kein Platz mehr")
+        } else {
+            None
+        };
+        let plural = if spec.slots == 1 { "Platz" } else { "Plätze" };
+        let label = format!(
+            "{} ({}; {} {plural}, {})",
+            spec.name,
+            spec.purpose,
+            spec.slots,
+            tons(spec.mass)
+        );
+        row(ui, "", |ui| {
+            ui.add_enabled_ui(reason.is_none(), |ui| {
+                let changed = ui
+                    .checkbox(&mut built_in, label)
+                    .on_disabled_hover_text(reason.unwrap_or_default())
+                    .changed();
+                if changed && built_in {
+                    design.modules.push(module);
+                } else if changed {
+                    design.modules.retain(|&m| m != module);
+                }
+            });
+        });
+    }
+}
+
 /// Die Bedienung des Entwurfs; liefert, ob gerade am Regler gezogen wird.
 fn edit(ui: &mut egui::Ui, design: &mut Design, unlocked: &[Part]) -> bool {
     row(ui, "Name", |ui| {
@@ -117,15 +166,13 @@ fn edit(ui: &mut egui::Ui, design: &mut Design, unlocked: &[Part]) -> bool {
         choose(ui, &mut design.engine, &Engine::ALL, unlocked, Part::Engine);
     });
     fit(design);
-    let slots = design.chassis.spec().slots;
+    let slots = design.chassis.spec().engine_slots;
     row(ui, "Anzahl", |ui| {
         let text = format!("{} von {slots}", design.engines);
         let step = stepper(ui, ["−", "+"], text.into());
         design.engines = design.engines.saturating_add_signed(step).min(slots);
     });
-    row(ui, "Einbauten", |ui| {
-        ui.checkbox(&mut design.foundation, "Fundament (gründet eine Basis)");
-    });
+    modules(ui, design, unlocked);
     fit(design);
 
     // Der freie Innenraum: links Tank, rechts Fracht.

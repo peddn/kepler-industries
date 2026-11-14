@@ -259,6 +259,7 @@ impl fmt::Display for PlanError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::design::Modules;
     use crate::world::VesselParams;
 
     const PARAMS: VesselParams = VesselParams {
@@ -269,7 +270,7 @@ mod tests {
         fuel_capacity: 200.0,
         parachute_area: 0.0,
         cargo_capacity: 0.0,
-        base_kit: false,
+        modules: Modules::NONE,
     };
 
     #[test]
