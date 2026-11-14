@@ -74,9 +74,9 @@ fn prerequisites_come_first() {
     ] {
         assert!(world.unlocked().contains(&part), "{part:?}");
     }
-    // Alle zusammen kosten 210 GB.
+    // Alle zusammen kosten 230 GB.
     let total: f64 = Tech::ALL.iter().map(|t| t.spec().data).sum();
-    assert_eq!(total, 210.0);
+    assert_eq!(total, 230.0);
 }
 
 /// Der B-2 kostet Daten und Zorit und ersetzt den Booster, aber nur, wenn

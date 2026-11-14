@@ -145,6 +145,9 @@ pub enum Module {
     /// Fundament einer Basis: Das Schiff gründet dort, wo es landet, eine
     /// Basis und wird ihr Fundament (siehe `base`).
     Foundation,
+    /// Probenbohrer: Das Schiff nimmt dort, wo es steht, Proben vom Boden
+    /// (siehe `goods`).
+    Sampler,
 }
 
 /// Werte eines Moduls.
@@ -164,7 +167,7 @@ pub struct ModuleSpec {
 }
 
 impl Module {
-    pub const ALL: [Module; 1] = [Module::Foundation];
+    pub const ALL: [Module; 2] = [Module::Foundation, Module::Sampler];
 
     pub fn spec(self) -> ModuleSpec {
         match self {
@@ -175,6 +178,14 @@ impl Module {
                 slots: 2,
                 limit: 1,
                 price: 400.0,
+            },
+            Module::Sampler => ModuleSpec {
+                name: "Probenbohrer",
+                purpose: "nimmt Proben vom Boden",
+                mass: 300.0,
+                slots: 1,
+                limit: 1,
+                price: 300.0,
             },
         }
     }

@@ -42,6 +42,7 @@
 use crate::body::{BodyId, SurfacePoint};
 use crate::design::{DesignError, Module};
 use crate::goods::{Good, Inventory};
+use crate::goods::{SAMPLE_DATA_PER_TON, SAMPLE_LIMIT};
 use crate::landing::LandingZone;
 use crate::log::{LogEntry, LogKind};
 use crate::trajectory::Segment;
@@ -96,6 +97,11 @@ pub enum BaseError {
     Design(DesignError),
     /// Umbau nur auf einen Entwurf mit demselben Chassis.
     OtherChassis,
+    /// Proben gibt es nur vom Boden des Körpers, auf dem das Schiff steht,
+    /// und nicht auf dem Heimatplaneten.
+    NoSamplesHere,
+    /// Dem Schiff fehlt der Probenbohrer.
+    NoSampler,
     /// Die geladene Fracht passt nicht in den neuen Frachtraum.
     CargoInTheWay,
 }
@@ -117,6 +123,8 @@ impl std::fmt::Display for BaseError {
             BaseError::NotEnoughZorit => "zu wenig Zorit im Lager der Startbasis",
             BaseError::NoDesign => "diesen Entwurf gibt es nicht",
             BaseError::OtherChassis => "Umbau nur mit demselben Chassis",
+            BaseError::NoSamplesHere => "hier gibt es keine Proben",
+            BaseError::NoSampler => "dem Schiff fehlt der Probenbohrer",
             BaseError::CargoInTheWay => {
                 "die Fracht passt nicht in den neuen Frachtraum: erst abladen"
             }
@@ -236,6 +244,14 @@ impl World {
             .map_or(0.0, |good| self.stock(base, good))
     }
 
+    /// Daten (GB), die die bisher an der Startbasis abgegebenen Proben eines
+    /// Körpers gebracht haben: je Tonne `SAMPLE_DATA_PER_TON` mal sein
+    /// Grundwert, bis `SAMPLE_LIMIT`.
+    pub fn sample_data(&self, body: BodyId) -> f64 {
+        let counted = self.in_depot(Good::Sample(body)).min(SAMPLE_LIMIT);
+        counted / 1_000.0 * SAMPLE_DATA_PER_TON * self.bodies[body].data
+    }
+
     /// Die Startbasis.
     pub fn depot(&self) -> Option<usize> {
         self.bases.iter().position(|b| b.kind == BaseKind::Depot)
@@ -349,8 +365,30 @@ impl World {
     /// dort liegt und hineinpasst. Die Startbasis gibt alles heraus, was sie
     /// hat, eine Mine ihr Zorit; Treibstoff ist keine Fracht (`refuel`).
     /// Liefert die Menge in kg.
+    ///
+    /// Proben kommen nicht aus einem Lager, sondern vom Boden: Ein Schiff mit
+    /// Probenbohrer lädt die Proben des Körpers, auf dem es steht (nicht auf
+    /// dem Heimatplaneten), so viel, wie hineinpasst. Aus dem Lager der
+    /// Startbasis kommen sie nicht wieder heraus: Sonst gäbe man sie
+    /// zweimal ab.
     pub fn load(&mut self, vessel: usize, good: Good, amount: f64) -> Result<f64, BaseError> {
-        self.parked(vessel)?;
+        let (body, _) = self.parked(vessel)?;
+        if let Good::Sample(from) = good {
+            let v = &self.vessels[vessel];
+            if from != body || body == self.home {
+                return Err(BaseError::NoSamplesHere);
+            }
+            if !v.params.modules.has(Module::Sampler) {
+                return Err(BaseError::NoSampler);
+            }
+            let amount = amount.min(v.params.cargo_capacity - v.cargo.total());
+            if amount <= 0.0 {
+                return Err(BaseError::NothingToLoad);
+            }
+            self.change_mass(vessel, amount);
+            self.vessels[vessel].cargo.add(good, amount);
+            return Ok(amount);
+        }
         let base = self.base_of(vessel).ok_or(BaseError::NoBase)?;
         let b = &self.bases[base];
         let offered = match b.kind {
@@ -380,8 +418,33 @@ impl World {
     /// Startbasis nimmt alles in ihr Lager; eine Baustelle nimmt Bauteile,
     /// so viel sie noch braucht, und ist mit dem letzten fertig. Liefert die
     /// Menge in kg.
+    ///
+    /// Proben bringen an der Startbasis Daten (`sample_data`) und bleiben in
+    /// ihrem Lager: Was dort liegt, ist abgegeben. Überall sonst kippt man
+    /// sie einfach aus.
     pub fn unload(&mut self, vessel: usize, good: Good, amount: f64) -> Result<f64, BaseError> {
         self.parked(vessel)?;
+        let depot = self.depot().filter(|&d| self.base_of(vessel) == Some(d));
+        if let Good::Sample(body) = good {
+            let amount = amount.min(self.vessels[vessel].cargo.get(good));
+            if amount <= 0.0 {
+                return Err(BaseError::NothingToUnload);
+            }
+            self.change_mass(vessel, -amount);
+            self.vessels[vessel].cargo.add(good, -amount);
+            if let Some(depot) = depot {
+                let before = self.sample_data(body);
+                self.put(depot, good, amount);
+                let data = self.sample_data(body) - before;
+                self.data += data;
+                self.push_log([LogEntry {
+                    time: self.time,
+                    vessel,
+                    kind: LogKind::Samples { body, amount, data },
+                }]);
+            }
+            return Ok(amount);
+        }
         let base = self.base_of(vessel).ok_or(BaseError::NoBase)?;
         let b = &self.bases[base];
         let site = !b.complete();
