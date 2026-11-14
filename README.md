@@ -281,8 +281,18 @@ beim Node schon vorab, welche offenen Aufgaben die Bahn danach erfüllt
 der Leiste steht der Stand („Daten 15 GB"); ein Klick öffnet das Fenster
 „Wirtschaft" mit den Reitern Übersicht, Aufgaben und Technik.
 
+**Proben** bringen weitere Daten (zusammen 120 GB). Dafür braucht ein
+Schiff das Modul Probenbohrer (300 kg, ein Modulplatz, 0,3 t Zorit; über die
+Technik für 20 GB, so viel wie die drei Umlaufbahnen um Zorb bringen). Steht
+es auf Zoon, Zill oder Nura, hat die Karte „Fracht & Basis" eine Zeile
+„Proben …": + lädt 0,5 t vom Boden, − kippt sie wieder aus. An der
+Startbasis abgeladen, bringen sie Daten: je Tonne 10 GB von Zoon, 20 von
+Zill, 30 von Nura, bis 2 t je Körper. Tragen und abgeben kann sie jedes
+Schiff mit Frachtraum; abgegebene Proben bleiben im Lager der Startbasis.
+Den Stand zeigt der Reiter „Aufgaben".
+
 Im Reiter „Technik" schaltet man mit Daten frei:
-das Triebwerk Z-2 (30 GB; 3.600 statt 3.200 m/s Ausströmgeschwindigkeit),
+den Probenbohrer (20 GB), das Triebwerk Z-2 (30 GB; 3.600 statt 3.200 m/s Ausströmgeschwindigkeit),
 das Chassis Groß (30 GB; 32 t Innenraum, 4 Triebwerksplätze), den Booster
 B-2 (50 GB und 3 t Zorit; trägt Schiffe bis etwa 38 t statt 19 t) und das
 Triebwerk Z-3 (100 GB, braucht Z-2; 4.000 m/s). Freischalten gilt sofort und

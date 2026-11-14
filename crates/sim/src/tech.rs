@@ -9,13 +9,14 @@
 //! ist, sagt `World::techs`.
 
 use crate::booster::B2;
-use crate::design::{Chassis, Engine, Part};
+use crate::design::{Chassis, Engine, Module, Part};
 use crate::world::{BoosterStatus, World};
 use serde::{Deserialize, Serialize};
 
 /// Eine Technologie.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tech {
+    Sampler,
     EngineZ2,
     ChassisLarge,
     BoosterB2,
@@ -35,7 +36,8 @@ pub struct TechSpec {
 }
 
 impl Tech {
-    pub const ALL: [Tech; 4] = [
+    pub const ALL: [Tech; 5] = [
+        Tech::Sampler,
         Tech::EngineZ2,
         Tech::ChassisLarge,
         Tech::BoosterB2,
@@ -44,6 +46,7 @@ impl Tech {
 
     pub fn spec(self) -> TechSpec {
         let (name, data, zorit, requires) = match self {
+            Tech::Sampler => ("Probenbohrer", 20.0, 0.0, None),
             Tech::EngineZ2 => ("Triebwerk Z-2", 30.0, 0.0, None),
             Tech::ChassisLarge => ("Chassis Groß", 30.0, 0.0, None),
             Tech::BoosterB2 => ("Booster B-2", 50.0, 3_000.0, None),
@@ -60,6 +63,7 @@ impl Tech {
     /// Das Teil, das sie für Entwürfe freigibt (der Booster gibt keins frei).
     pub fn part(self) -> Option<Part> {
         match self {
+            Tech::Sampler => Some(Part::Module(Module::Sampler)),
             Tech::EngineZ2 => Some(Part::Engine(Engine::Z2)),
             Tech::EngineZ3 => Some(Part::Engine(Engine::Z3)),
             Tech::ChassisLarge => Some(Part::Chassis(Chassis::Large)),

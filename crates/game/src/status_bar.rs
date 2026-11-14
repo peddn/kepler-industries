@@ -146,6 +146,15 @@ fn entry_line(world: &World, entry: &LogEntry) -> Line {
             ),
             TEXT_COLOR,
         ),
+        LogKind::Samples { body, amount, data } => (
+            format!(
+                "{:.1} t Proben von {} abgegeben, +{:.0} GB",
+                De(amount / 1_000.0),
+                world.bodies[*body].name,
+                De(*data)
+            ),
+            LANDED_COLOR,
+        ),
         LogKind::TaskDone { task } => {
             let task = &world.tasks[*task];
             (

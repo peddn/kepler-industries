@@ -835,6 +835,7 @@ Startentwürfen.
 | Modul | Masse | Modulplätze | Preis | Wirkung | frei |
 |---|---|---|---|---|---|
 | Fundament | 1.500 kg | 2 | 0,4 t | gründet eine Basis | von Anfang an |
+| Probenbohrer | 300 kg | 1 | 0,3 t | nimmt Proben vom Boden | 20 GB |
 
 | Triebwerk | Schub | Ausströmgeschw. | Masse | Preis | frei |
 |---|---|---|---|---|---|
@@ -903,9 +904,22 @@ gutgeschrieben.
 - *Vorschau statt Fummeln:* Die Karte „Manöver" zeigt beim Node, welche
   offenen Aufgaben die Bahn danach erfüllt (`World::tasks_met_by`, dieselbe
   Prüfung wie beim Zählen).
+- *Proben* (`Good::Sample`, je Körper ein eigenes Gut): Ein Schiff mit
+  Probenbohrer lädt sie vom Boden des Körpers, auf dem es steht (nicht auf
+  Zorb); der Boden ist unbegrenzt, der Frachtraum nicht, und auf Zoon
+  konkurrieren sie mit dem Zorit der Mine um denselben Platz. An der
+  Startbasis abgeladen, bringen sie Daten: je Tonne das Doppelte des
+  Grundwerts (Zoon 10, Zill 20, Nura 30 GB), bis 2 t je Körper, zusammen
+  120 GB. Die volle Menge bringt damit doppelt so viel wie eine Landung,
+  weil man sie auch zurückbringen muss. Die abgegebenen Proben bleiben im
+  Lager der Startbasis und kommen nicht wieder heraus: Das Lager ist die
+  Buchführung (`World::sample_data`), einen eigenen Zähler gibt es nicht.
+  Überall sonst kippt man Proben einfach aus. Tragen und abgeben kann sie
+  jedes Schiff mit Frachtraum.
 - *Techtree* (`sim::tech`; eine Liste mit Voraussetzungen):
+  Probenbohrer (20 GB, so viel wie die drei Umlaufbahnen um Zorb bringen),
   Z-2 (30 GB), Chassis Groß (30 GB), Booster B-2 (50 GB und 3 t Zorit), Z-3
-  (100 GB, braucht Z-2); zusammen 210 von 290 GB. Freischalten geschieht
+  (100 GB, braucht Z-2); zusammen 230 von 410 GB. Freischalten geschieht
   sofort (eine Forschungszeit wäre wirkungslos, Regel 14). Gespeichert
   sind nur die Technologien (`World::techs`); welche Teile baubar sind,
   leitet `World::unlocked` daraus ab. Der B-2 ersetzt die Werte des Boosters an der
@@ -923,13 +937,10 @@ gutgeschrieben.
 Gebaut und spielbar: Fliegen (Manöverketten, Start auf dem Booster, Landung,
 Rendezvous, Andocken, Flüge zu Monden und Planeten), der Kreislauf aus
 Bauteilen, Basen und Zorit, Entwürfe aus dem Katalog, Aufgaben für Daten und
-die Technik, dazu der Umbau gebauter Schiffe.
+die Technik, dazu der Umbau gebauter Schiffe, Module und Proben.
 
 Vereinbart, noch nicht gebaut:
 
-- **Proben:** eine neue Fracht, die man zurückbringt und heil landet. Mehr
-  Masse bringt mehr Daten, mit einer Obergrenze je Körper, damit sich Daten
-  nicht endlos farmen lassen.
 - **Erzeugte Aufgaben** mit ungewöhnlichen Bahnen und kleiner Toleranz: Der
   Zufall müsste in den Spielstand, und Daten wären nicht mehr endlich. Das
   entscheidet sich mit der Story-Kampagne; die Preise der Technik richten

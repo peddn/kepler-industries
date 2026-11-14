@@ -11,7 +11,8 @@ use crate::ui::{Notes, Selected};
 use crate::zahl::De;
 use bevy_egui::egui;
 use sim::body::sphere_of_influence;
-use sim::{BaseKind, Goal, Task, Tech, TechError, VesselStatus, World};
+use sim::goods::{SAMPLE_DATA_PER_TON, SAMPLE_LIMIT};
+use sim::{BaseKind, Goal, Good, Task, Tech, TechError, VesselStatus, World};
 
 /// Vorrat einer Basis und der Stand dazu: bei der Startbasis Zorit und
 /// Bauteile im Lager, auf einer Baustelle die Bauteile, sonst der hergestellte Stoff und
@@ -117,7 +118,7 @@ fn cargo(ui: &mut egui::Ui, world: &World, selected: &mut Selected) {
             let goods: Vec<String> = v
                 .cargo
                 .iter()
-                .map(|(good, kg)| format!("{} {}", good.name(), tons(kg)))
+                .map(|(good, kg)| format!("{} {}", good.name(&world.bodies), tons(kg)))
                 .collect();
             ui.label(goods.join(", "));
             ui.label(place(world, host));
@@ -168,12 +169,12 @@ fn goal(world: &World, task: &Task) -> String {
 
 /// Die Aufgaben: was sie verlangen und bringen, und welche erfüllt sind.
 fn tasks(ui: &mut egui::Ui, world: &World) {
-    let earned: f64 = world
+    // Nicht `sum`: Das ergäbe ohne erfüllte Aufgabe -0.
+    let earned = world
         .tasks
         .iter()
         .filter(|t| t.done.is_some())
-        .map(|t| t.data)
-        .sum();
+        .fold(0.0, |earned, t| earned + t.data);
     let total: f64 = world.tasks.iter().map(|t| t.data).sum();
     ui.heading(format!(
         "Aufgaben ({earned:.0} von {total:.0} GB)",
@@ -207,11 +208,54 @@ fn tasks(ui: &mut egui::Ui, world: &World) {
                 }
             });
         });
+    samples(ui, world);
+}
+
+/// Proben: was an der Startbasis abgegeben ist und was es gebracht hat, je
+/// Körper bis zur Obergrenze.
+fn samples(ui: &mut egui::Ui, world: &World) {
+    let bodies: Vec<usize> = (0..world.bodies.len())
+        .filter(|&body| body != world.home && world.bodies[body].data > 0.0)
+        .collect();
+    let per_ton = |body: usize| SAMPLE_DATA_PER_TON * world.bodies[body].data;
+    let full = |body: usize| per_ton(body) * SAMPLE_LIMIT / 1_000.0;
+    let earned: f64 = bodies.iter().map(|&body| world.sample_data(body)).sum();
+    let total: f64 = bodies.iter().map(|&body| full(body)).sum();
+    ui.add_space(6.0);
+    ui.heading(format!(
+        "Proben ({:.0} von {:.0} GB)",
+        De(earned),
+        De(total)
+    ));
+    ui.weak(
+        "Ein Schiff mit Probenbohrer nimmt sie vom Boden; an der Startbasis abgeladen, \
+         bringen sie Daten, bis zur Obergrenze je Körper.",
+    );
+    egui::Grid::new("samples").striped(true).show(ui, |ui| {
+        header(ui, &["Körper", "Daten je Tonne", "abgegeben", "Daten"]);
+        for body in bodies {
+            let delivered = world.in_depot(Good::Sample(body));
+            ui.label(&world.bodies[body].name);
+            ui.label(format!("{:.0} GB", De(per_ton(body))));
+            ui.label(format!(
+                "{} von {}",
+                tons(delivered.min(SAMPLE_LIMIT)),
+                tons(SAMPLE_LIMIT)
+            ));
+            ui.label(format!(
+                "{:.0} von {:.0} GB",
+                De(world.sample_data(body)),
+                De(full(body))
+            ));
+            ui.end_row();
+        }
+    });
 }
 
 /// Was eine Technologie bringt, in Worten.
 fn effect(tech: Tech) -> &'static str {
     match tech {
+        Tech::Sampler => "Modul: nimmt Proben vom Boden",
         Tech::EngineZ2 => "3600 m/s Ausströmgeschw. (Z-1: 3200)",
         Tech::EngineZ3 => "4000 m/s Ausströmgeschwindigkeit",
         Tech::ChassisLarge => "32 t Innenraum, 4 Triebwerksplätze",

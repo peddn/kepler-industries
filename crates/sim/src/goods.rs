@@ -13,6 +13,7 @@
 //! Flug (Masse, Δv). Im Lager einer Tankstelle ist er ein Gut wie jedes
 //! andere; in den Tank kommt er mit `World::refuel`.
 
+use crate::body::{Body, BodyId};
 use serde::{Deserialize, Serialize};
 
 /// Laden und Abladen in der Oberfläche gehen in Schritten dieser Größe (kg).
@@ -28,17 +29,31 @@ pub enum Good {
     Zorit,
     /// Treibstoff im Lager einer Tankstelle.
     Fuel,
+    /// Proben vom Boden dieses Körpers. Ein Schiff mit Probenbohrer nimmt sie
+    /// dort, wo es steht; an der Startbasis abgeladen, bringen sie Daten
+    /// (siehe `World::sample_data`).
+    Sample(BodyId),
 }
 
 impl Good {
-    pub fn name(self) -> &'static str {
+    pub fn name(self, bodies: &[Body]) -> String {
         match self {
-            Good::Parts => "Bauteile",
-            Good::Zorit => "Zorit",
-            Good::Fuel => "Treibstoff",
+            Good::Parts => "Bauteile".into(),
+            Good::Zorit => "Zorit".into(),
+            Good::Fuel => "Treibstoff".into(),
+            Good::Sample(body) => format!("Proben {}", bodies[body].name),
         }
     }
 }
+
+/// Proben: So viele Tonnen je Körper bringen Daten (kg). Mehr abzugeben
+/// bringt nichts, damit sich Daten nicht endlos holen lassen.
+pub const SAMPLE_LIMIT: f64 = 2_000.0;
+
+/// Proben: Daten je Tonne als Vielfaches des Grundwerts des Körpers
+/// (`Body::data`). Die volle Menge bringt damit das Vierfache, doppelt so
+/// viel wie eine Landung: Proben muss man auch zurückbringen.
+pub const SAMPLE_DATA_PER_TON: f64 = 2.0;
 
 /// Güter mit ihren Mengen in kg. Was nicht da ist, steht nicht drin; die
 /// Reihenfolge ist die, in der die Güter dazukamen.

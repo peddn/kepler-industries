@@ -85,25 +85,45 @@ fn actions(world: &World, vessel: usize) -> Vec<Action> {
     }
 }
 
-/// Die Güter, die sich hier zwischen Schiff und Basis bewegen lassen: an der
-/// Startbasis alles, was im Lager oder an Bord ist, an der Mine Zorit, an
-/// einer Baustelle die Bauteile an Bord.
+/// Die Güter, die sich hier bewegen lassen. Zwischen Schiff und Basis: an
+/// der Startbasis alles, was im Lager oder an Bord ist, an der Mine Zorit, an
+/// einer Baustelle die Bauteile an Bord. Dazu Proben: die an Bord (an der
+/// Startbasis abgeben, sonst auskippen) und, mit Probenbohrer, die vom Boden
+/// des Körpers, auf dem das Schiff steht.
 fn movable(world: &World, vessel: usize) -> Vec<Good> {
     let v = &world.vessels[vessel];
-    let Some(k) = world.base_of(vessel).filter(|_| ready(world, vessel)) else {
+    if !ready(world, vessel) {
         return Vec::new();
-    };
-    let base = &world.bases[k];
+    }
     let aboard = |good: Good| v.cargo.get(good) > 0.0;
-    [Good::Parts, Good::Zorit]
-        .into_iter()
-        .filter(|&good| match base.kind {
-            _ if !base.complete() => good == Good::Parts && aboard(good),
-            BaseKind::Depot => aboard(good) || world.stock(k, good) > 0.0,
-            BaseKind::Mine => good == Good::Zorit && v.params.cargo_capacity > 0.0,
-            BaseKind::FuelStation => false,
-        })
-        .collect()
+    let mut goods = Vec::new();
+    if let Some(k) = world.base_of(vessel) {
+        let base = &world.bases[k];
+        goods.extend(
+            [Good::Parts, Good::Zorit]
+                .into_iter()
+                .filter(|&good| match base.kind {
+                    _ if !base.complete() => good == Good::Parts && aboard(good),
+                    BaseKind::Depot => aboard(good) || world.stock(k, good) > 0.0,
+                    BaseKind::Mine => good == Good::Zorit && v.params.cargo_capacity > 0.0,
+                    BaseKind::FuelStation => false,
+                }),
+        );
+    }
+    goods.extend(
+        v.cargo
+            .iter()
+            .map(|(good, _)| good)
+            .filter(|good| matches!(good, Good::Sample(_))),
+    );
+    if let Segment::Surface { body, .. } = v.trajectory.current()
+        && *body != world.home
+        && v.params.modules.has(Module::Sampler)
+        && !goods.contains(&Good::Sample(*body))
+    {
+        goods.push(Good::Sample(*body));
+    }
+    goods
 }
 
 /// Die Zeilen der Karte; leer: keine Karte.
@@ -119,7 +139,7 @@ fn lines(world: &World, vessel: usize) -> Vec<String> {
         // Was eine eigene Zeile zum Laden hat, steht dort.
         let rows = movable(world, vessel);
         for (good, kg) in v.cargo.iter().filter(|(good, _)| !rows.contains(good)) {
-            lines.push(format!("  {} {}", good.name(), tons(kg)));
+            lines.push(format!("  {} {}", good.name(&world.bodies), tons(kg)));
         }
     }
     if let Some(base) = v.foundation_of {
@@ -223,15 +243,25 @@ pub fn show(ui: &mut egui::Ui, world: &mut World, vessel: usize, notes: &mut Not
         }
         for good in goods {
             let aboard = world.vessels[vessel].cargo.get(good);
-            let label = format!("{} {}", good.name(), tons(aboard));
+            let name = good.name(&world.bodies);
+            let label = format!("{name} {}", tons(aboard));
             let moved = match stepper(ui, ["−", "+"], egui::RichText::new(label)) {
                 1 => world.load(vessel, good, LOT).map(|kg| (kg, "geladen")),
-                -1 => world.unload(vessel, good, LOT).map(|kg| (kg, "abgeladen")),
+                -1 => {
+                    // Proben gibt man an der Startbasis ab; sonst kippt man
+                    // sie aus.
+                    let done = match good {
+                        Good::Sample(_) if world.at_depot(vessel) => "abgegeben",
+                        Good::Sample(_) => "ausgekippt",
+                        _ => "abgeladen",
+                    };
+                    world.unload(vessel, good, LOT).map(|kg| (kg, done))
+                }
                 _ => continue,
             };
             if let Some((kg, done)) = notes.check(moved) {
                 let ship = &world.vessels[vessel].name;
-                notes.say(format!("{ship}: {} {} {done}", tons(kg), good.name()));
+                notes.say(format!("{ship}: {} {name} {done}", tons(kg)));
             }
         }
         for action in actions(world, vessel) {

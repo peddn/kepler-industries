@@ -79,4 +79,11 @@ pub enum LogKind {
     Separated { ship: usize },
     /// Die Aufgabe mit dieser Nummer ist erfüllt (siehe `task`).
     TaskDone { task: usize },
+    /// Proben vom Körper `body` an der Startbasis abgegeben: `amount` kg,
+    /// dafür `data` GB (0, wenn die Obergrenze schon erreicht war).
+    Samples {
+        body: BodyId,
+        amount: f64,
+        data: f64,
+    },
 }

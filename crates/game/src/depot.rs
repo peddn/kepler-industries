@@ -29,7 +29,10 @@ pub fn stock(world: &World) -> Vec<String> {
     fixed
         .into_iter()
         .chain(more)
-        .map(|good| format!("{} {}", good.name(), tons_fine(world.in_depot(good))))
+        .map(|good| {
+            let name = good.name(&world.bodies);
+            format!("{name} {}", tons_fine(world.in_depot(good)))
+        })
         .collect()
 }
 
